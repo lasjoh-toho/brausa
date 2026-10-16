@@ -2,6 +2,7 @@
   import { app } from '../state/app.svelte';
   import { drag } from '../state/drag.svelte';
   import { crumbs, relativeTo } from '../core/paths';
+  import { formatRange } from '../core/dates';
   import type { ViewMode } from '../core/views';
   import { modLabel } from '../platform';
   import Icon from './Icon.svelte';
@@ -13,6 +14,7 @@
     { id: 'stream', icon: 'grid', label: 'Stream' },
     { id: 'kanban', icon: 'kanban', label: 'Kanban' },
     { id: 'timeline', icon: 'timeline', label: 'Zeitachse' },
+    { id: 'calendar', icon: 'calendar', label: 'Kalender' },
     { id: 'map', icon: 'map', label: 'Karte' }
   ];
 
@@ -60,6 +62,13 @@
         <Icon name="filter" size={11} />
         {relativeTo(app.funnel, app.cwd)}
         <button onclick={() => app.setFunnel(null)} aria-label="Filter entfernen"><Icon name="x" size={11} /></button>
+      </span>
+    {/if}
+    {#if app.dateFilter && app.view !== 'calendar'}
+      <span class="chip funnel">
+        <Icon name="calendar" size={11} />
+        {formatRange(app.dateFilter)}
+        <button onclick={() => app.setDateFilter(null)} aria-label="Zeitfilter entfernen"><Icon name="x" size={11} /></button>
       </span>
     {/if}
   </nav>

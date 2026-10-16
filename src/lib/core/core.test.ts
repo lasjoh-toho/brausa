@@ -144,3 +144,48 @@ describe('views', () => {
     expect(groupEntries(entries.slice(0, 3), 'subfolder').map((g) => g.label)).toEqual(['(oberste Ebene)', '2026']);
   });
 });
+
+import { countDates, formatRange, level, monthGrid, monthRange, yearGrid, yearRange } from './dates';
+
+describe('dates', () => {
+  const at = (y: number, m: number, d: number) => new Date(y, m, d, 12).getTime();
+  const es = [
+    entry('a.jpg', { mtime: at(2026, 0, 5), taken: at(2025, 6, 1) }),
+    entry('b.jpg', { mtime: at(2026, 0, 5) }),
+    entry('c.jpg', { mtime: at(2026, 2, 1) })
+  ];
+
+  it('counts per day and month, with taken falling back to mtime', () => {
+    const c = countDates(es, 'mtime');
+    expect(c.days.get('2026-01-05')).toBe(2);
+    expect(c.months.get('2026-03')).toBe(1);
+    const t = countDates(es, 'taken');
+    expect(t.months.get('2025-07')).toBe(1);
+    expect(t.months.get('2026-01')).toBe(1);
+  });
+
+  it('filters by date range via filterEntries', () => {
+    const [from, to] = monthRange(2026, 0);
+    expect(filterEntries(es, { date: { field: 'mtime', from, to } }).map((e) => e.name)).toEqual(['a.jpg', 'b.jpg']);
+    const [yf, yt] = yearRange(2025);
+    expect(filterEntries(es, { date: { field: 'taken', from: yf, to: yt } }).map((e) => e.name)).toEqual(['a.jpg']);
+  });
+
+  it('builds calendar grids Monday-first', () => {
+    // 1 Jan 2026 is a Thursday → row 3 in a Monday-first grid.
+    expect(yearGrid(2026)[0]).toMatchObject({ key: '2026-01-01', col: 0, row: 3 });
+    expect(yearGrid(2024).length).toBe(366);
+    expect(monthGrid(2026, 1)).toMatchObject({ lead: 6 }); // Feb 2026 starts on Sunday
+    expect(monthGrid(2026, 1).days.length).toBe(28);
+  });
+
+  it('scales intensity and formats ranges', () => {
+    expect(level(0, 10)).toBe(0);
+    expect(level(10, 10)).toBe(4);
+    expect(level(1, 100)).toBeGreaterThanOrEqual(1);
+    const [f, t] = monthRange(2026, 9);
+    expect(formatRange({ field: 'mtime', from: f, to: t })).toBe('Oktober 2026');
+    const [yf, yt] = yearRange(2026);
+    expect(formatRange({ field: 'mtime', from: yf, to: yt })).toBe('2026');
+  });
+});

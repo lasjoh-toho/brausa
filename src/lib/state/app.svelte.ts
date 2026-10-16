@@ -7,9 +7,11 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
 import { createBackend } from '../backend';
 import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
-import { dirname, isWithin } from '../core/paths';
+import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
+import { inRange, type DateField, type DateRange } from '../core/dates';
+import { family } from '../core/format';
 import { store } from '../platform';
 
 export interface DropCell {
@@ -82,8 +84,16 @@ class AppState {
   toasts = $state<Toast[]>([]);
   springDelay = 550;
 
-  /** Entries after filtering (what the canvas shows). */
-  visible = $derived(
+  /** Calendar heatmap: which date the heatmap counts, and the selected range (filters every view). */
+  dateField = $state<DateField>(store.get('dateField', 'mtime'));
+  dateFilter = $state<DateRange | null>(null);
+  /** Lazily generated thumbnail URLs, keyed by path + mtime. */
+  thumbs = new SvelteMap<string, string | null>();
+  renaming = $state<string | null>(null);
+  menu = $state<{ x: number; y: number; entry: Entry | null } | null>(null);
+
+  /** Entries after all filters except the date range (the calendar shows these). */
+  undated = $derived(
     filterEntries(this.raw, {
       search: this.searchMode === 'filter' ? this.search : '',
       funnel: this.funnel,
@@ -92,6 +102,9 @@ class AppState {
       desc: this.desc
     })
   );
+
+  /** What the canvas shows. */
+  visible = $derived(this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated);
 
   groups = $derived.by(() => {
     if (this.view === 'kanban') return groupEntries(this.visible, this.kanbanBy, { depth: this.tagDepth });
@@ -118,6 +131,22 @@ class AppState {
     await this.navigate(last || this.home, false).catch(() => this.navigate(this.home, false));
     if (!this.expanded.size) this.expanded.add(this.home);
     for (const p of this.expanded) this.loadChildren(p);
+    await this.backend.onChange((paths) => this.onFsChange(paths));
+  }
+
+  private fsTimer: ReturnType<typeof setTimeout> | null = null;
+  private fsDirs = new Set<string>();
+
+  /** External changes (other apps, sync clients): refresh quietly, keep selection. */
+  private onFsChange(paths: string[]) {
+    for (const p of paths) this.fsDirs.add(dirname(p));
+    if (this.fsTimer) clearTimeout(this.fsTimer);
+    this.fsTimer = setTimeout(async () => {
+      const dirs = [...this.fsDirs];
+      this.fsDirs.clear();
+      await this.refresh(true);
+      await Promise.all(dirs.filter((d) => this.children.has(d)).map((d) => this.loadChildren(d)));
+    }, 250);
   }
 
   // ---------------------------------------------------------------- navigation
@@ -129,6 +158,7 @@ class AppState {
     }
     this.cwd = path;
     this.funnel = null;
+    this.dateFilter = null;
     this.selection.clear();
     this.anchor = null;
     store.set('cwd', path);
@@ -156,15 +186,21 @@ class AppState {
     if (parent && parent !== this.cwd) this.navigate(parent);
   }
 
-  async refresh() {
-    this.loading = true;
+  async refresh(quiet = false) {
+    if (!quiet) this.loading = true;
     try {
       const forceRecursive = this.view === 'kanban' && this.kanbanBy === 'subfolder';
-      this.raw =
-        this.recursive || forceRecursive
-          ? await this.backend.walk(this.cwd, { maxDepth: 12 })
-          : await this.backend.listDir(this.cwd);
+      const recursive = this.recursive || forceRecursive;
+      const fresh = recursive ? await this.backend.walk(this.cwd, { maxDepth: 12 }) : await this.backend.listDir(this.cwd);
+      // Keep lazily loaded EXIF data across refreshes.
+      const prev = new Map(this.raw.map((e) => [e.path, e]));
+      this.raw = fresh.map((e) => {
+        const o = prev.get(e.path);
+        return o && o.mtime === e.mtime && (o.taken !== undefined || o.geo) ? { ...e, taken: e.taken ?? o.taken, geo: e.geo ?? o.geo } : e;
+      });
       this.learnTags(this.raw.flatMap((e) => e.tags));
+      if (!quiet) this.backend.watch(this.cwd, recursive).catch(() => {});
+      if (this.view === 'map' || (this.view === 'calendar' && this.dateField === 'taken')) void this.loadMediaInfo();
     } catch (e) {
       this.toast(String(e), true);
       this.raw = [];
@@ -183,6 +219,74 @@ class AppState {
     this.view = v;
     store.set('view', v);
     this.refresh();
+  }
+
+  setDateField(f: DateField) {
+    this.dateField = f;
+    store.set('dateField', f);
+    if (this.dateFilter) this.dateFilter = { ...this.dateFilter, field: f };
+    if (f === 'taken') void this.loadMediaInfo();
+  }
+
+  setDateFilter(r: DateRange | null) {
+    this.dateFilter = r;
+    this.selection.clear();
+  }
+
+  // ---------------------------------------------------------------- media
+
+  private thumbQueue: { entry: Entry; key: string }[] = [];
+  private thumbActive = 0;
+
+  thumbKey(e: Entry) {
+    return `${e.path}|${e.mtime}`;
+  }
+
+  /** Called by tiles when they scroll into view. At most 4 thumbnails are generated at once. */
+  requestThumb(e: Entry) {
+    const key = this.thumbKey(e);
+    if (e.thumb || this.thumbs.has(key) || family(e.ext, e.kind) !== 'image') return;
+    this.thumbs.set(key, null);
+    this.thumbQueue.push({ entry: e, key });
+    this.pumpThumbs();
+  }
+
+  private pumpThumbs() {
+    while (this.thumbActive < 4 && this.thumbQueue.length) {
+      // Newest requests first: what the user scrolled to most recently.
+      const job = this.thumbQueue.pop()!;
+      this.thumbActive++;
+      this.backend
+        .thumbnail(job.entry, 480)
+        .then((url) => this.thumbs.set(job.key, url))
+        .catch(() => {})
+        .finally(() => {
+          this.thumbActive--;
+          this.pumpThumbs();
+        });
+    }
+  }
+
+  thumbOf(e: Entry): string | null {
+    return e.thumb ?? this.thumbs.get(this.thumbKey(e)) ?? null;
+  }
+
+  private mediaLoaded = new Set<string>();
+
+  /** EXIF (GPS, capture date) for photos in the current listing, batched. */
+  async loadMediaInfo() {
+    const todo = this.raw.filter(
+      (e) => e.kind === 'file' && ['jpg', 'jpeg', 'tif', 'tiff', 'heic', 'png', 'webp'].includes(e.ext) && !this.mediaLoaded.has(this.thumbKey(e))
+    );
+    for (let i = 0; i < todo.length; i += 200) {
+      const batch = todo.slice(i, i + 200);
+      for (const e of batch) this.mediaLoaded.add(this.thumbKey(e));
+      const infos = new Map((await this.backend.mediaInfo(batch.map((e) => e.path))).map((m) => [m.path, m]));
+      this.raw = this.raw.map((e) => {
+        const m = infos.get(e.path);
+        return m ? { ...e, geo: e.geo ?? m.geo, taken: m.taken } : e;
+      });
+    }
   }
 
   setKanbanBy(v: 'tag' | 'subfolder') {
@@ -376,9 +480,62 @@ class AppState {
   }
 
   async mkdir(name: string) {
-    const p = await this.backend.mkdir(this.cwd, name);
+    const p = await this.backend.mkdir(this.funnel ?? this.cwd, name);
     await this.afterFsChange();
     return p;
+  }
+
+  /** New folder, then straight into rename mode (like Finder). */
+  async newFolder() {
+    try {
+      const p = await this.mkdir('Neuer Ordner');
+      this.select(p, 'replace');
+      this.renaming = p;
+    } catch (e) {
+      this.toast(String(e), true);
+    }
+  }
+
+  async rename(path: string, newName: string) {
+    // Enter and the following blur both end editing; only the first one counts.
+    if (this.renaming !== path) return;
+    this.renaming = null;
+    if (!newName.trim() || newName === basename(path)) return;
+    try {
+      const e = await this.backend.rename(path, newName);
+      this.staging = this.staging.map((s) => (s.path === path ? { ...s, path: e.path, name: e.name } : s));
+      await this.afterFsChange();
+      this.select(e.path, 'replace');
+    } catch (err) {
+      this.toast(String(err), true);
+    }
+  }
+
+  async trash(entries: Entry[]) {
+    if (!entries.length) return;
+    const res = await this.backend.trash(entries.map((e) => e.path));
+    const n = Object.keys(res.moved).length;
+    if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
+    if (n) this.toast(`${n} ${n === 1 ? 'Objekt' : 'Objekte'} in den Papierkorb gelegt`);
+    this.unstage(Object.keys(res.moved));
+    await this.afterFsChange();
+  }
+
+  async open(e: Entry) {
+    if (e.kind === 'dir') return this.navigate(e.path);
+    try {
+      await this.backend.openDefault(e.path);
+    } catch (err) {
+      this.toast(String(err).replace(/^Error: /, ''), true);
+    }
+  }
+
+  async reveal(e: Entry) {
+    try {
+      await this.backend.reveal(e.path);
+    } catch (err) {
+      this.toast(String(err).replace(/^Error: /, ''), true);
+    }
   }
 
   private async afterFsChange() {
@@ -399,6 +556,7 @@ class AppState {
   private toastId = 0;
   toast(text: string, error = false, undo?: () => Promise<void>) {
     const id = ++this.toastId;
+    text = text.replace(/^Error: /, '');
     this.toasts = [...this.toasts, { id, text, error, undo }];
     setTimeout(() => this.dismiss(id), undo ? 7000 : 3500);
   }

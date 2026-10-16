@@ -15,9 +15,45 @@
   const isHit = $derived(drag.active && drag.hit?.kind === 'folder' && drag.hit.path === entry.path);
   const dragging = $derived(drag.active && drag.items.some((i) => i.path === entry.path));
 
-  let imgEl: HTMLElement | undefined = $state();
+  const src = $derived(app.thumbOf(entry));
+  const renaming = $derived(app.renaming === entry.path);
+
+  /** Ask for a thumbnail only once the tile is (nearly) on screen. */
+  function lazyThumb(node: HTMLElement) {
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es.some((x) => x.isIntersecting)) {
+          app.requestThumb(entry);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '400px' }
+    );
+    io.observe(node);
+    return { destroy: () => io.disconnect() };
+  }
+
+  /** Select the name without the extension, like Finder/Explorer. */
+  function renameField(node: HTMLInputElement) {
+    node.focus();
+    const dot = entry.kind === 'file' ? entry.name.lastIndexOf('.') : -1;
+    node.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
+  }
+
+  function renameKey(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Enter') app.rename(entry.path, (e.currentTarget as HTMLInputElement).value);
+    else if (e.key === 'Escape') app.renaming = null;
+  }
+
+  function menu(e: MouseEvent) {
+    e.preventDefault();
+    if (!selected) app.select(entry.path, 'replace');
+    app.menu = { x: e.clientX, y: e.clientY, entry };
+  }
 
   function down(e: PointerEvent) {
+    if (renaming || e.button !== 0) return;
     if (e.shiftKey || isToggleKey(e)) {
       // Modifier clicks only change the selection.
       app.select(entry.path, e.shiftKey ? 'range' : 'toggle');
@@ -33,8 +69,7 @@
   }
 
   function open() {
-    if (entry.kind === 'dir') app.navigate(entry.path);
-    else app.preview = { entry, from: imgEl?.getBoundingClientRect() ?? null };
+    if (!renaming) app.open(entry);
   }
 </script>
 
@@ -53,10 +88,11 @@
   tabindex="-1"
   onpointerdown={down}
   ondblclick={open}
+  oncontextmenu={menu}
 >
-  <div class="thumb" bind:this={imgEl}>
-    {#if entry.thumb}
-      <img src={entry.thumb} alt="" draggable="false" loading="lazy" />
+  <div class="thumb" use:lazyThumb>
+    {#if src}
+      <img {src} alt="" draggable="false" loading="lazy" />
     {:else}
       <div class="ph ph-{fam}" style:color={entry.color ?? undefined}>
         <Icon name={fam === 'dir' ? 'folder' : fam === 'other' ? 'file' : fam} size={compact ? 26 : 38} />
@@ -75,7 +111,19 @@
     {/if}
   </div>
   <div class="meta">
-    <span class="name" title={entry.name}>{entry.name}</span>
+    {#if renaming}
+      <input
+        class="rename"
+        value={entry.name}
+        use:renameField
+        onkeydown={renameKey}
+        onblur={(e) => app.rename(entry.path, e.currentTarget.value)}
+        onpointerdown={(e) => e.stopPropagation()}
+        spellcheck="false"
+      />
+    {:else}
+      <span class="name" title={entry.name}>{entry.name}</span>
+    {/if}
     {#if !compact}
       <span class="sub">
         {#each entry.tags.slice(0, 3) as t (t)}
@@ -224,6 +272,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .rename {
+    width: 100%;
+    padding: 1px 4px;
+    margin: -2px -4px;
+    border: 0;
+    border-radius: 4px;
+    outline: 2px solid var(--accent);
+    background: var(--bg-elev);
+    font-weight: 500;
   }
   .sub {
     display: flex;

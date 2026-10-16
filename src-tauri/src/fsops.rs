@@ -200,6 +200,46 @@ pub fn transfer(paths: &[String], target_dir: &Path, mode: Mode) -> TransferResu
     res
 }
 
+/// Rename within the same folder; the sidecar follows. Fails instead of overwriting.
+pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
+    let name = new_name.trim();
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
+        return Err("Ungültiger Name".into());
+    }
+    let dir = path.parent().ok_or("Kein Elternordner")?;
+    let dest = dir.join(name);
+    if dest == path {
+        return Ok(dest);
+    }
+    // Case-only renames ("a.jpg" → "A.jpg") are fine on case-insensitive file systems.
+    let same_file = dest.exists()
+        && fs::canonicalize(&dest).ok() == fs::canonicalize(path).ok();
+    if dest.exists() && !same_file {
+        return Err(format!("„{name}“ existiert bereits"));
+    }
+    fs::rename(path, &dest).map_err(|e| e.to_string())?;
+    let _ = meta::transfer_sidecar(path, &dest, false);
+    Ok(dest)
+}
+
+/// Move files to the system trash (with their sidecars, so a restore keeps the tags nearby).
+pub fn trash(paths: &[String]) -> TransferResult {
+    let mut res = TransferResult::default();
+    for p in paths {
+        let path = Path::new(p);
+        match ::trash::delete(path) {
+            Ok(()) => {
+                if let Some(sc) = meta::sidecar_path(path).filter(|s| s.exists()) {
+                    let _ = ::trash::delete(sc);
+                }
+                res.moved.insert(p.clone(), String::new());
+            }
+            Err(e) => res.errors.push(TransferError { path: p.clone(), message: e.to_string() }),
+        }
+    }
+    res
+}
+
 pub fn places() -> Vec<(String, PathBuf)> {
     let mut v = Vec::new();
     if let Some(h) = dirs::home_dir() {
@@ -253,6 +293,12 @@ mod tests {
         fs::write(root.join("a/x[foo].jpg"), b"1").unwrap();
         let res = transfer(&[root.join("a/x[foo].jpg").to_string_lossy().to_string()], &root.join("dest"), Mode::Copy);
         assert!(res.moved.values().next().unwrap().ends_with("x[foo] 2.jpg"));
+
+        // Rename keeps the sidecar and refuses to overwrite.
+        let renamed = rename(Path::new(res.moved.values().next().unwrap()), "y.jpg").unwrap();
+        assert!(renamed.ends_with("y.jpg"));
+        assert!(rename(&renamed, "x[foo].jpg").is_err(), "must not overwrite");
+        assert!(rename(&renamed, "../evil.jpg").is_err());
 
         // A folder can't go into itself.
         let res = transfer(&[root.join("a").to_string_lossy().to_string()], &root.join("a/b"), Mode::Move);

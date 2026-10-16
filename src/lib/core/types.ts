@@ -18,6 +18,8 @@ export interface Entry {
   tags: string[];
   color?: string | null;
   geo?: Geo | null;
+  /** Capture time from EXIF (ms), loaded lazily for photos. */
+  taken?: number | null;
   /** In recursive stream mode: directory path relative to the stream root ('' = root). */
   relDir?: string;
   /** Optional URL usable as <img src>; the backend decides how it is served. */

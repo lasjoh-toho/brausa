@@ -213,7 +213,7 @@ Pointer-Events**:
 |---|---|---|
 | **0 – Fundament** | Konzept, Projektgerüst, Domänenkern mit Tests, Backend-Interface, Demo-Backend | ✅ in diesem Schritt |
 | **1 – MVP-Oberfläche** | Baum mit Aufklappen beim Hovern, Breadcrumb-Drop, Dual-Zone, Ablage-Raster, Stream, Kanban, Timeline, Auswahl und Lasso, Tray, Quick-Tag, Muster-Auswahl, Zoom-Vorschau, Undo für Verschieben | ✅ erste Version, unter Linux (WebKitGTK) mit echtem Dateisystem getestet |
-| **2 – Echte Daten** | Thumbnails (Rust, `image`-Crate, Cache), EXIF/GPS, Karten-Ansicht, Watcher, Undo-Stack, Papierkorb, Index (SQLite als Cache) | offen |
+| **2 – Echte Daten** | Thumbnails (Rust, `image`-Crate, Cache) ✅, EXIF/GPS ✅, Karten-Ansicht ✅, Kalender-Heatmap mit Zeitfilter ✅, Watcher ✅, Papierkorb und Umbenennen ✅, Öffnen in Standard-App ✅ · offen: Undo-Stack für alle Aktionen, Index (SQLite als Cache) | größtenteils erledigt |
 | **3 – Web** | Web-Pane, Clipper, Lesezeichen, nativer Drag hinaus | offen |
 | **4 – KI** | Ollama-Provider, Auto-Tag-Vorschläge, Zusammenfassungen, NL-Suche | offen |
 | **5 – Release** | Signierte Builds (notarisiert für macOS, MSI für Windows, AppImage/deb für Linux) über GitHub Actions | offen |

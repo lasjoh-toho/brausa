@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { app } from './lib/state/app.svelte';
   import { drag } from './lib/state/drag.svelte';
-  import { isToggleKey } from './lib/platform';
+  import { isMac, isToggleKey } from './lib/platform';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Toolbar from './lib/components/Toolbar.svelte';
   import Canvas from './lib/components/Canvas.svelte';
@@ -14,6 +14,7 @@
   import Preview from './lib/components/Preview.svelte';
   import GridEditor from './lib/components/GridEditor.svelte';
   import Toasts from './lib/components/Toasts.svelte';
+  import ContextMenu from './lib/components/ContextMenu.svelte';
 
   let toolbar: Toolbar;
   let accent = $state<{ color: string; light: boolean } | null>(null);
@@ -23,6 +24,13 @@
   onMount(() => {
     app.init();
   });
+
+  function openPreview() {
+    const first = app.selectedEntries.find((x) => x.kind === 'file');
+    if (!first) return;
+    const thumb = document.querySelector<HTMLElement>(`.tile[data-path="${CSS.escape(first.path)}"] .thumb`);
+    app.preview = { entry: first, from: thumb?.getBoundingClientRect() ?? null };
+  }
 
   function typing(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
@@ -36,9 +44,23 @@
       e.preventDefault();
       return;
     }
-    if (typing(e) || drag.active || tagSource || app.preview) return;
+    if (typing(e) || drag.active || tagSource || app.preview || app.menu || app.renaming) return;
 
-    if (mod && e.key.toLowerCase() === 'a') {
+    const sel = app.selectedEntries;
+    const k = e.key.toLowerCase();
+    if (mod && e.shiftKey && k === 'n') {
+      app.newFolder();
+      e.preventDefault();
+    } else if (mod && k === 'o') {
+      sel.forEach((x) => app.open(x));
+      e.preventDefault();
+    } else if (e.key === 'F2' || (isMac && e.key === 'Enter')) {
+      if (sel.length === 1) app.renaming = sel[0].path;
+      e.preventDefault();
+    } else if ((isMac && mod && e.key === 'Backspace') || (!isMac && e.key === 'Delete')) {
+      app.trash(sel);
+      e.preventDefault();
+    } else if (mod && e.key.toLowerCase() === 'a') {
       app.selectAll();
       e.preventDefault();
     } else if (e.key === 't' || e.key === 'T') {
@@ -49,15 +71,10 @@
     } else if (e.key === 's' && !mod) {
       app.stage(app.selectedEntries);
     } else if (e.key === ' ') {
-      const first = app.selectedEntries.find((x) => x.kind === 'file');
-      if (first) {
-        const thumb = document.querySelector<HTMLElement>(`.tile[data-path="${CSS.escape(first.path)}"] .thumb`);
-        app.preview = { entry: first, from: thumb?.getBoundingClientRect() ?? null };
-      }
+      openPreview();
       e.preventDefault();
     } else if (e.key === 'Enter') {
-      const dir = app.selectedEntries.find((x) => x.kind === 'dir');
-      if (dir) app.navigate(dir.path);
+      sel.forEach((x) => app.open(x));
     } else if (e.key === 'Escape') {
       if (app.funnel) app.setFunnel(null);
       else app.selection.clear();
@@ -83,6 +100,7 @@
   {#if app.preview}<Preview onaccent={(c) => (accent = c)} />{/if}
   {#if tagSource && tagTargets.length}<TagBar targets={tagTargets} onclose={() => (tagSource = null)} />{/if}
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
+  {#if app.menu}<ContextMenu onTag={() => (tagSource = 'selection')} onPreview={openPreview} />{/if}
   <Toasts />
   <DragGhost />
 </div>

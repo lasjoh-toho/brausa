@@ -6,8 +6,9 @@ import type { Entry } from './types';
 import { TAG_SEPARATOR, indexTags } from './tags';
 import { isWithin } from './paths';
 import { matches, parsePattern } from './pattern';
+import { inRange, type DateRange } from './dates';
 
-export type ViewMode = 'stream' | 'kanban' | 'timeline' | 'map';
+export type ViewMode = 'stream' | 'kanban' | 'timeline' | 'calendar' | 'map';
 export type GroupBy = 'none' | 'tag' | 'subfolder' | 'month';
 export type SortKey = 'name' | 'mtime' | 'size' | 'ext';
 
@@ -22,6 +23,8 @@ export interface ViewQuery {
   search?: string;
   /** Breadcrumb funnel: restrict to this sub-branch. */
   funnel?: string | null;
+  /** Calendar heatmap filter. */
+  date?: DateRange | null;
   /** Show directories in the canvas (off in stream mode). */
   showDirs?: boolean;
   sort?: SortKey;
@@ -34,6 +37,7 @@ export function filterEntries(entries: Entry[], q: ViewQuery, now = Date.now()):
   let out = entries;
   if (!q.showDirs) out = out.filter((e) => e.kind === 'file');
   if (q.funnel) out = out.filter((e) => isWithin(e.path, q.funnel!));
+  if (q.date) out = out.filter((e) => e.kind === 'file' && inRange(e, q.date!));
   if (q.search?.trim()) {
     const p = parsePattern(q.search);
     if (p.terms.length) out = out.filter((e) => matches(e, p, now));
@@ -80,7 +84,7 @@ export function groupEntries(entries: Entry[], by: GroupBy, opts: { depth?: numb
       const top = rel.split(/[\\/]/)[0] ?? '';
       add(top || '.', top || '(oberste Ebene)', e);
     } else if (by === 'month') {
-      const d = new Date(e.mtime);
+      const d = new Date(e.taken ?? e.mtime);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const label = d.toLocaleDateString(opts.locale ?? 'de-DE', { month: 'long', year: 'numeric' });
       add(key, label, e);

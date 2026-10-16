@@ -1,11 +1,14 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
-import { family } from '../core/format';
-import type { Backend, TransferResult, WalkOptions } from './types';
+import type { Backend, MediaInfo, TransferResult, WalkOptions } from './types';
 
-/** Rust returns entries without thumbnails; image files are served via the asset protocol. */
+/** Formats the webview can show as-is. Raster thumbnails come from the Rust cache instead. */
+const WEB_IMAGE = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp']);
+
+/** Vector graphics need no thumbnail; everything else is requested lazily by the tile. */
 function withThumb(e: Entry): Entry {
-  return family(e.ext, e.kind) === 'image' ? { ...e, thumb: convertFileSrc(e.path) } : e;
+  return e.kind === 'file' && e.ext === 'svg' ? { ...e, thumb: convertFileSrc(e.path) } : e;
 }
 
 export class TauriBackend implements Backend {
@@ -47,5 +50,46 @@ export class TauriBackend implements Backend {
 
   folderMeta(path: string) {
     return invoke<{ tags: string[]; color: string | null }>('folder_meta', { path });
+  }
+
+  async thumbnail(entry: Entry, size: number) {
+    if (entry.thumb) return entry.thumb;
+    try {
+      return convertFileSrc(await invoke<string>('thumbnail', { path: entry.path, size }));
+    } catch {
+      return null; // unsupported format or broken file → icon
+    }
+  }
+
+  fileUrl(entry: Entry) {
+    return WEB_IMAGE.has(entry.ext) ? convertFileSrc(entry.path) : null;
+  }
+
+  mediaInfo(paths: string[]) {
+    return invoke<MediaInfo[]>('media_info', { paths });
+  }
+
+  async rename(path: string, newName: string) {
+    return withThumb(await invoke<Entry>('rename', { path, newName }));
+  }
+
+  trash(paths: string[]) {
+    return invoke<TransferResult>('trash', { paths });
+  }
+
+  openDefault(path: string) {
+    return invoke<void>('open_default', { path });
+  }
+
+  reveal(path: string) {
+    return invoke<void>('reveal', { path });
+  }
+
+  watch(path: string, recursive: boolean) {
+    return invoke<void>('watch', { path, recursive });
+  }
+
+  onChange(cb: (paths: string[]) => void) {
+    return listen<{ paths: string[] }>('fs-change', (ev) => cb(ev.payload.paths));
   }
 }
