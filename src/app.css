@@ -1,0 +1,184 @@
+:root {
+  --bg: #fbfbfa;
+  --bg-elev: #ffffff;
+  --bg-sunken: #f2f2f0;
+  --fg: #1c1c1a;
+  --fg-muted: #6b6b66;
+  --fg-faint: #a3a39e;
+  --line: #e6e6e2;
+  --accent: #2f6bff;
+  --accent-soft: rgba(47, 107, 255, 0.12);
+  --attr: #c2410c;
+  --attr-soft: rgba(194, 65, 12, 0.12);
+  --danger: #d92d20;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.08);
+  --radius: 10px;
+  --toolbar-h: 52px;
+  --sidebar-w: 248px;
+  --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #141413;
+    --bg-elev: #1d1d1b;
+    --bg-sunken: #0f0f0e;
+    --fg: #ecece8;
+    --fg-muted: #9a9a94;
+    --fg-faint: #5d5d58;
+    --line: #2a2a27;
+    --accent: #5b8cff;
+    --accent-soft: rgba(91, 140, 255, 0.18);
+    --attr: #fb923c;
+    --attr-soft: rgba(251, 146, 60, 0.16);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #141413;
+  --bg-elev: #1d1d1b;
+  --bg-sunken: #0f0f0e;
+  --fg: #ecece8;
+  --fg-muted: #9a9a94;
+  --fg-faint: #5d5d58;
+  --line: #2a2a27;
+  --accent: #5b8cff;
+  --accent-soft: rgba(91, 140, 255, 0.18);
+  --attr: #fb923c;
+  --attr-soft: rgba(251, 146, 60, 0.16);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  /* A file manager, not a document: no accidental text selection (WebKit selects while dragging). */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+body.dragging,
+body.dragging * {
+  cursor: grabbing !important;
+}
+
+/* macOS overlay title bar: keep the traffic lights clear of the sidebar. */
+:root[data-platform='mac'] .brand {
+  padding-left: 76px !important;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--bg-sunken);
+  color: var(--fg);
+}
+.btn.on {
+  background: var(--bg-sunken);
+  color: var(--fg);
+}
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.seg .btn {
+  height: 24px;
+  padding: 0 8px;
+}
+.seg .btn.on {
+  background: var(--bg-elev);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: var(--bg-sunken);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--fg-muted);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 10px;
+  border: 3px solid var(--bg);
+}
