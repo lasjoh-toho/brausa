@@ -38,6 +38,8 @@ jobs:
   # Installer for all three platforms (also on PRs, so macOS/Windows breakage shows up before merge).
   bundle:
     needs: [web, rust]
+    permissions:
+      contents: write # needed to attach installers to a GitHub Release
     strategy:
       fail-fast: false
       matrix:
@@ -74,3 +76,18 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.AppImage
             src-tauri/target/**/release/bundle/**/*.deb
           if-no-files-found: warn
+      # On a version tag (v*): create/extend the GitHub Release and attach the installers.
+      # All three matrix jobs append to the same release.
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: brausa ${{ github.ref_name }}
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          body_path: docs/RELEASE_NOTES.md
+          files: |
+            src-tauri/target/**/release/bundle/**/*.dmg
+            src-tauri/target/**/release/bundle/**/*.msi
+            src-tauri/target/**/release/bundle/**/*-setup.exe
+            src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.deb
+          fail_on_unmatched_files: false
