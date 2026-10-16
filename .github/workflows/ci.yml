@@ -35,9 +35,8 @@ jobs:
       - run: cargo test
         working-directory: src-tauri
 
-  # Installer for all three platforms. Runs on main and tags; artifacts are attached to the run.
+  # Installer for all three platforms (also on PRs, so macOS/Windows breakage shows up before merge).
   bundle:
-    if: github.event_name == 'push'
     needs: [web, rust]
     strategy:
       fail-fast: false
