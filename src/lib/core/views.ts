@@ -8,7 +8,7 @@ import { isWithin } from './paths';
 import { matches, parsePattern } from './pattern';
 import { inRange, type DateRange } from './dates';
 
-export type ViewMode = 'stream' | 'kanban' | 'timeline' | 'calendar' | 'map';
+export type ViewMode = 'stream' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
 export type GroupBy = 'none' | 'tag' | 'subfolder' | 'month';
 export type SortKey = 'name' | 'mtime' | 'size' | 'ext';
 

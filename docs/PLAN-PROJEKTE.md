@@ -127,14 +127,18 @@ Watcher-Event / App-Start / alle 10 min
      werden innerhalb der Karte verkleinert sichtbar**. Beim weiteren
      Hineinzoomen gehen sie nahtlos in eine eigene Fläche über.
 - **Leistung bei Tausenden Karten:**
-  - Gezeichnet wird mit Canvas 2D bzw. WebGL (z. B. PixiJS).
-  - Nur die gerade bearbeitete Karte ist ein echtes HTML-Element.
   - Was außerhalb des Sichtfelds liegt, wird nicht gerendert (Viewport-Culling).
-  - Unterkarten werden erst ab Detailstufe 3 geladen.
-- **Navigation:** Mausrad oder Pinch zoomt zum Zeiger hin. Doppelklick fliegt
-  in eine Karte hinein, `Esc` oder Herauszoomen geht eine Ebene zurück. Oben
-  steht eine Breadcrumb-Leiste („Roadmap › Phase 3 › Web-Clipper“), deren
-  Segmente wie heute Drop-Ziele sind.
+  - Unterkarten werden erst gezeichnet, wenn ihre Fläche groß genug ist.
+  - Gezeichnet wird ab der tiefsten Karte, die den ganzen Bildschirm füllt.
+    Dadurch bekommt CSS auch nach zehn Ebenen keine riesigen Zahlen.
+  - Umgesetzt (Phase B/C) mit absolut positionierten HTML-Elementen in
+    Bildschirmkoordinaten; das reicht für einige Hundert sichtbare Karten.
+    Erst wenn das nicht mehr genügt, wechselt der Renderer zu Canvas 2D bzw.
+    WebGL. Das Datenformat ändert sich dabei nicht.
+- **Navigation:** Mausrad oder Pinch zoomt zum Zeiger hin. `↵` oder die Lupe
+  an der Karte fliegt hinein, `Esc` geht eine Ebene zurück, `0` zeigt die
+  ganze Map. Oben steht eine Breadcrumb-Leiste („Roadmap › Phase 3 ›
+  Web-Clipper“). Ihre Segmente sollen später auch Drop-Ziele werden.
 
 ### Zusammenspiel mit dem Rest von brausa
 
@@ -154,6 +158,30 @@ Watcher-Event / App-Start / alle 10 min
   Map. Links, markierter Text und Bilder lassen sich als Karten auf die Map
   ziehen (mit Quelle). Der Web-Clipper legt die Seite zusätzlich als Datei in
   die Bibliothek.
+- **Karten Dokumenten zuordnen:** Eine Karte (z. B. mit einer Idee) auf eine
+  Datei ziehen, oder eine Datei auf eine Karte, ergänzt einen Verweis in
+  `refs`. Ein Klick darauf öffnet die Datei in der Standard-App. Eine Karte
+  kann mehrere Verweise haben.
+- **Von der Map ins Kanban schicken:** Weil das Kanban nur eine Ansicht ist,
+  heißt „schicken“, das Feld `status` zu setzen. Das geht per Kontextmenü, per
+  Ablage-Raster mit Status-Zellen oder durch Ziehen in die Kanban-Ansicht.
+
+### Snippets aus PDF und HTML (wie LiquidText)
+
+- **Leser:** PDFs werden mit pdf.js angezeigt, HTML im Web-Pane bzw. als
+  lokale Datei. Der Leser steht neben der Map.
+- **Snippet ziehen:** Markierten Text oder einen Bildausschnitt auf die Map
+  ziehen. Das erzeugt eine Snippet-Karte mit Verweis
+  `{ "kind": "file", "id": "f_…", "page": 3, "quads": [...], "quote": "…" }`
+  (bei HTML ein Textanker statt der Seitenkoordinaten). Ein Klick auf das
+  Snippet öffnet die Quelle an genau dieser Stelle und hebt sie hervor.
+- **Stapel:** Zieht man ein Snippet an die Ober- oder Unterkante eines
+  anderen, rasten beide zu einem Stapel ein. Der Stapel bewegt sich als
+  Ganzes, einzelne Snippets lassen sich wieder herausziehen. Gespeichert wird
+  er als Karte vom Typ `stack`, deren `children` die Reihenfolge festlegen.
+  Nach TiddlyWiki wird das ein `list`-Feld.
+- Pfeile und Verschachtelung funktionieren mit Snippets wie mit jeder anderen
+  Karte.
 
 ---
 
@@ -229,11 +257,11 @@ ein Tab in brausa.
 | Phase | Inhalt | Ergebnis |
 |---|---|---|
 | **A – Index** | `meta.jsonl` und SQLite-Cache, Datei-Identität, Abgleich und Reparatur, Migration der Sidecars, Statusanzeige | Ein `.brausa/` pro Bibliothek; Tags überleben Verschieben im Finder |
-| **B – Map-Grundgerüst** | Datenformat, Canvas-Renderer mit Pan/Zoom/Culling, Karten anlegen, bearbeiten, verschieben, Verbindungen ziehen, Undo | Erste nutzbare Map |
-| **C – Tiefe und ZUI** | Unterkarten, semantischer Zoom, Hineinfliegen, Breadcrumbs, Drag zwischen Ebenen | iMapping-artiges Arbeiten |
-| **D – Verzahnung** | Dateien als Karten (über Index-IDs), Kanban als Ansicht auf Karten, Bausteine-Panel mit Suche und Ordnervorschlägen | Projektorganisation mit echten Dateien |
+| **B – Map-Grundgerüst** ✅ | Datenformat, Renderer mit Pan/Zoom/Culling, Karten anlegen, bearbeiten, verschieben, Verbindungen ziehen, Undo | Erste nutzbare Map |
+| **C – Tiefe und ZUI** ✅ | Unterkarten, semantischer Zoom, Hineinfliegen, Breadcrumbs, Drag zwischen Ebenen | iMapping-artiges Arbeiten |
+| **D – Verzahnung** | Dateien als Karten mit Vorschaubild (über Index-IDs), Karten Dokumenten zuordnen, Kanban als Ansicht auf Karten („ins Kanban schicken“), Bausteine-Panel mit Suche und Ordnervorschlägen | Projektorganisation mit echten Dateien |
 | **E – TiddlyWiki** | Export Ordner/JSON, Import, danach Live-Sync; Drill-down im Pinboard-Fork | Projekte im Wiki vorstellen |
-| **F – Web** | Web-Pane, Ziehen ins Map, Clipper | Recherche direkt in Maps |
+| **F – Web und Lesen** | Web-Pane, PDF-/HTML-Leser, Snippets mit Rücksprung zur Quelle, Snippet-Stapel, Clipper | Recherche direkt in Maps |
 
 Reihenfolge-Empfehlung: **A vor B.** Maps verweisen auf Dateien, und das ist
 nur mit stabilen Index-IDs robust. E kann nach B parallel beginnen, weil das

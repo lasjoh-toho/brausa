@@ -5,7 +5,8 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MediaInfo, TransferResult, WalkOptions } from './types';
+import type { Backend, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions } from './types';
+import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 
 interface Node {
   entry: Entry;
@@ -349,4 +350,69 @@ export class DemoBackend implements Backend {
   async onIndexReport() {
     return () => {};
   }
+
+  // Maps persist in localStorage so the demo keeps what you draw.
+  private mapKey(root: string) {
+    return 'brausa.demo.maps:' + root;
+  }
+
+  private readMaps(root: string): Record<string, ProjectMap> {
+    try {
+      const raw = localStorage.getItem(this.mapKey(root));
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* private mode */
+    }
+    return root === this.libs[0]?.root ? { m_demo: demoMap() } : {};
+  }
+
+  private writeMaps(root: string, maps: Record<string, ProjectMap>) {
+    try {
+      localStorage.setItem(this.mapKey(root), JSON.stringify(maps));
+    } catch {
+      /* private mode */
+    }
+  }
+
+  private requireProject(root: string) {
+    if (!this.libs.some((l) => l.root === root)) throw new Error(`„${root}“ ist kein Projekt`);
+  }
+
+  async listMaps(root: string): Promise<MapInfo[]> {
+    this.requireProject(root);
+    return Object.values(this.readMaps(root)).map((m) => ({ id: m.id, title: m.title, updated: m.updated ?? null }));
+  }
+
+  async loadMap(root: string, id: string) {
+    this.requireProject(root);
+    const m = this.readMaps(root)[id];
+    if (!m) throw new Error('Map nicht gefunden');
+    return structuredClone(m);
+  }
+
+  async saveMap(root: string, map: ProjectMap) {
+    this.requireProject(root);
+    this.writeMaps(root, { ...this.readMaps(root), [map.id]: structuredClone(map) });
+  }
+
+  async deleteMap(root: string, id: string) {
+    const maps = this.readMaps(root);
+    delete maps[id];
+    this.writeMaps(root, maps);
+  }
+}
+
+/** A small roadmap that shows nesting and links. */
+function demoMap(): ProjectMap {
+  const m = newMap('Roadmap', 'm_demo');
+  const idea = addCard(m, null, { x: 0, y: 0 }, { title: 'Idee', text: 'Ein Finder, der **Projekte** versteht.\n\n- Index\n- Maps\n- TiddlyWiki', color: '#f59e0b', w: 260, h: 170 });
+  const web = addCard(m, null, { x: 380, y: -40 }, { title: 'Phase F: Web', w: 420, h: 300, color: '#0090ff' });
+  addCard(m, web.id, { x: 20, y: 20 }, { title: 'Web-Pane', text: 'Seiten neben der Map öffnen', w: 380, h: 220 });
+  const clip = addCard(m, web.id, { x: 460, y: 20 }, { title: 'Clipper', text: 'Seite als Datei ablegen', w: 380, h: 220 });
+  addCard(m, web.id, { x: 20, y: 300 }, { title: 'Snippets', text: 'Text aus PDF/HTML auf die Map ziehen', w: 820, h: 300, color: '#10b981' });
+  const tw = addCard(m, null, { x: 0, y: 260 }, { title: 'TiddlyWiki-Export', text: 'Karten → Tiddler, Pfeile → `brausa-links`', w: 300, h: 150, color: '#8b5cf6' });
+  addLink(m, idea.id, web.id);
+  addLink(m, idea.id, tw.id);
+  addLink(m, clip.id, tw.id);
+  return m;
 }

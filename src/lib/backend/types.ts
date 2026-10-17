@@ -1,4 +1,5 @@
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
+import type { ProjectMap } from '../core/map';
 
 export interface WalkOptions {
   maxDepth?: number;
@@ -22,6 +23,12 @@ export interface LibraryInfo {
   files: number;
   /** Files whose metadata waits for the file to come back. */
   orphans: number;
+}
+
+export interface MapInfo {
+  id: string;
+  title: string;
+  updated: string | null;
 }
 
 /** What a background reconcile changed. */
@@ -79,4 +86,10 @@ export interface Backend {
   addLibrary(root: string, name?: string): Promise<LibraryInfo>;
   removeLibrary(root: string): Promise<void>;
   onIndexReport(cb: (r: IndexReport) => void): Promise<() => void>;
+
+  /** Project maps, stored in `<root>/.brausa/maps/`. `root` must be a project. */
+  listMaps(root: string): Promise<MapInfo[]>;
+  loadMap(root: string, id: string): Promise<ProjectMap>;
+  saveMap(root: string, map: ProjectMap): Promise<void>;
+  deleteMap(root: string, id: string): Promise<void>;
 }

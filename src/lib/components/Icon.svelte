@@ -31,7 +31,16 @@
     select: 'M4 4h4M12 4h4M20 4v4M20 12v4M4 8v4M4 16v4h4M12 20h4',
     gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12l2-1-1-3-2 .5-1.5-1.5.5-2-3-1-1 2h-2l-1-2-3 1 .5 2L6 8.5 4 8l-1 3 2 1v0l-2 1 1 3 2-.5 1.5 1.5-.5 2 3 1 1-2h2l1 2 3-1-.5-2 1.5-1.5 2 .5 1-3z',
     filter: 'M4 5h16l-6 8v6l-4-2v-4z',
-    copy: 'M8 8h12v12H8zM4 16V4h12'
+    copy: 'M8 8h12v12H8zM4 16V4h12',
+    nodes: 'M4 4h7v5H4zM13 15h7v5h-7zM7.5 9v4.5a1.5 1.5 0 0 0 1.5 1.5h4M14 6.5h6M17 4v5',
+    zoomIn: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4M8 11h6M11 8v6',
+    zoomOut: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4M8 11h6',
+    fit: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
+    undo: 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',
+    redo: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3',
+    chevronDown: 'M6 9l6 6 6-6',
+    arrow: 'M4 12h15M13 6l6 6-6 6',
+    line: 'M4 12h16'
   };
   let { name, size = 16 }: { name: string; size?: number } = $props();
 </script>

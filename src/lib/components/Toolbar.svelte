@@ -15,7 +15,8 @@
     { id: 'kanban', icon: 'kanban', label: 'Kanban' },
     { id: 'timeline', icon: 'timeline', label: 'Zeitachse' },
     { id: 'calendar', icon: 'calendar', label: 'Kalender' },
-    { id: 'map', icon: 'map', label: 'Karte' }
+    { id: 'map', icon: 'map', label: 'Fotos auf der Landkarte' },
+    { id: 'board', icon: 'nodes', label: 'Projektmap' }
   ];
 
   let searchEl: HTMLInputElement;
@@ -106,20 +107,22 @@
     </div>
   {/if}
 
-  <button class="btn" class:on={app.recursive} onclick={() => app.setRecursive(!app.recursive)} title="Unterordner flach anzeigen">
-    <Icon name="stream" size={15} /> Stream
-  </button>
+  {#if app.view !== 'board'}
+    <button class="btn" class:on={app.recursive} onclick={() => app.setRecursive(!app.recursive)} title="Unterordner flach anzeigen">
+      <Icon name="stream" size={15} /> Stream
+    </button>
 
-  <input
-    class="zoom"
-    type="range"
-    min="96"
-    max="360"
-    step="4"
-    value={app.tileSize}
-    oninput={(e) => app.setTileSize(Number(e.currentTarget.value))}
-    aria-label="Kachelgröße"
-  />
+    <input
+      class="zoom"
+      type="range"
+      min="96"
+      max="360"
+      step="4"
+      value={app.tileSize}
+      oninput={(e) => app.setTileSize(Number(e.currentTarget.value))}
+      aria-label="Kachelgröße"
+    />
+  {/if}
 
   <button
     class="btn drop-trigger"
