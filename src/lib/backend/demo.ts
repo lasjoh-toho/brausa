@@ -5,8 +5,9 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions } from './types';
+import type { Backend, LibraryInfo, MapInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiOverlay, WikiRecipe } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
+import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 
 interface Node {
   entry: Entry;
@@ -155,6 +156,7 @@ export class DemoBackend implements Backend {
       });
     this.addFile(`${HOME}/Projekte/Brausa`, 'Konzept[Work planung].pdf', { size: 340_000, mtime: now - 2 * DAY });
     this.addFile(`${HOME}/Projekte/Brausa`, 'notizen.md', { size: 4_100, tags: ['Work'] });
+    this.addFile(`${HOME}/Projekte/Brausa`, 'Recherche ZUI.html', { size: DEMO_HTML.length, mtime: now - 3 * DAY });
     this.addFile(`${HOME}/Dokumente`, 'Steuer-2025.pdf', { size: 1_200_000, tags: ['Privat/Finanzen'], mtime: now - 90 * DAY });
     this.addFile(`${HOME}/Dokumente`, 'Mietvertrag.pdf', { size: 800_000, tags: ['Privat/Wohnung'], mtime: now - 400 * DAY });
     this.addFile(`${HOME}/Downloads`, 'installer.dmg', { size: 180_000_000 });
@@ -283,6 +285,22 @@ export class DemoBackend implements Backend {
 
   fileUrl(entry: Entry) {
     return entry.thumb ?? null;
+  }
+
+  assetUrl() {
+    return null;
+  }
+
+  async fileData(path: string) {
+    if (!this.find(path)) throw new Error('Nicht gefunden');
+    if (extOf(path) !== 'pdf') throw new Error('Demo-Modus: nur PDFs haben Inhalt');
+    return DEMO_PDF.slice().buffer as ArrayBuffer;
+  }
+
+  async readText(path: string) {
+    if (!this.find(path)) throw new Error('Nicht gefunden');
+    if (extOf(path) === 'html') return DEMO_HTML;
+    return '# Notizen\n\nDie Map soll **Snippets** aus PDFs und Webseiten aufnehmen.\n\n- Stapel wie in LiquidText\n- Rücksprung zur Quelle\n';
   }
 
   async mediaInfo(paths: string[]): Promise<MediaInfo[]> {
@@ -438,6 +456,107 @@ export class DemoBackend implements Backend {
         return [id, p && this.find(p) ? p : null];
       })
     );
+  }
+
+  // TiddlyWiki: bags and recipes in memory; syncing needs the real app (files on disk).
+  private bags: WikiBag[] = [
+    { name: 'glossar', description: 'Begriffe für alle Wikis', readonly: false, tiddlers: 12 },
+    { name: 'vorlagen', description: 'Seitenvorlagen', readonly: true, tiddlers: 4 }
+  ];
+  private recipes: WikiRecipe[] = [];
+
+  async wikiBags() {
+    return this.bags.map((b) => ({ ...b }));
+  }
+
+  async putWikiBag(bag: Omit<WikiBag, 'tiddlers'>) {
+    this.bags = [...this.bags.filter((b) => b.name !== bag.name), { ...bag, tiddlers: 0 }].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async deleteWikiBag(name: string) {
+    if (this.recipes.some((r) => r.bags.includes(name))) throw new Error(`Bag „${name}“ wird noch von einem Wiki benutzt`);
+    this.bags = this.bags.filter((b) => b.name !== name);
+  }
+
+  async wikiRecipes() {
+    return structuredClone(this.recipes);
+  }
+
+  async putWikiRecipe(r: WikiRecipe) {
+    const own = `wiki-${r.name}`;
+    const top = r.bags[r.bags.length - 1];
+    const bags = !top || top.startsWith('@map:') || this.bags.find((b) => b.name === top)?.readonly ? [...r.bags, own] : r.bags;
+    if (!this.bags.some((b) => b.name === own) && bags.includes(own)) await this.putWikiBag({ name: own, description: `Eigener Bag von „${r.name}“`, readonly: false });
+    const out = { ...r, bags, plugins: r.plugins ?? true };
+    this.recipes = [...this.recipes.filter((x) => x.name !== r.name), out];
+    return structuredClone(out);
+  }
+
+  async deleteWikiRecipe(name: string) {
+    this.recipes = this.recipes.filter((r) => r.name !== name);
+  }
+
+  /** Two wikis that cover the same glossary entry, to try the overlay tool. */
+  private overlays: WikiOverlay[] = [
+    {
+      title: 'Zoomable User Interface',
+      bag: 'glossar',
+      base: { title: 'Zoomable User Interface', tags: 'Glossar', text: 'Eine ZUI zeigt Inhalte auf einer unendlichen Fläche.\nMan zoomt hinein statt Fenster zu öffnen.' },
+      variants: [
+        {
+          recipe: 'Brausa',
+          identical: false,
+          kept: false,
+          fields: { title: 'Zoomable User Interface', tags: 'Glossar', text: 'Eine ZUI zeigt Inhalte auf einer unendlichen Fläche.\nMan zoomt hinein statt Fenster zu öffnen.\nBeispiele: Pad++, iMapping.' }
+        },
+        {
+          recipe: 'Lehre',
+          identical: false,
+          kept: false,
+          fields: { title: 'Zoomable User Interface', tags: 'Glossar', text: 'Eine ZUI zeigt Inhalte auf einer großen Fläche.\nMan zoomt hinein statt Fenster zu öffnen.' }
+        }
+      ]
+    },
+    {
+      title: 'Snippet',
+      bag: 'glossar',
+      base: { title: 'Snippet', text: 'Ausschnitt aus einem Dokument.' },
+      variants: [{ recipe: 'Brausa', identical: true, kept: false, fields: { title: 'Snippet', text: 'Ausschnitt aus einem Dokument.', modified: '20261017120000000' } }]
+    }
+  ];
+
+  async wikiOverlays() {
+    return structuredClone(this.overlays);
+  }
+
+  async resolveOverlay(title: string, bag: string, how: OverlayResolution) {
+    const o = this.overlays.find((x) => x.title === title && x.bag === bag);
+    if (!o) throw new Error(`„${title}“ wird nicht mehr überdeckt`);
+    const drop = (recipe: string) => (o.variants = o.variants.filter((v) => v.recipe !== recipe));
+    if (how.action === 'promote') {
+      o.base = { ...o.variants.find((v) => v.recipe === how.recipe)!.fields };
+      if (how.all) o.variants = [];
+      else drop(how.recipe);
+    } else if (how.action === 'merge') {
+      o.base = { ...o.base, text: how.text };
+      o.variants = [];
+    } else if (how.action === 'discard') drop(how.recipe);
+    else o.variants = o.variants.map((v) => (v.recipe === how.recipe ? { ...v, kept: how.keep } : v));
+    this.overlays = this.overlays.filter((x) => x.variants.length);
+  }
+
+  async wikiPlugins(): Promise<[string, string][]> {
+    return [
+      ['Markdown', '5.3.8'],
+      ['Graph', '1.11.0'],
+      ['Vis-Network', '10.6.3'],
+      ['Pinboard', '0.3.0'],
+      ['Kanban', '0.1.0']
+    ];
+  }
+
+  async syncWiki(): Promise<never> {
+    throw new Error('Demo-Modus: Der Abgleich mit TiddlyWiki braucht die App (Dateien auf der Festplatte).');
   }
 
   async deleteMap(root: string, id: string) {

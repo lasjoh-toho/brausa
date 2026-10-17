@@ -31,6 +31,53 @@ export interface MapInfo {
   updated: string | null;
 }
 
+/** TiddlyWiki bag (MultiWikiServer model): a named set of tiddlers. */
+export interface WikiBag {
+  name: string;
+  description: string;
+  readonly: boolean;
+  tiddlers: number;
+}
+
+/** A wiki = ordered list of bags (later wins) synced with a wiki folder or single-file wiki. */
+export interface WikiRecipe {
+  name: string;
+  description: string;
+  /** `@map:<root>|<mapId>` uses a project map as bag. */
+  bags: string[];
+  target: { kind: 'folder' | 'file'; path: string };
+  lastSync?: string | null;
+  /** Put brausa's bundled plugins (Markdown, tw5-graph, Pinboard, Kanban) into the wiki. */
+  plugins: boolean;
+  /** Overlays kept on purpose as this wiki's own variant. */
+  kept?: string[];
+}
+
+export type TiddlerFields = Record<string, string>;
+
+/** A shared tiddler that wikis cover with their own version (MultiWikiServer-style overlay). */
+export interface WikiOverlay {
+  title: string;
+  bag: string;
+  base: TiddlerFields;
+  variants: { recipe: string; fields: TiddlerFields; identical: boolean; kept: boolean }[];
+}
+
+export type OverlayResolution =
+  | { action: 'promote'; recipe: string; all: boolean }
+  | { action: 'merge'; text: string }
+  | { action: 'discard'; recipe: string }
+  | { action: 'keep'; recipe: string; keep: boolean };
+
+export interface WikiSyncReport {
+  pulled: string[];
+  conflicts: string[];
+  deleted: string[];
+  pushed: number;
+  maps: [string, string][];
+  warnings: string[];
+}
+
 /** What a background reconcile changed. */
 export interface IndexReport {
   relinked: [string, string][];
@@ -70,6 +117,11 @@ export interface Backend {
   thumbnail(entry: Entry, size: number): Promise<string | null>;
   /** URL for showing the original file in the webview (preview), or null. */
   fileUrl(entry: Entry): string | null;
+  /** URL for any local file (images inside HTML documents), or null. */
+  assetUrl(path: string): string | null;
+  /** Raw bytes (PDF reader) and text (HTML/Markdown reader) of a file. */
+  fileData(path: string): Promise<ArrayBuffer>;
+  readText(path: string): Promise<string>;
   /** EXIF GPS + capture date, batched. */
   mediaInfo(paths: string[]): Promise<MediaInfo[]>;
   rename(path: string, newName: string): Promise<Entry>;
@@ -96,4 +148,17 @@ export interface Backend {
   linkFiles(paths: string[]): Promise<{ path: string; id: string }[]>;
   /** Current path per id, null when the file is missing. */
   locateFiles(ids: string[]): Promise<Record<string, string | null>>;
+
+  /** TiddlyWiki: bags, recipes and two-way sync (see docs/PLAN-PROJEKTE.md §3). */
+  wikiBags(): Promise<WikiBag[]>;
+  putWikiBag(bag: Omit<WikiBag, 'tiddlers'>): Promise<void>;
+  deleteWikiBag(name: string): Promise<void>;
+  wikiRecipes(): Promise<WikiRecipe[]>;
+  putWikiRecipe(r: WikiRecipe): Promise<WikiRecipe>;
+  deleteWikiRecipe(name: string): Promise<void>;
+  syncWiki(name: string): Promise<WikiSyncReport>;
+  wikiOverlays(): Promise<WikiOverlay[]>;
+  resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
+  /** [name, version] of the plugins brausa bundles. */
+  wikiPlugins(): Promise<[string, string][]>;
 }
