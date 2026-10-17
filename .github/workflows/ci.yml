@@ -5,6 +5,13 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  # Release button: Actions → CI → "Run workflow" with a version like v0.2.0.
+  # Creates the tag on the chosen commit, then builds and attaches installers.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to release, e.g. v0.2.0'
+        required: true
 
 jobs:
   web:
@@ -35,9 +42,35 @@ jobs:
       - run: cargo test
         working-directory: src-tauri
 
+  # Creates the GitHub Release (and the tag, when started from the release button)
+  # once, so the three installer jobs below only attach files and never race.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: [web, rust]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        env:
+          TAG: ${{ inputs.version || github.ref_name }}
+        run: echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: brausa ${{ steps.tag.outputs.tag }}
+          prerelease: ${{ startsWith(steps.tag.outputs.tag, 'v0.') }}
+          body_path: docs/RELEASE_NOTES.md
+
   # Installer for all three platforms (also on PRs, so macOS/Windows breakage shows up before merge).
   bundle:
-    needs: [web, rust]
+    needs: [web, rust, release]
+    # Run even though `release` is skipped on PRs and branch pushes.
+    if: ${{ !failure() && !cancelled() }}
     permissions:
       contents: write # needed to attach installers to a GitHub Release
     strategy:
@@ -76,14 +109,10 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.AppImage
             src-tauri/target/**/release/bundle/**/*.deb
           if-no-files-found: warn
-      # On a version tag (v*): create/extend the GitHub Release and attach the installers.
-      # All three matrix jobs append to the same release.
-      - if: startsWith(github.ref, 'refs/tags/v')
+      - if: needs.release.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          name: brausa ${{ github.ref_name }}
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
-          body_path: docs/RELEASE_NOTES.md
+          tag_name: ${{ needs.release.outputs.tag }}
           files: |
             src-tauri/target/**/release/bundle/**/*.dmg
             src-tauri/target/**/release/bundle/**/*.msi
