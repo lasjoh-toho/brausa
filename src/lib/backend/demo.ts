@@ -5,7 +5,7 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, TransferResult, WalkOptions } from './types';
+import type { Backend, LibraryInfo, MediaInfo, TransferResult, WalkOptions } from './types';
 
 interface Node {
   entry: Entry;
@@ -131,7 +131,7 @@ export class DemoBackend implements Backend {
     let seed = 1;
     for (const [dir, count, tags, geo] of photos) {
       for (let i = 0; i < count; i++) {
-        const age = Math.floor(r() * 200) * DAY;
+        const age = Math.floor(r() * r() * 700) * DAY;
         const name = `IMG_${String(1000 + seed).padStart(4, '0')}.jpg`;
         this.addFile(dir, name, {
           size: Math.round(1e6 + r() * 9e6),
@@ -139,6 +139,7 @@ export class DemoBackend implements Backend {
           ctime: now - age,
           tags: r() > 0.4 ? tags : [],
           geo: geo ? { lat: geo[0] + (r() - 0.5) * 0.4, lon: geo[1] + (r() - 0.5) * 0.4 } : null,
+          taken: now - age - Math.floor(r() * 400) * DAY,
           thumb: photo(seed * 7919)
         });
         seed++;
@@ -272,5 +273,80 @@ export class DemoBackend implements Backend {
 
   async folderMeta(path: string) {
     return this.folderMetaStore.get(path) ?? { tags: [], color: null };
+  }
+
+  async thumbnail(entry: Entry) {
+    return entry.thumb ?? null;
+  }
+
+  fileUrl(entry: Entry) {
+    return entry.thumb ?? null;
+  }
+
+  async mediaInfo(paths: string[]): Promise<MediaInfo[]> {
+    return paths.map((p) => {
+      const e = this.find(p)?.entry;
+      return { path: p, geo: e?.geo ?? null, taken: e?.taken ?? null };
+    });
+  }
+
+  async rename(path: string, newName: string): Promise<Entry> {
+    const parent = this.find(dirname(path));
+    const node = this.find(path);
+    const name = newName.trim();
+    if (!parent?.children || !node) throw new Error('Nicht gefunden');
+    if (!name || /[\\/]/.test(name)) throw new Error('Ungültiger Name');
+    if (name !== node.entry.name && parent.children.has(name)) throw new Error(`„${name}“ existiert bereits`);
+    parent.children.delete(node.entry.name);
+    this.retarget(node, joinPath(dirname(path), name));
+    node.entry.ext = node.children ? '' : extOf(name);
+    parent.children.set(name, node);
+    return this.decorate(node.entry);
+  }
+
+  async trash(paths: string[]): Promise<TransferResult> {
+    const res: TransferResult = { moved: {}, errors: [] };
+    for (const p of paths) {
+      const parent = this.find(dirname(p));
+      if (parent?.children?.delete(basename(p))) res.moved[p] = '';
+      else res.errors.push({ path: p, message: 'Nicht gefunden' });
+    }
+    return res;
+  }
+
+  async openDefault(path: string) {
+    throw new Error(`Demo-Modus: „${basename(path)}“ würde jetzt in der Standard-App geöffnet.`);
+  }
+
+  async reveal(path: string) {
+    throw new Error(`Demo-Modus: „${basename(path)}“ würde im Dateimanager gezeigt.`);
+  }
+
+  async watch() {}
+
+  async onChange() {
+    return () => {};
+  }
+
+  private libs: LibraryInfo[] = [{ id: 'lib_demo', name: 'Brausa', root: `${HOME}/Projekte/Brausa`, files: 31, orphans: 0 }];
+
+  async libraries() {
+    return this.libs.map((l) => ({ ...l }));
+  }
+
+  async addLibrary(root: string, name?: string) {
+    const have = this.libs.find((l) => l.root === root);
+    if (have) return have;
+    const lib = { id: 'lib_' + this.libs.length, name: name ?? basename(root), root, files: 0, orphans: 0 };
+    this.libs.push(lib);
+    return lib;
+  }
+
+  async removeLibrary(root: string) {
+    this.libs = this.libs.filter((l) => l.root !== root);
+  }
+
+  async onIndexReport() {
+    return () => {};
   }
 }

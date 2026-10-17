@@ -1,7 +1,8 @@
 //! File-system operations behind the Tauri commands. Kept free of Tauri types
 //! so they can be unit-tested and reused (e.g. by a future CLI).
 
-use crate::meta::{self, Geo, Sidecar, SIDECAR_DIR};
+use crate::library::Record;
+use crate::meta::{self, Geo, SIDECAR_DIR};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
@@ -54,7 +55,8 @@ pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.') || name == SIDECAR_DIR
 }
 
-pub fn make_entry(path: &Path, sc: Option<&Sidecar>) -> io::Result<Entry> {
+/// Plain file-system view of a path; index metadata is added by `decorate`.
+pub fn make_entry(path: &Path) -> io::Result<Entry> {
     let md = fs::metadata(path)?;
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string_lossy().to_string());
     let is_dir = md.is_dir();
@@ -63,15 +65,7 @@ pub fn make_entry(path: &Path, sc: Option<&Sidecar>) -> io::Result<Entry> {
     } else {
         Path::new(&name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default()
     };
-    let owned;
-    let sc = match sc {
-        Some(s) => s,
-        None => {
-            owned = meta::read_sidecar(path);
-            &owned
-        }
-    };
-    let tags = meta::unique_tags(sc.tags.iter().cloned().chain(meta::filename_tags(&name)));
+    let tags = meta::filename_tags(&name);
     Ok(Entry {
         path: path.to_string_lossy().to_string(),
         name,
@@ -81,15 +75,22 @@ pub fn make_entry(path: &Path, sc: Option<&Sidecar>) -> io::Result<Entry> {
         mtime: ms(md.modified()),
         ctime: ms(md.created().or_else(|_| md.modified())),
         tags,
-        color: sc.color.clone(),
-        geo: sc.geo.clone(),
+        color: None,
+        geo: None,
         rel_dir: None,
     })
 }
 
+/// Merge index metadata (tags, color, geo) into an entry; filename tags stay.
+pub fn decorate(e: &mut Entry, r: Option<&Record>) {
+    if let Some(r) = r {
+        e.tags = meta::unique_tags(r.tags.iter().cloned().chain(e.tags.drain(..)));
+        e.color = r.color.clone();
+        e.geo = r.geo.clone();
+    }
+}
+
 pub fn list_dir(dir: &Path, include_hidden: bool) -> io::Result<Vec<Entry>> {
-    let sidecars = meta::read_dir_sidecars(dir);
-    let empty = Sidecar::default();
     let mut out = Vec::new();
     for e in fs::read_dir(dir)?.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
@@ -97,7 +98,7 @@ pub fn list_dir(dir: &Path, include_hidden: bool) -> io::Result<Vec<Entry>> {
             continue;
         }
         // Unreadable entries (broken symlinks, permissions) are skipped, not fatal.
-        if let Ok(entry) = make_entry(&e.path(), Some(sidecars.get(&name).unwrap_or(&empty))) {
+        if let Ok(entry) = make_entry(&e.path()) {
             out.push(entry);
         }
     }
@@ -107,8 +108,6 @@ pub fn list_dir(dir: &Path, include_hidden: bool) -> io::Result<Vec<Entry>> {
 /// Recursive flat listing of files below `root`, with `rel_dir` set.
 pub fn walk(root: &Path, max_depth: usize, include_hidden: bool, limit: usize) -> Vec<Entry> {
     let mut out = Vec::new();
-    let mut cache: HashMap<PathBuf, HashMap<String, Sidecar>> = HashMap::new();
-    let empty = Sidecar::default();
     let it = WalkDir::new(root).min_depth(1).max_depth(max_depth).into_iter().filter_entry(|e| {
         let n = e.file_name().to_string_lossy();
         n != SIDECAR_DIR && (include_hidden || !is_hidden(&n))
@@ -118,9 +117,7 @@ pub fn walk(root: &Path, max_depth: usize, include_hidden: bool, limit: usize) -
             continue;
         }
         let parent = e.path().parent().unwrap_or(root).to_path_buf();
-        let scs = cache.entry(parent.clone()).or_insert_with(|| meta::read_dir_sidecars(&parent));
-        let name = e.file_name().to_string_lossy().to_string();
-        if let Ok(mut entry) = make_entry(e.path(), Some(scs.get(&name).unwrap_or(&empty))) {
+        if let Ok(mut entry) = make_entry(e.path()) {
             let rel = parent.strip_prefix(root).unwrap_or(Path::new(""));
             entry.rel_dir = Some(rel.to_string_lossy().replace('\\', "/"));
             out.push(entry);
@@ -182,8 +179,6 @@ fn transfer_one(src: &Path, target_dir: &Path, mode: Mode) -> Result<PathBuf, St
         }
         Mode::Copy => copy_recursive(src, &dest).map_err(|e| e.to_string())?,
     }
-    // Metadata travels with the file; failure here must not fail the transfer.
-    let _ = meta::transfer_sidecar(src, &dest, mode == Mode::Copy);
     Ok(dest)
 }
 
@@ -195,6 +190,42 @@ pub fn transfer(paths: &[String], target_dir: &Path, mode: Mode) -> TransferResu
                 res.moved.insert(p.clone(), dest.to_string_lossy().to_string());
             }
             Err(message) => res.errors.push(TransferError { path: p.clone(), message }),
+        }
+    }
+    res
+}
+
+/// Rename within the same folder. Fails instead of overwriting.
+pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
+    let name = new_name.trim();
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
+        return Err("Ungültiger Name".into());
+    }
+    let dir = path.parent().ok_or("Kein Elternordner")?;
+    let dest = dir.join(name);
+    if dest == path {
+        return Ok(dest);
+    }
+    // Case-only renames ("a.jpg" → "A.jpg") are fine on case-insensitive file systems.
+    let same_file = dest.exists()
+        && fs::canonicalize(&dest).ok() == fs::canonicalize(path).ok();
+    if dest.exists() && !same_file {
+        return Err(format!("„{name}“ existiert bereits"));
+    }
+    fs::rename(path, &dest).map_err(|e| e.to_string())?;
+    Ok(dest)
+}
+
+/// Move files to the system trash. The index keeps their metadata as orphans for a while.
+pub fn trash(paths: &[String]) -> TransferResult {
+    let mut res = TransferResult::default();
+    for p in paths {
+        let path = Path::new(p);
+        match ::trash::delete(path) {
+            Ok(()) => {
+                res.moved.insert(p.clone(), String::new());
+            }
+            Err(e) => res.errors.push(TransferError { path: p.clone(), message: e.to_string() }),
         }
     }
     res
@@ -224,17 +255,15 @@ pub fn places() -> Vec<(String, PathBuf)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::meta::{write_sidecar, Sidecar};
 
     #[test]
-    fn lists_walks_and_moves_with_sidecars() {
+    fn lists_walks_moves_and_renames() {
         let t = tempfile::tempdir().unwrap();
         let root = t.path();
         fs::create_dir_all(root.join("a/b")).unwrap();
         fs::create_dir_all(root.join("dest")).unwrap();
         fs::write(root.join("a/b/x[foo].jpg"), b"123").unwrap();
         fs::write(root.join(".hidden"), b"").unwrap();
-        write_sidecar(&root.join("a/b/x[foo].jpg"), &Sidecar { tags: vec!["bar".into()], ..Default::default() }).unwrap();
 
         let top = list_dir(root, false).unwrap();
         assert_eq!(top.iter().filter(|e| e.name.starts_with('.')).count(), 0);
@@ -242,17 +271,23 @@ mod tests {
         let all = walk(root, 10, false, 100);
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].rel_dir.as_deref(), Some("a/b"));
-        assert_eq!(all[0].tags, vec!["bar", "foo"]);
+        assert_eq!(all[0].tags, vec!["foo"], "filename tags are read");
 
         let res = transfer(&[all[0].path.clone()], &root.join("dest"), Mode::Move);
         assert!(res.errors.is_empty());
         let moved = list_dir(&root.join("dest"), false).unwrap();
-        assert_eq!(moved[0].tags, vec!["bar", "foo"], "sidecar must travel with the file");
+        assert_eq!(moved[0].name, "x[foo].jpg");
 
         // Name collision → "x[foo] 2.jpg"
         fs::write(root.join("a/x[foo].jpg"), b"1").unwrap();
         let res = transfer(&[root.join("a/x[foo].jpg").to_string_lossy().to_string()], &root.join("dest"), Mode::Copy);
         assert!(res.moved.values().next().unwrap().ends_with("x[foo] 2.jpg"));
+
+        // Rename refuses to overwrite and to leave the folder.
+        let renamed = rename(Path::new(res.moved.values().next().unwrap()), "y.jpg").unwrap();
+        assert!(renamed.ends_with("y.jpg"));
+        assert!(rename(&renamed, "x[foo].jpg").is_err(), "must not overwrite");
+        assert!(rename(&renamed, "../evil.jpg").is_err());
 
         // A folder can't go into itself.
         let res = transfer(&[root.join("a").to_string_lossy().to_string()], &root.join("a/b"), Mode::Move);

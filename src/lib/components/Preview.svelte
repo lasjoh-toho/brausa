@@ -16,6 +16,14 @@
 
   const p = $derived(app.preview!);
   const e = $derived(p.entry);
+  // Original file when the webview can show it, else a large cached rendition (TIFF etc.).
+  let big = $state<string | null>(null);
+  $effect(() => {
+    const entry = e;
+    big = null;
+    if (!app.backend.fileUrl(entry)) app.backend.thumbnail(entry, 1600).then((u) => entry === e && (big = u));
+  });
+  const src = $derived(app.backend.fileUrl(e) ?? big ?? app.thumbOf(e));
   let box = $state<Box | null>(null);
   let animate = $state(false);
   let closing = false;
@@ -120,7 +128,7 @@
 
 <div class="preview" transition:fade={{ duration: 200 }} role="dialog" aria-label={e.name}>
   <button class="scrim" onclick={close} aria-label="Schließen"></button>
-  {#if e.thumb && family(e.ext) === 'image'}
+  {#if src && family(e.ext) === 'image'}
     <div
       class="frame"
       class:animate
@@ -130,7 +138,7 @@
       style:height="{box?.height ?? 0}px"
       style:opacity={box ? 1 : 0}
     >
-      <img src={e.thumb} alt={e.name} onload={loaded} draggable="false" />
+      <img {src} alt={e.name} onload={loaded} draggable="false" />
     </div>
   {:else}
     <div class="doc">

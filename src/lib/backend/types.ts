@@ -1,10 +1,37 @@
-import type { Entry, MetaPatch, TransferMode } from '../core/types';
+import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
 
 export interface WalkOptions {
   maxDepth?: number;
   includeHidden?: boolean;
   /** Stop after this many files (protects against walking $HOME by accident). */
   limit?: number;
+}
+
+export interface MediaInfo {
+  path: string;
+  geo: Geo | null;
+  taken: number | null;
+}
+
+/** A project folder with its own index, or summary numbers for the overview. */
+export interface LibraryInfo {
+  id: string;
+  name: string;
+  root: string | null;
+  /** Files carrying metadata. */
+  files: number;
+  /** Files whose metadata waits for the file to come back. */
+  orphans: number;
+}
+
+/** What a background reconcile changed. */
+export interface IndexReport {
+  relinked: [string, string][];
+  orphaned: string[];
+  restored: number;
+  updated: number;
+  purged: number;
+  imported: number;
 }
 
 export interface TransferResult {
@@ -31,4 +58,25 @@ export interface Backend {
   mkdir(parent: string, name: string): Promise<string>;
   /** Folder's own meta (tags, color) — used by the right-half "assign attributes" drop zone. */
   folderMeta(path: string): Promise<{ tags: string[]; color: string | null }>;
+
+  /** URL of a downscaled preview (longest edge ≈ size px), or null if the format has none. */
+  thumbnail(entry: Entry, size: number): Promise<string | null>;
+  /** URL for showing the original file in the webview (preview), or null. */
+  fileUrl(entry: Entry): string | null;
+  /** EXIF GPS + capture date, batched. */
+  mediaInfo(paths: string[]): Promise<MediaInfo[]>;
+  rename(path: string, newName: string): Promise<Entry>;
+  /** Move to the system trash. `moved` lists the trashed paths. */
+  trash(paths: string[]): Promise<TransferResult>;
+  openDefault(path: string): Promise<void>;
+  reveal(path: string): Promise<void>;
+  /** Watch one folder; `onChange` fires with changed paths. Returns an unsubscribe function. */
+  watch(path: string, recursive: boolean): Promise<void>;
+  onChange(cb: (paths: string[]) => void): Promise<() => void>;
+
+  /** Projects (each with its own index under `<root>/.brausa/`). */
+  libraries(): Promise<LibraryInfo[]>;
+  addLibrary(root: string, name?: string): Promise<LibraryInfo>;
+  removeLibrary(root: string): Promise<void>;
+  onIndexReport(cb: (r: IndexReport) => void): Promise<() => void>;
 }

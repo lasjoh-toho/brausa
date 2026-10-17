@@ -6,13 +6,14 @@
   import { isToggleKey } from '../platform';
   import Tile from './Tile.svelte';
   import MapView from './MapView.svelte';
+  import CalendarView from './CalendarView.svelte';
 
   let el: HTMLElement;
   let lasso = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
   /** Rubber-band selection on empty canvas space. */
   function down(e: PointerEvent) {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('.tile, button, input')) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest('.tile, button, input, .cal, .leaflet-container')) return;
     const additive = e.shiftKey || isToggleKey(e);
     const base = additive ? new Set(app.selection) : new Set<string>();
     if (!additive) app.selection.clear();
@@ -57,13 +58,16 @@
   data-autoscroll
   style:--tile="{app.tileSize}px"
   onpointerdown={down}
+  oncontextmenu={(e) => {
+    if ((e.target as HTMLElement).closest('.tile, .cal, .leaflet-container')) return;
+    e.preventDefault();
+    app.menu = { x: e.clientX, y: e.clientY, entry: null };
+  }}
   role="listbox"
   aria-multiselectable="true"
   tabindex="-1"
 >
-  {#if app.view === 'map'}
-    <MapView />
-  {:else if app.view === 'kanban'}
+  {#if app.view === 'kanban'}
     <div class="kanban">
       {#each app.groups as g (g.key)}
         {@const hit = drag.active && drag.hit?.kind === 'column' && drag.hit.key === g.key}
@@ -84,6 +88,8 @@
       {/each}
     </div>
   {:else}
+    {#if app.view === 'calendar'}<CalendarView />{/if}
+    {#if app.view === 'map'}<MapView />{/if}
     {#each app.groups as g (g.key)}
       {#if app.view === 'timeline'}
         <h3 class="group-head"><span>{g.label}</span><span class="count">{g.entries.length}</span></h3>

@@ -62,6 +62,42 @@
     </div>
   {/each}
 
+  <div class="section with-action">
+    Projekte
+    {#if app.cwd && !app.libraries.some((l) => l.root === app.cwd)}
+      <button class="add" title="Aktuellen Ordner als Projekt einbeziehen" onclick={() => app.addProject(app.cwd)}>
+        <Icon name="plus" size={13} />
+      </button>
+    {/if}
+  </div>
+  {#each app.libraries as l (l.id)}
+    {@const hit = drag.active && drag.hit?.kind === 'folder' && drag.hit.path === l.root}
+    <div
+      class="place project"
+      class:current={app.cwd === l.root}
+      class:hit
+      data-drop="folder"
+      data-path={l.root}
+      role="button"
+      tabindex="0"
+      title="{l.root}&#10;{l.files} Dateien mit Metadaten{l.orphans ? ` · ${l.orphans} vermisst` : ''}"
+      onpointerdown={(e) => drag.begin(e, () => [{ ...homeEntry, path: l.root!, name: l.name }], 'tree', () => app.navigate(l.root!))}
+      onkeydown={(e) => e.key === 'Enter' && app.navigate(l.root!)}
+    >
+      <Icon name="kanban" size={15} />
+      <span class="pname">{l.name}</span>
+      {#if l.orphans}<span class="warn" title="{l.orphans} Dateien vermisst">{l.orphans}</span>{/if}
+      <button
+        class="rm"
+        title="Nicht mehr als Projekt führen (Dateien bleiben)"
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={() => app.removeProject(l.root!)}><Icon name="x" size={11} /></button
+      >
+    </div>
+  {:else}
+    <p class="hint">Ordner öffnen und mit + als Projekt einbeziehen.</p>
+  {/each}
+
   <div class="section">Ordner</div>
   <div class="tree" data-autoscroll role="tree">
     {#if app.home}
@@ -143,6 +179,50 @@
   }
   .tree {
     flex: none;
+  }
+  .with-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .add {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    color: var(--fg-muted);
+  }
+  .add:hover {
+    background: var(--bg-sunken);
+    color: var(--fg);
+  }
+  .pname {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .warn {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: var(--attr-soft);
+    color: var(--attr);
+  }
+  .project .rm {
+    display: none;
+    color: var(--fg-faint);
+  }
+  .project:hover .rm {
+    display: grid;
+  }
+  .hint {
+    margin: 0 8px;
+    font-size: 11px;
+    color: var(--fg-faint);
   }
   .tags {
     display: flex;
