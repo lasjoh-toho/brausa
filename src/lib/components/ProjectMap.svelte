@@ -629,6 +629,7 @@
 
 <section
   class="board"
+  class:narrow={board.vw < 760}
   bind:this={el}
   bind:clientWidth={board.vw}
   bind:clientHeight={board.vh}
@@ -1169,6 +1170,14 @@
     background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
     box-shadow: var(--shadow);
   }
+  /* Narrow map (reader open): breadcrumb below the tools, switch without labels. */
+  .narrow .crumbs {
+    top: 92px;
+    max-width: calc(100% - 24px);
+  }
+  .narrow :global(.lbl) {
+    display: none;
+  }
   .crumb {
     padding: 3px 6px;
     border-radius: 6px;
@@ -1233,6 +1242,9 @@
   .tools {
     top: 10px;
     right: 12px;
+    max-width: calc(100% - 24px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
     display: flex;
     align-items: center;
     gap: 2px;
@@ -1242,6 +1254,9 @@
     box-shadow: var(--shadow);
   }
   .selbar {
+    max-width: calc(100% - 24px);
+    flex-wrap: wrap;
+    justify-content: center;
     left: 50%;
     bottom: 16px;
     transform: translateX(-50%);
