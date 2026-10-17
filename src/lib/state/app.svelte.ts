@@ -5,6 +5,7 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
+import type { IndexReport, LibraryInfo } from '../backend/types';
 import { createBackend } from '../backend';
 import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
 import { basename, dirname, isWithin } from '../core/paths';
@@ -48,6 +49,8 @@ class AppState {
   backend: Backend = createBackend();
 
   home = $state('');
+  /** Projects: folders with their own index. */
+  libraries = $state<LibraryInfo[]>([]);
   places = $state<{ name: string; path: string }[]>([]);
   cwd = $state('');
   history = $state<string[]>([]);
@@ -132,6 +135,49 @@ class AppState {
     if (!this.expanded.size) this.expanded.add(this.home);
     for (const p of this.expanded) this.loadChildren(p);
     await this.backend.onChange((paths) => this.onFsChange(paths));
+    await this.loadLibraries();
+    await this.backend.onIndexReport((r) => this.onIndexReport(r));
+  }
+
+  // ---------------------------------------------------------------- projects / index
+
+  async loadLibraries() {
+    this.libraries = (await this.backend.libraries()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** The project a path belongs to (innermost), if any. */
+  libraryOf(path: string): LibraryInfo | null {
+    let best: LibraryInfo | null = null;
+    for (const l of this.libraries)
+      if (l.root && isWithin(path, l.root) && (!best || l.root.length > best.root!.length)) best = l;
+    return best;
+  }
+
+  async addProject(root: string) {
+    try {
+      const lib = await this.backend.addLibrary(root);
+      await this.loadLibraries();
+      this.toast(`„${lib.name}“ ist jetzt ein Projekt mit eigenem Index`);
+    } catch (e) {
+      this.toast(String(e), true);
+    }
+  }
+
+  async removeProject(root: string) {
+    await this.backend.removeLibrary(root);
+    await this.loadLibraries();
+    this.toast('Projekt entfernt. Dateien und der .brausa-Ordner bleiben erhalten.');
+  }
+
+  private onIndexReport(r: IndexReport) {
+    const parts: string[] = [];
+    if (r.relinked.length) parts.push(`${r.relinked.length} verschoben/umbenannt erkannt`);
+    if (r.imported) parts.push(`${r.imported} alte Sidecars übernommen`);
+    if (r.restored) parts.push(`${r.restored} zurückgekehrt`);
+    if (r.orphaned.length) parts.push(`${r.orphaned.length} vermisst`);
+    if (parts.length) this.toast('Index: ' + parts.join(' · '));
+    void this.loadLibraries();
+    void this.refresh(true);
   }
 
   private fsTimer: ReturnType<typeof setTimeout> | null = null;

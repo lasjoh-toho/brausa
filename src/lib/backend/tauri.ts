@@ -1,7 +1,7 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
-import type { Backend, MediaInfo, TransferResult, WalkOptions } from './types';
+import type { Backend, IndexReport, LibraryInfo, MediaInfo, TransferResult, WalkOptions } from './types';
 
 /** Formats the webview can show as-is. Raster thumbnails come from the Rust cache instead. */
 const WEB_IMAGE = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp']);
@@ -91,5 +91,21 @@ export class TauriBackend implements Backend {
 
   onChange(cb: (paths: string[]) => void) {
     return listen<{ paths: string[] }>('fs-change', (ev) => cb(ev.payload.paths));
+  }
+
+  libraries() {
+    return invoke<LibraryInfo[]>('libraries');
+  }
+
+  addLibrary(root: string, name?: string) {
+    return invoke<LibraryInfo>('add_library', { root, name: name ?? null });
+  }
+
+  removeLibrary(root: string) {
+    return invoke<void>('remove_library', { root });
+  }
+
+  onIndexReport(cb: (r: IndexReport) => void) {
+    return listen<IndexReport>('index-report', (ev) => cb(ev.payload));
   }
 }

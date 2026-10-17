@@ -5,7 +5,7 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, MediaInfo, TransferResult, WalkOptions } from './types';
+import type { Backend, LibraryInfo, MediaInfo, TransferResult, WalkOptions } from './types';
 
 interface Node {
   entry: Entry;
@@ -325,6 +325,28 @@ export class DemoBackend implements Backend {
   async watch() {}
 
   async onChange() {
+    return () => {};
+  }
+
+  private libs: LibraryInfo[] = [{ id: 'lib_demo', name: 'Brausa', root: `${HOME}/Projekte/Brausa`, files: 31, orphans: 0 }];
+
+  async libraries() {
+    return this.libs.map((l) => ({ ...l }));
+  }
+
+  async addLibrary(root: string, name?: string) {
+    const have = this.libs.find((l) => l.root === root);
+    if (have) return have;
+    const lib = { id: 'lib_' + this.libs.length, name: name ?? basename(root), root, files: 0, orphans: 0 };
+    this.libs.push(lib);
+    return lib;
+  }
+
+  async removeLibrary(root: string) {
+    this.libs = this.libs.filter((l) => l.root !== root);
+  }
+
+  async onIndexReport() {
     return () => {};
   }
 }

@@ -1,15 +1,18 @@
-//! Portable metadata: sidecar files at `<dir>/.brausa/<name>.meta.json` and
-//! tags embedded in file names (`Photo[beach sunset].jpg`).
+//! Metadata helpers: tag normalisation and patches, tags embedded in file
+//! names (`Photo[beach sunset].jpg`) and the old per-folder sidecar format
+//! (`<dir>/.brausa/<name>.meta.json`), which `library` migrates into the index.
 //!
 //! The format mirrors `src/lib/core/types.ts` (`Sidecar`).
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 pub const SIDECAR_DIR: &str = ".brausa";
+#[cfg(test)]
 const SIDECAR_EXT: &str = ".meta.json";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -47,6 +50,7 @@ impl Default for Sidecar {
     }
 }
 
+#[cfg(test)]
 impl Sidecar {
     pub fn is_empty(&self) -> bool {
         self.tags.is_empty() && self.color.is_none() && self.note.is_empty() && self.geo.is_none() && self.source.is_none()
@@ -72,36 +76,15 @@ where
     Ok(Some(Option::deserialize(d)?))
 }
 
+#[cfg(test)]
 pub fn sidecar_path(file: &Path) -> Option<PathBuf> {
     let dir = file.parent()?;
     let name = file.file_name()?.to_string_lossy();
     Some(dir.join(SIDECAR_DIR).join(format!("{name}{SIDECAR_EXT}")))
 }
 
-pub fn read_sidecar(file: &Path) -> Sidecar {
-    sidecar_path(file)
-        .and_then(|p| fs::read_to_string(p).ok())
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
-}
-
-/// All sidecars of one directory, keyed by file name (one directory read instead of N file probes).
-pub fn read_dir_sidecars(dir: &Path) -> HashMap<String, Sidecar> {
-    let mut out = HashMap::new();
-    let Ok(rd) = fs::read_dir(dir.join(SIDECAR_DIR)) else { return out };
-    for e in rd.flatten() {
-        let n = e.file_name().to_string_lossy().to_string();
-        if let Some(base) = n.strip_suffix(SIDECAR_EXT) {
-            if let Ok(s) = fs::read_to_string(e.path()) {
-                if let Ok(sc) = serde_json::from_str::<Sidecar>(&s) {
-                    out.insert(base.to_string(), sc);
-                }
-            }
-        }
-    }
-    out
-}
-
+/// Old per-folder format; only used to create fixtures for the migration tests.
+#[cfg(test)]
 pub fn write_sidecar(file: &Path, sc: &Sidecar) -> io::Result<()> {
     let p = sidecar_path(file).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "kein Elternordner"))?;
     if sc.is_empty() {
@@ -113,20 +96,6 @@ pub fn write_sidecar(file: &Path, sc: &Sidecar) -> io::Result<()> {
     let tmp = p.with_extension("json.tmp");
     fs::write(&tmp, serde_json::to_vec_pretty(sc)?)?;
     fs::rename(tmp, p) // atomic replace
-}
-
-/// Move (or copy) the sidecar along with its file.
-pub fn transfer_sidecar(from: &Path, to: &Path, copy: bool) -> io::Result<()> {
-    let (Some(src), Some(dst)) = (sidecar_path(from), sidecar_path(to)) else { return Ok(()) };
-    if !src.exists() {
-        return Ok(());
-    }
-    fs::create_dir_all(dst.parent().unwrap())?;
-    if copy {
-        fs::copy(&src, &dst).map(|_| ())
-    } else {
-        fs::rename(&src, &dst).or_else(|_| fs::copy(&src, &dst).and_then(|_| fs::remove_file(&src)))
-    }
 }
 
 // ---------------------------------------------------------------- tags
@@ -207,18 +176,5 @@ mod tests {
         assert_eq!(p.color, Some(None));
         let p: MetaPatch = serde_json::from_str(r##"{"color":"#fff"}"##).unwrap();
         assert_eq!(p.color, Some(Some("#fff".into())));
-    }
-
-    #[test]
-    fn sidecar_roundtrip_and_cleanup() {
-        let dir = tempfile::tempdir().unwrap();
-        let f = dir.path().join("a.jpg");
-        fs::write(&f, b"x").unwrap();
-        let sc = Sidecar { tags: vec!["x".into()], ..Default::default() };
-        write_sidecar(&f, &sc).unwrap();
-        assert_eq!(read_sidecar(&f).tags, vec!["x"]);
-        assert_eq!(read_dir_sidecars(dir.path())["a.jpg"].tags, vec!["x"]);
-        write_sidecar(&f, &Sidecar::default()).unwrap();
-        assert!(!sidecar_path(&f).unwrap().exists());
     }
 }

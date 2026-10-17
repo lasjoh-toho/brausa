@@ -29,7 +29,8 @@ Lock-in und flachen Bild-Streams statt tiefer Ordnerbäume.
 | **Live-Aktualisierung** | Änderungen durch andere Programme (Sync-Clients, Downloads) erscheinen automatisch. |
 | **Auswahl** | Klick, Shift-Bereich, ⌘/Strg-Toggle, Lasso, ⌘/Strg+A, **Auswahl per Muster** (`*.png > 5MB`, `#ToReview`, `modified < 30d`, `ext:jpg,png`, `-#done`). |
 | **Ablage-Tray** | Dateien aus beliebigen Ordnern sammeln (Drag oder `S`). Der Inhalt bleibt beim Navigieren erhalten und lässt sich als Gruppe verschieben oder taggen. |
-| **Tags** | `T` öffnet die Quick-Tag-Leiste mit Autovervollständigung, zuletzt benutzten Tags und Farben. Hierarchische Tags (`Work/Design/UI` erscheint auch unter `#Work`). Gespeichert wird in `.brausa/<datei>.meta.json`; Tags im Dateinamen (`Foto[urlaub strand].jpg`) werden mitgelesen. |
+| **Tags** | `T` öffnet die Quick-Tag-Leiste mit Autovervollständigung, zuletzt benutzten Tags und Farben. Hierarchische Tags (`Work/Design/UI` erscheint auch unter `#Work`). Gespeichert im zentralen Index (siehe Projekte); Tags im Dateinamen (`Foto[urlaub strand].jpg`) werden mitgelesen. |
+| **Projekte & Index** | Jeder Ordner lässt sich mit **+** unter *Projekte* einbeziehen und bekommt einen eigenen Index in `<Projekt>/.brausa/meta.jsonl` (lesbar, sortiert, git-tauglich). Dateien außerhalb von Projekten landen im globalen Index. brausa erkennt Dateien, die in anderen Programmen verschoben oder umbenannt wurden, über Datei-ID und Prüfsumme wieder; Metadaten verschwundener Dateien bleiben 30 Tage erhalten. Alte `.brausa/*.meta.json`-Sidecars werden automatisch übernommen. |
 | **Vorschau** | Doppelklick oder Leertaste: Das Bild wächst aus der Kachel bis unter die Toolbar, die zu Glas in der Bildfarbe wird. ←/→ blättert. |
 | **Rückgängig** | Verschieben lässt sich über die Meldung unten rechts zurücknehmen. |
 

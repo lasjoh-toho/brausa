@@ -239,12 +239,49 @@ Reihenfolge-Empfehlung: **A vor B.** Maps verweisen auf Dateien, und das ist
 nur mit stabilen Index-IDs robust. E kann nach B parallel beginnen, weil das
 Format früh feststeht.
 
-## 5. Offene Entscheidungen
+## 5. Entscheidungen (17.10.2026)
 
-1. **Bibliotheks-Grenze:** Ist jeder Projektordner eine eigene Bibliothek, oder
-   gibt es eine große Bibliothek (z. B. `~`) mit Projekten darin?
-   *Empfehlung:* mehrere Bibliotheken, frei wählbar.
-2. **Kartentext:** Markdown (verbreitet, im Wiki mit Plugin) oder WikiText
-   (nativ in TW)? *Empfehlung:* Markdown in brausa, beim Export wählbar.
-3. **Sollen Map-Karten auch ohne Datei existieren können?** *Empfehlung:* ja,
-   Karten sind eigenständige Notizen, Dateien nur optionale Verweise.
+1. **Bibliotheken:** Jedes Projekt ist eine eigene Bibliothek (eigener Ordner
+   mit `.brausa/`). Zusätzlich gibt es einen **globalen Überblick** über alle
+   einbezogenen Ordner: eine Registry im App-Datenordner, die alle Projekte
+   kennt und projektübergreifend suchen kann. Dateien außerhalb eines
+   Projekts, die trotzdem Tags bekommen, landen im globalen Speicher
+   (`<App-Daten>/global/meta.jsonl`, absolute Pfade, gleiche Reparaturlogik).
+2. **Kartentext wie in TiddlyWiki:** Jede Karte hat einen `type`:
+   `text/markdown` oder `text/vnd.tiddlywiki`. Der Standard ist pro Projekt
+   einstellbar. Gerendert wird **mit dem echten TiddlyWiki-Kern**, der als
+   JS-Bibliothek in brausa eingebettet ist. Markdown entspricht damit dem
+   TW-Markdown-Plugin. Alles, was Markdown nicht abdeckt (Makros `<<…>>`,
+   Transklusionen `{{…}}`, Widgets, `[[Links]]`), wird nach TW-Schema
+   gerendert. Dadurch sieht eine Karte in brausa genau so aus wie später im
+   Wiki.
+3. **Karten ohne Datei** sind normal: Notizen, Lesezeichen, Aufgaben,
+   Überschriften.
+
+### Brauchen Notizen und Lesezeichen einen Projektordner?
+
+**Nein, nicht zwingend.**
+
+- Eine Karte lebt in der Map-Datei ihres Projekts
+  (`.brausa/maps/<id>.json`). Eine Notiz erzeugt also keine eigene Datei
+  und keinen Ordner.
+- Für Lose, was (noch) zu keinem Projekt gehört, gibt es ein festes
+  **Eingang-Projekt** (`~/Brausa/Eingang`, sichtbar und synchronisierbar).
+  Schnell-Notizen, Clips und Lesezeichen landen dort und werden später per
+  Drag in ein Projekt verschoben.
+- **„Als Datei ablegen“** (optional pro Karte) schreibt eine Notiz als
+  `.md`- bzw. `.tid`-Datei in den Projektordner. Das ist sinnvoll, wenn sie
+  auch außerhalb von brausa auftauchen soll. Lesezeichen werden dabei zu
+  `.url`/`.webloc` (klickbar im Finder).
+- **Ein neues Projekt** entsteht nur bewusst: einen vorhandenen Ordner „als
+  Projekt einbeziehen“ oder einen neuen anlegen.
+
+### Umsetzungsdetail Phase A
+
+Die SQLite-Datenbank kommt erst mit der Volltextsuche. Für Phase A reicht
+`meta.jsonl` plus ein Speicherindex im Rust-Kern.
+
+- `meta.jsonl` enthält **nur Dateien mit Metadaten** (Tags, Farbe, Notiz,
+  Map-Verweise), nicht jede Datei. Damit bleibt die Datei klein.
+- Für diese Einträge merkt sich brausa Datei-ID und Prüfwert. So werden
+  extern verschobene Dateien wiedergefunden.
