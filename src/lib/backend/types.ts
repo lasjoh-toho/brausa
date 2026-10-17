@@ -47,7 +47,27 @@ export interface WikiRecipe {
   bags: string[];
   target: { kind: 'folder' | 'file'; path: string };
   lastSync?: string | null;
+  /** Put brausa's bundled plugins (Markdown, tw5-graph, Pinboard, Kanban) into the wiki. */
+  plugins: boolean;
+  /** Overlays kept on purpose as this wiki's own variant. */
+  kept?: string[];
 }
+
+export type TiddlerFields = Record<string, string>;
+
+/** A shared tiddler that wikis cover with their own version (MultiWikiServer-style overlay). */
+export interface WikiOverlay {
+  title: string;
+  bag: string;
+  base: TiddlerFields;
+  variants: { recipe: string; fields: TiddlerFields; identical: boolean; kept: boolean }[];
+}
+
+export type OverlayResolution =
+  | { action: 'promote'; recipe: string; all: boolean }
+  | { action: 'merge'; text: string }
+  | { action: 'discard'; recipe: string }
+  | { action: 'keep'; recipe: string; keep: boolean };
 
 export interface WikiSyncReport {
   pulled: string[];
@@ -137,4 +157,8 @@ export interface Backend {
   putWikiRecipe(r: WikiRecipe): Promise<WikiRecipe>;
   deleteWikiRecipe(name: string): Promise<void>;
   syncWiki(name: string): Promise<WikiSyncReport>;
+  wikiOverlays(): Promise<WikiOverlay[]>;
+  resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
+  /** [name, version] of the plugins brausa bundles. */
+  wikiPlugins(): Promise<[string, string][]>;
 }

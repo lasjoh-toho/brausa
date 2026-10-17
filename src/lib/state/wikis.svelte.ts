@@ -4,7 +4,7 @@
  */
 import { app } from './app.svelte';
 import { board } from './board.svelte';
-import type { WikiBag, WikiRecipe } from '../backend/types';
+import type { OverlayResolution, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
 
 class WikiState {
   recipes = $state<WikiRecipe[]>([]);
@@ -12,6 +12,11 @@ class WikiState {
   /** Recipe being edited (null = closed, '' = new). */
   editing = $state<string | null>(null);
   syncing = $state<string | null>(null);
+  /** Shared tiddlers covered by wikis' own versions (see the overlay tool). */
+  overlays = $state<WikiOverlay[]>([]);
+  overlaysOpen = $state(false);
+  /** Overlays that still need a decision (not identical, not kept). */
+  pending = $derived(this.overlays.filter((o) => o.variants.some((v) => !v.kept)).length);
   /** Project maps that can be used as bags: `@map:<root>|<id>` → title. */
   maps = $state<{ bag: string; title: string; project: string }[]>([]);
 
@@ -26,9 +31,33 @@ class WikiState {
           )
       );
       this.maps = perProject.flat();
+      this.overlays = await app.backend.wikiOverlays();
     } catch (e) {
       app.toast(String(e), true);
     }
+  }
+
+  async resolve(o: WikiOverlay, how: OverlayResolution, quiet = false) {
+    try {
+      await app.backend.resolveOverlay(o.title, o.bag, how);
+      this.overlays = await app.backend.wikiOverlays();
+      if (!quiet) app.toast('Erledigt – die Wikis bekommen es beim nächsten Abgleich.');
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    }
+  }
+
+  /** Overlays that only differ in dates: drop them all. */
+  async discardIdentical() {
+    let n = 0;
+    for (const o of this.overlays)
+      for (const v of o.variants)
+        if (v.identical) {
+          await app.backend.resolveOverlay(o.title, o.bag, { action: 'discard', recipe: v.recipe });
+          n++;
+        }
+    this.overlays = await app.backend.wikiOverlays();
+    app.toast(`${n} gleiche Überdeckungen verworfen`);
   }
 
   /** Open the editor with fresh lists (maps may have been created since). */
@@ -71,6 +100,7 @@ class WikiState {
       for (const w of r.warnings) app.toast(w, true);
       for (const [root, id] of r.maps) if (board.root === root && board.map?.id === id) await board.load(id);
       await this.load();
+      if (this.pending) app.toast(`${this.pending} Überdeckung${this.pending === 1 ? '' : 'en'} gemeinsamer Tiddler – unter „Wikis“ prüfen`);
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
     } finally {

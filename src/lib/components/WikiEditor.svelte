@@ -18,10 +18,13 @@
           name: project?.name ?? '',
           description: '',
           bags: wikis.maps.filter((m) => project && m.bag.startsWith(`@map:${project.root}|`)).map((m) => m.bag),
-          target: { kind: 'folder', path: project?.root ? `${project.root}/${project.name}-wiki` : '' }
+          target: { kind: 'folder', path: project?.root ? `${project.root}/${project.name}-wiki` : '' },
+          plugins: true
         }
   );
   let error = $state('');
+  let plugins = $state<[string, string][]>([]);
+  app.backend.wikiPlugins().then((p) => (plugins = p)).catch(() => {});
   let newBag = $state('');
   let newReadonly = $state(false);
 
@@ -70,6 +73,8 @@
   }
 </script>
 
+<svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
+
 <div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
   <div class="panel" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="Wiki">
     <div class="head">
@@ -101,9 +106,17 @@
         Ordner-Wikis speichert TiddlyDesktop-RS bei jeder Änderung (mit Node.js). brausa legt <code>tiddlywiki.info</code> an, falls es fehlt.
       {:else}
         Ein vorhandenes Wiki (TiddlyWiki ≥ 5.2), z. B. in TiddlyDesktop-RS neu angelegt. Vor jedem Abgleich speichern und schließen; brausa legt eine Sicherung in <code>.backups/</code> an.
-        Für Kartentext in Markdown das Markdown-Plugin im Wiki installieren.
       {/if}
     </p>
+
+    <label class="plugins">
+      <input type="checkbox" bind:checked={r.plugins} />
+      <span>
+        <b>Plugins mitliefern:</b>
+        {plugins.map(([n, v]) => `${n} ${v}`).join(' · ')}
+        <span class="muted">– Karten erscheinen im Wiki als Pinboard und Kanban, Markdown wird gerendert. Nichts muss im Wiki installiert werden.</span>
+      </span>
+    </label>
 
     <div class="cols">
       <div>
@@ -223,6 +236,20 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--fg-faint);
+  }
+  .plugins {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-sunken);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .plugins input {
+    margin-top: 3px;
   }
   .cols {
     display: grid;

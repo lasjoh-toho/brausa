@@ -256,6 +256,22 @@ async fn tw_delete_recipe(w: State<'_, Wikis>, name: String) -> CmdResult<()> {
     w.0.lock().map_err(err)?.delete_recipe(&name).map_err(err)
 }
 
+#[tauri::command]
+async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
+    w.0.lock().map_err(err)?.overlays().map_err(err)
+}
+
+#[tauri::command]
+async fn tw_resolve_overlay(w: State<'_, Wikis>, title: String, bag: String, how: tw::Resolve) -> CmdResult<()> {
+    w.0.lock().map_err(err)?.resolve_overlay(&title, &bag, how).map_err(err)
+}
+
+/// Name and version of the plugins brausa puts into its wikis.
+#[tauri::command]
+fn tw_plugins() -> Vec<(String, String)> {
+    tw::bundled_plugins()
+}
+
 /// Two-way sync of one wiki; maps changed from the wiki are refreshed in the index too.
 #[tauri::command]
 async fn tw_sync(state: State<'_, Index>, w: State<'_, Wikis>, name: String) -> CmdResult<tw::SyncReport> {
@@ -413,7 +429,10 @@ pub fn run() {
             tw_recipes,
             tw_put_recipe,
             tw_delete_recipe,
-            tw_sync
+            tw_sync,
+            tw_overlays,
+            tw_resolve_overlay,
+            tw_plugins
         ])
         .run(tauri::generate_context!())
         .expect("error while running brausa");

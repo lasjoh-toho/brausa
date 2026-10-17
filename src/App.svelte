@@ -17,6 +17,7 @@
   import ContextMenu from './lib/components/ContextMenu.svelte';
   import ProjectBoard from './lib/components/ProjectBoard.svelte';
   import WikiEditor from './lib/components/WikiEditor.svelte';
+  import OverlayTool from './lib/components/OverlayTool.svelte';
   import { wikis } from './lib/state/wikis.svelte';
 
   let toolbar: Toolbar;
@@ -47,7 +48,7 @@
       e.preventDefault();
       return;
     }
-    if (wikis.editing !== null || app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.renaming) return;
+    if (wikis.editing !== null || wikis.overlaysOpen || app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.renaming) return;
 
     const sel = app.selectedEntries;
     const k = e.key.toLowerCase();
@@ -103,6 +104,7 @@
   {#if app.preview}<Preview onaccent={(c) => (accent = c)} />{/if}
   {#if tagSource && tagTargets.length}<TagBar targets={tagTargets} onclose={() => (tagSource = null)} />{/if}
   {#if wikis.editing !== null}<WikiEditor onclose={() => (wikis.editing = null)} />{/if}
+  {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
   {#if app.menu}<ContextMenu onTag={() => (tagSource = 'selection')} onPreview={openPreview} />{/if}
   <Toasts />

@@ -10,7 +10,9 @@ import type {
   MediaInfo,
   TransferResult,
   WalkOptions,
+  OverlayResolution,
   WikiBag,
+  WikiOverlay,
   WikiRecipe,
   WikiSyncReport
 } from './types';
@@ -186,5 +188,17 @@ export class TauriBackend implements Backend {
 
   syncWiki(name: string) {
     return invoke<WikiSyncReport>('tw_sync', { name });
+  }
+
+  wikiOverlays() {
+    return invoke<WikiOverlay[]>('tw_overlays');
+  }
+
+  resolveOverlay(title: string, bag: string, how: OverlayResolution) {
+    return invoke<void>('tw_resolve_overlay', { title, bag, how });
+  }
+
+  wikiPlugins() {
+    return invoke<[string, string][]>('tw_plugins');
   }
 }

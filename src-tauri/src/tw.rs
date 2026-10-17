@@ -21,6 +21,37 @@ use crate::maps;
 pub type Fields = BTreeMap<String, String>;
 
 const MAP_BAG: &str = "@map:";
+/// Built-in, read-only bag with the plugins every brausa wiki needs.
+pub const PLUGINS: &str = "@plugins";
+
+/// Plugin tiddlers bundled into brausa (rebuild with scripts/build-tw-plugins.sh).
+const BUNDLED_PLUGINS: [&str; 5] = [
+    include_str!("../resources/tw-plugins/markdown.json"),
+    include_str!("../resources/tw-plugins/graph.json"),
+    include_str!("../resources/tw-plugins/vis-network.json"),
+    include_str!("../resources/tw-plugins/pinboard.json"),
+    include_str!("../resources/tw-plugins/kanban.json"),
+];
+
+fn plugin_tiddlers() -> Vec<Fields> {
+    let mut out: Vec<Fields> =
+        BUNDLED_PLUGINS.iter().filter_map(|s| serde_json::from_str::<Value>(s).ok()).filter_map(|v| fields_from_json(&v)).collect();
+    // Map cards are written in Markdown by default.
+    let mut cfg = Fields::new();
+    cfg.insert("title".into(), "$:/config/markdown/renderWikiText".into());
+    cfg.insert("text".into(), "true".into());
+    out.push(cfg);
+    out
+}
+
+/// Plugin name and version, for the UI.
+pub fn bundled_plugins() -> Vec<(String, String)> {
+    plugin_tiddlers()
+        .into_iter()
+        .filter(|f| f.contains_key("plugin-type"))
+        .map(|f| (f.get("name").cloned().unwrap_or_else(|| f["title"].clone()), f.get("version").cloned().unwrap_or_default()))
+        .collect()
+}
 
 fn err(msg: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, msg.into())
@@ -215,22 +246,55 @@ pub fn map_tiddlers(map: &Value) -> Vec<Fields> {
         out.push(f);
     }
 
-    // The map itself: a tw5-graph graph tiddler with the top-level positions.
-    let mut pos = String::new();
-    for id in map.get("roots").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
-        if let (Some(c), Some(t)) = (cards.get(id), title_of.get(id)) {
-            let n = |k: &str| c.get(k).and_then(Value::as_f64).unwrap_or(0.0).round();
-            pos.push_str(&format!("{t}: {},{}\n", n("x"), n("y")));
+    // The map as tw5-graph boards (bundled plugins): a Pinboard per level and a Kanban.
+    let kids_of = |parent: Option<&str>| -> Vec<&str> {
+        match parent {
+            None => map.get("roots").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect(),
+            Some(p) => cards.get(p).and_then(|c| c.get("children")).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect(),
+        }
+    };
+    let board = |title: String, filter: String, ids: &[&str]| -> Fields {
+        let mut pos = serde_json::Map::new();
+        let mut sizes = serde_json::Map::new();
+        for id in ids {
+            if let (Some(c), Some(t)) = (cards.get(*id), title_of.get(*id)) {
+                let n = |k: &str| c.get(k).and_then(Value::as_f64).unwrap_or(0.0);
+                // Pinboard keeps card centres; brausa keeps top-left corners.
+                pos.insert(t.clone(), Value::String(format!("{},{}", (n("x") + n("w") / 2.0).round(), (n("y") + n("h") / 2.0).round())));
+                sizes.insert(t.clone(), serde_json::json!({"w": n("w").round(), "h": n("h").round()}));
+            }
+        }
+        let mut g = Fields::new();
+        g.insert("title".into(), title);
+        g.insert("type".into(), "application/json".into());
+        g.insert("template".into(), "$:/plugins/lasjoh-toho/pinboard/templates/pinboard".into());
+        g.insert("filter".into(), filter);
+        g.insert("brausa-map-id".into(), map_id.into());
+        g.insert("pinboard".into(), serde_json::json!({"version": 1, "cards": sizes}).to_string());
+        g.insert("text".into(), serde_json::to_string_pretty(&pos).unwrap_or_default());
+        g
+    };
+    out.push(board(format!("$:/graph/{map_title}"), format!("[field:brausa-map[{map_id}]!has[brausa-parent]]"), &kids_of(None)));
+    for id in &ids {
+        let kids = kids_of(Some(id.as_str()));
+        if !kids.is_empty() {
+            let t = &title_of[*id];
+            out.push(board(format!("$:/graph/{map_title}/{t}"), format!("[field:brausa-map[{map_id}]field:brausa-parent[{t}]]"), &kids));
         }
     }
-    let mut m = Fields::new();
-    m.insert("title".into(), map_title);
-    m.insert("type".into(), "application/x-tiddler-dictionary".into());
-    m.insert("tags".into(), "brausa-map".into());
-    m.insert("brausa-map-id".into(), map_id.into());
-    m.insert("filter".into(), format!("[field:brausa-map[{map_id}]!has[brausa-parent]]"));
-    m.insert("text".into(), pos);
-    out.push(m);
+    let statuses: Vec<String> = map
+        .get("statuses")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+        .unwrap_or_else(|| ["Offen", "In Arbeit", "Erledigt"].map(String::from).to_vec());
+    let mut k = Fields::new();
+    k.insert("title".into(), format!("$:/graph/{map_title} · Kanban"));
+    k.insert("template".into(), "$:/plugins/lasjoh-toho/kanban/templates/kanban".into());
+    k.insert("filter".into(), format!("[field:brausa-map[{map_id}]has[status]]"));
+    k.insert("brausa-map-id".into(), map_id.into());
+    k.insert("graph.graph".into(), serde_json::json!({"columns": stringify_list(&statuses), "fields": "title text"}).to_string());
+    k.insert("text".into(), String::new());
+    out.push(k);
 
     let mut e = Fields::new();
     e.insert("title".into(), "$:/config/flibbles/graph/edges/fields/brausa-links".into());
@@ -272,6 +336,50 @@ pub struct Recipe {
     pub target: Target,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_sync: Option<String>,
+    /// Put brausa's bundled plugins (Markdown, tw5-graph with Pinboard and Kanban) into the wiki.
+    #[serde(default = "yes")]
+    pub plugins: bool,
+    /// Overlays the user decided to keep as this wiki's own variant.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept: Vec<String>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// A tiddler of a shared bag (or map) that one or more wikis cover with their own version.
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Overlay {
+    pub title: String,
+    pub bag: String,
+    pub base: Fields,
+    pub variants: Vec<Variant>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Variant {
+    pub recipe: String,
+    pub fields: Fields,
+    /// Same as the base apart from dates: can be dropped without losing anything.
+    pub identical: bool,
+    pub kept: bool,
+}
+
+/// What to do with an overlay.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "action")]
+pub enum Resolve {
+    /// The wiki's version becomes the shared one; with `all`, other wikis' overlays go too.
+    Promote { recipe: String, all: bool },
+    /// Write merged text into the shared tiddler and drop all overlays of it.
+    Merge { text: String },
+    /// Drop the wiki's version; the wiki gets the shared one again.
+    Discard { recipe: String },
+    /// Keep (or stop keeping) the wiki's version as a deliberate variant.
+    Keep { recipe: String, keep: bool },
 }
 
 /// What the last sync left behind: where each pushed tiddler came from, and the wiki as it was.
@@ -363,6 +471,9 @@ impl Store {
     }
 
     fn bag_readonly(&self, name: &str) -> bool {
+        if name.starts_with('@') {
+            return true;
+        }
         self.bags().iter().find(|b| b.name == name).map(|b| b.readonly).unwrap_or(true)
     }
 
@@ -443,6 +554,9 @@ impl Store {
 
     /// Tiddlers of one bag; map bags are generated from the map file.
     fn layer(&self, bag: &str) -> io::Result<BTreeMap<String, Fields>> {
+        if bag == PLUGINS {
+            return Ok(plugin_tiddlers().into_iter().map(|f| (f["title"].clone(), f)).collect());
+        }
         if let Some(spec) = bag.strip_prefix(MAP_BAG) {
             let (root, id) = spec.split_once('|').ok_or_else(|| err("Ungültiger Map-Bag"))?;
             let m = maps::load(Path::new(root), id)?;
@@ -454,12 +568,97 @@ impl Store {
     /// The recipe's view: title → (fields, bag); later bags win.
     fn merged(&self, r: &Recipe) -> io::Result<BTreeMap<String, (Fields, String)>> {
         let mut out = BTreeMap::new();
-        for b in &r.bags {
+        let plugins = r.plugins.then(|| PLUGINS.to_string());
+        for b in plugins.iter().chain(&r.bags) {
             for (t, f) in self.layer(b)? {
                 out.insert(t, (f, b.clone()));
             }
         }
         Ok(out)
+    }
+
+    // ------------------------------------------------------------ overlays
+
+    /// Every tiddler that a wiki's own bag holds over a lower bag of its recipe.
+    pub fn overlays(&self) -> io::Result<Vec<Overlay>> {
+        let mut by_key: BTreeMap<(String, String), Overlay> = BTreeMap::new();
+        for r in self.recipes() {
+            let Some((top, lower)) = r.bags.split_last() else { continue };
+            if top.starts_with('@') {
+                continue;
+            }
+            let own = self.layer(top)?;
+            let mut layers = vec![];
+            if r.plugins {
+                layers.push((PLUGINS.to_string(), self.layer(PLUGINS)?));
+            }
+            for b in lower {
+                layers.push((b.clone(), self.layer(b)?));
+            }
+            for (title, f) in own {
+                // The highest lower bag that has the title is the one being covered.
+                let Some((bag, base)) = layers.iter().rev().find_map(|(b, l)| l.get(&title).map(|f| (b.clone(), f.clone()))) else {
+                    continue;
+                };
+                let identical = strip_wiki_fields(&f) == strip_wiki_fields(&base);
+                let o = by_key.entry((bag.clone(), title.clone())).or_insert_with(|| Overlay { title: title.clone(), bag, base, variants: vec![] });
+                o.variants.push(Variant { recipe: r.name.clone(), fields: f, identical, kept: r.kept.contains(&title) });
+            }
+        }
+        Ok(by_key.into_values().collect())
+    }
+
+    /// Resolve the overlay of `title` over `bag`. Changes reach the wikis with their next sync.
+    pub fn resolve_overlay(&self, title: &str, bag: &str, how: Resolve) -> io::Result<()> {
+        let o = self
+            .overlays()?
+            .into_iter()
+            .find(|o| o.title == title && o.bag == bag)
+            .ok_or_else(|| err(format!("„{title}“ wird nicht mehr überdeckt")))?;
+        let recipes = self.recipes();
+        let own_bag = |recipe: &str| recipes.iter().find(|r| r.name == recipe).and_then(|r| r.bags.last().cloned());
+        let shared_writable = !bag.starts_with('@') && !self.bag_readonly(bag);
+        let drop = |recipe: &str| -> io::Result<()> {
+            match own_bag(recipe) {
+                Some(b) => self.delete_tiddler(&b, title),
+                None => Ok(()),
+            }
+        };
+        match how {
+            Resolve::Promote { recipe, all } => {
+                if !shared_writable {
+                    return Err(err(format!("„{bag}“ ist schreibgeschützt; nur Verwerfen oder Behalten ist möglich")));
+                }
+                let v = o.variants.iter().find(|v| v.recipe == recipe).ok_or_else(|| err("Diese Fassung gibt es nicht"))?;
+                self.put_tiddler(bag, &strip_wiki_fields(&v.fields))?;
+                for v in &o.variants {
+                    if v.recipe == recipe || all {
+                        drop(&v.recipe)?;
+                    }
+                }
+            }
+            Resolve::Merge { text } => {
+                if !shared_writable {
+                    return Err(err(format!("„{bag}“ ist schreibgeschützt")));
+                }
+                let mut f = o.base.clone();
+                f.insert("text".into(), text);
+                self.put_tiddler(bag, &f)?;
+                for v in &o.variants {
+                    drop(&v.recipe)?;
+                }
+            }
+            Resolve::Discard { recipe } => drop(&recipe)?,
+            Resolve::Keep { recipe, keep } => {
+                let mut r = recipes.iter().find(|r| r.name == recipe).cloned().ok_or_else(|| err("Wiki nicht gefunden"))?;
+                r.kept.retain(|t| t != title);
+                if keep {
+                    r.kept.push(title.to_string());
+                }
+                self.put_recipe(r)?;
+            }
+        }
+        Ok(())
     }
 
     // ------------------------------------------------------------ sync
@@ -500,12 +699,10 @@ impl Store {
                         continue;
                     }
                 }
-                let origin = state.pushed.get(title).map(|(b, _)| b.clone());
-                let bag = match &origin {
-                    Some(b) if !b.starts_with(MAP_BAG) && !self.bag_readonly(b) => b.clone(),
-                    _ => top.clone(),
-                };
-                // Changed in the bag as well since the last sync? The bag wins, the wiki's version is kept aside.
+                // Like the MultiWikiServer: everything else lands in the wiki's own bag. A tiddler
+                // from a shared bag is overlaid there; `overlays()` finds these for later resolution.
+                let bag = top.clone();
+                // Changed in the own bag as well since the last sync? The bag wins, the wiki's version is kept aside.
                 let bag_now = before.get(title).filter(|(_, b)| *b == bag).map(|(f, _)| hash(f));
                 let bag_then = state.pushed.get(title).filter(|(b, _)| *b == bag).map(|(_, h)| h.clone());
                 if bag_now.is_some() && bag_now != bag_then {
@@ -519,9 +716,13 @@ impl Store {
                     rep.pulled.push(title.clone());
                 }
             }
-            // Deleted in the wiki: delete in writable bags whose copy is unchanged.
+            // Deleted in the wiki: delete in the own bag if unchanged; shared tiddlers come back.
             for (title, (bag, h)) in &state.pushed {
-                if wiki.contains_key(title) || bag.starts_with(MAP_BAG) || self.bag_readonly(bag) {
+                if wiki.contains_key(title) || bag == PLUGINS || bag.starts_with(MAP_BAG) {
+                    continue;
+                }
+                if *bag != top {
+                    rep.warnings.push(format!("„{title}“ kommt aus dem Bag „{bag}“ und erscheint beim nächsten Abgleich wieder"));
                     continue;
                 }
                 if before.get(title).map(|(f, b)| b == bag && hash(f) == *h).unwrap_or(false) {
@@ -698,6 +899,10 @@ fn store_blocks(html: &str) -> Vec<(usize, usize)> {
 /// Fields only the wiki maintains; kept when brausa rewrites a tiddler.
 const WIKI_FIELDS: [&str; 4] = ["created", "modified", "creator", "modifier"];
 
+fn strip_wiki_fields(f: &Fields) -> Fields {
+    f.iter().filter(|(k, _)| !WIKI_FIELDS.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect()
+}
+
 /// `f` as it should look in the wiki: plus the wiki's own date/author fields of the existing copy.
 fn with_wiki_fields(f: &Fields, existing: Option<&Fields>) -> Fields {
     let mut out = f.clone();
@@ -719,7 +924,7 @@ fn write_wiki(t: &Target, wiki: &WikiTiddlers, merged: &BTreeMap<String, (Fields
         if !p.join("tiddlywiki.info").exists() {
             let info = serde_json::json!({
                 "description": "Von brausa angelegt",
-                "plugins": ["tiddlywiki/markdown"],
+                "plugins": [],
                 "themes": ["tiddlywiki/vanilla", "tiddlywiki/snowwhite"]
             });
             fs::write(p.join("tiddlywiki.info"), serde_json::to_vec_pretty(&info)?)?;
@@ -821,8 +1026,14 @@ mod tests {
         assert_eq!(get("c_c")["brausa-parent"], "Idee");
         assert_eq!(get("c_c")["brausa-page"], "3");
         assert_eq!(get("c_a")["status"], "Offen");
-        let map = ts.iter().find(|t| t["title"] == "Roadmap").unwrap();
-        assert_eq!(map["text"], "Idee: 1,2\nIdee (2): 0,0\n");
+        // Boards for the bundled tw5-graph plugins: Pinboard per level (card centres), Kanban by status.
+        let board = ts.iter().find(|t| t["title"] == "$:/graph/Roadmap").unwrap();
+        assert_eq!(board["template"], "$:/plugins/lasjoh-toho/pinboard/templates/pinboard");
+        let pos: Value = serde_json::from_str(&board["text"]).unwrap();
+        assert_eq!(pos["Idee"], "1,2");
+        assert!(ts.iter().any(|t| t["title"] == "$:/graph/Roadmap/Idee" && t["filter"].contains("brausa-parent[Idee]")));
+        let kanban = ts.iter().find(|t| t["title"] == "$:/graph/Roadmap · Kanban").unwrap();
+        assert!(kanban["graph.graph"].contains("[[In Arbeit]]"));
         assert!(ts.iter().any(|t| t["title"] == "$:/config/flibbles/graph/edges/fields/brausa-links"));
     }
 
@@ -847,12 +1058,14 @@ mod tests {
                 bags: vec!["glossar".into(), format!("@map:{}|m_1", proj.display())],
                 target,
                 last_sync: None,
+                plugins: true,
+                kept: vec![],
             })
             .unwrap()
     }
 
     #[test]
-    fn shared_bags_cards_and_conflicts_with_wiki_folders() {
+    fn wiki_edits_overlay_shared_bags_until_resolved() {
         let (t, store, proj) = setup();
         let wa = t.path().join("wiki-a");
         let wb = t.path().join("wiki-b");
@@ -865,6 +1078,11 @@ mod tests {
         assert!(wa.join("tiddlywiki.info").exists());
         assert!(wa.join("tiddlers/ZUI.tid").exists());
         assert!(wa.join("tiddlers/Idee.tid").exists());
+        // The bundled plugins are in every wiki.
+        let wiki_a = read_tiddler_dir(&wa.join("tiddlers"));
+        for p in ["$:/plugins/flibbles/graph", "$:/plugins/lasjoh-toho/pinboard", "$:/plugins/lasjoh-toho/kanban", "$:/plugins/tiddlywiki/markdown"] {
+            assert!(wiki_a.contains_key(p), "{p} missing");
+        }
 
         // In wiki A: edit the shared glossary entry, rename and edit the card, add a new tiddler.
         fs::write(wa.join("tiddlers/ZUI.tid"), "title: ZUI\n\nZoomable User Interface").unwrap();
@@ -876,39 +1094,75 @@ mod tests {
         assert!(rep.conflicts.is_empty(), "{rep:?}");
         assert_eq!(rep.maps.len(), 1);
 
-        // Shared bag updated, card renamed and edited, new tiddler in A's own bag, state tiddler ignored.
-        assert_eq!(store.bag_tiddlers("glossar").unwrap()["ZUI"].0["text"], "Zoomable User Interface");
+        // Like the MultiWikiServer: the shared entry is only overlaid in A's own bag.
+        assert_eq!(store.bag_tiddlers("glossar").unwrap()["ZUI"].0["text"], "Zoomable UI");
+        assert_eq!(store.bag_tiddlers("wiki-a").unwrap()["ZUI"].0["text"], "Zoomable User Interface");
+        // Cards still go back into the map; state tiddlers are ignored.
         let m = maps::load(&proj, "m_1").unwrap();
         assert_eq!(m["cards"]["c_a"]["title"], "Kernidee");
         assert_eq!(m["cards"]["c_a"]["text"], "neu");
-        // The wiki's own date field survives brausa rewriting the card tiddler.
-        assert!(fs::read_to_string(wa.join("tiddlers/Kernidee.tid")).unwrap().contains("modified: 20261017120000000"));
         assert!(store.bag_tiddlers("wiki-a").unwrap().contains_key("Neu"));
         assert!(!store.bag_tiddlers("wiki-a").unwrap().contains_key("$:/StoryList"));
+        assert!(fs::read_to_string(wa.join("tiddlers/Kernidee.tid")).unwrap().contains("modified: 20261017120000000"));
 
-        // Wiki B gets the shared change and the renamed card, but not A's own tiddler.
         store.sync("b").unwrap();
-        assert!(fs::read_to_string(wb.join("tiddlers/ZUI.tid")).unwrap().contains("Zoomable User Interface"));
+        assert!(fs::read_to_string(wb.join("tiddlers/ZUI.tid")).unwrap().contains("Zoomable UI"));
         assert!(read_tiddler_dir(&wb.join("tiddlers")).contains_key("Kernidee"));
-        assert!(!read_tiddler_dir(&wb.join("tiddlers")).contains_key("Idee"));
         assert!(!wb.join("tiddlers/Neu.tid").exists());
 
-        // Both sides change the glossary entry: the bag wins, B's text is kept as a conflict copy.
-        fs::write(wa.join("tiddlers/ZUI.tid"), "title: ZUI\n\nAus A").unwrap();
+        // B overlays the same entry differently.
         fs::write(wb.join("tiddlers/ZUI.tid"), "title: ZUI\n\nAus B").unwrap();
-        store.sync("a").unwrap();
-        let rep = store.sync("b").unwrap();
-        assert_eq!(rep.conflicts.len(), 1);
-        assert_eq!(store.bag_tiddlers("glossar").unwrap()["ZUI"].0["text"], "Aus A");
-        assert!(fs::read_to_string(wb.join("tiddlers/ZUI.tid")).unwrap().contains("Aus A"));
-        let own = store.bag_tiddlers("wiki-b").unwrap();
-        assert!(own.keys().any(|k| k.starts_with("ZUI (Konflikt")));
+        store.sync("b").unwrap();
+        let ov = store.overlays().unwrap();
+        assert_eq!(ov.len(), 1, "{ov:?}");
+        assert_eq!((ov[0].title.as_str(), ov[0].bag.as_str(), ov[0].variants.len()), ("ZUI", "glossar", 2));
 
-        // Deleting in the wiki deletes in the shared bag.
+        // Promote A's version for everyone: the shared bag changes, both overlays go.
+        store.resolve_overlay("ZUI", "glossar", Resolve::Promote { recipe: "a".into(), all: true }).unwrap();
+        assert_eq!(store.bag_tiddlers("glossar").unwrap()["ZUI"].0["text"], "Zoomable User Interface");
+        assert!(store.overlays().unwrap().is_empty());
+        store.sync("b").unwrap();
+        assert!(fs::read_to_string(wb.join("tiddlers/ZUI.tid")).unwrap().contains("Zoomable User Interface"));
+
+        // Keep marks a deliberate variant; discard drops it and the wiki gets the shared text back.
+        fs::write(wb.join("tiddlers/ZUI.tid"), "title: ZUI\n\nNur in B so").unwrap();
+        store.sync("b").unwrap();
+        store.resolve_overlay("ZUI", "glossar", Resolve::Keep { recipe: "b".into(), keep: true }).unwrap();
+        assert!(store.overlays().unwrap()[0].variants[0].kept);
+        store.resolve_overlay("ZUI", "glossar", Resolve::Discard { recipe: "b".into() }).unwrap();
+        store.sync("b").unwrap();
+        assert!(fs::read_to_string(wb.join("tiddlers/ZUI.tid")).unwrap().contains("Zoomable User Interface"));
+
+        // Merge: hand-written text for the shared tiddler.
+        fs::write(wa.join("tiddlers/ZUI.tid"), "title: ZUI\n\nA2").unwrap();
+        store.sync("a").unwrap();
+        store.resolve_overlay("ZUI", "glossar", Resolve::Merge { text: "A2 und B".into() }).unwrap();
+        assert_eq!(store.bag_tiddlers("glossar").unwrap()["ZUI"].0["text"], "A2 und B");
+        assert!(!store.bag_tiddlers("wiki-a").unwrap().contains_key("ZUI"));
+
+        // Deleting a shared tiddler in a wiki does not delete it for everyone.
+        store.sync("a").unwrap();
         fs::remove_file(wa.join("tiddlers/ZUI.tid")).unwrap();
         let rep = store.sync("a").unwrap();
-        assert_eq!(rep.deleted, ["ZUI"]);
-        assert!(!store.bag_tiddlers("glossar").unwrap().contains_key("ZUI"));
+        assert!(rep.deleted.is_empty() && rep.warnings.len() == 1, "{rep:?}");
+        assert!(wa.join("tiddlers/ZUI.tid").exists());
+        // Deleting the wiki's own tiddler deletes it in its bag.
+        fs::remove_file(wa.join("tiddlers/Neu.tid")).unwrap();
+        assert_eq!(store.sync("a").unwrap().deleted, ["Neu"]);
+    }
+
+    #[test]
+    fn read_only_bags_can_not_take_promotions() {
+        let (t, store, proj) = setup();
+        store.put_bag(&BagInfo { name: "glossar".into(), readonly: true, ..Default::default() }).unwrap();
+        let w = t.path().join("w");
+        recipe(&store, "a", &proj, Target { kind: "folder".into(), path: w.display().to_string() });
+        store.sync("a").unwrap();
+        fs::write(w.join("tiddlers/ZUI.tid"), "title: ZUI\n\nanders").unwrap();
+        store.sync("a").unwrap();
+        assert!(store.resolve_overlay("ZUI", "glossar", Resolve::Promote { recipe: "a".into(), all: false }).is_err());
+        store.resolve_overlay("ZUI", "glossar", Resolve::Discard { recipe: "a".into() }).unwrap();
+        assert!(store.overlays().unwrap().is_empty());
     }
 
     #[test]
@@ -929,6 +1183,7 @@ mod tests {
         assert_eq!(wiki["Eigenes"].0["text"], "bleibt <b>");
         assert!(wiki.contains_key("$:/core"));
         assert!(wiki.contains_key("ZUI") && wiki.contains_key("Idee"));
+        assert!(wiki.contains_key("$:/plugins/lasjoh-toho/pinboard"));
         assert_eq!(fs::read_dir(t.path().join(".backups")).unwrap().count(), 1);
 
         // An edit saved by the wiki comes back; the plugin is never imported.
@@ -936,7 +1191,7 @@ mod tests {
         fs::write(&file, html).unwrap();
         let rep = store.sync("einzel").unwrap();
         assert_eq!(rep.pulled, ["ZUI"]);
-        assert_eq!(store.bag_tiddlers("glossar").unwrap()["ZUI"].0["text"], "Zoomen!");
+        assert_eq!(store.bag_tiddlers("wiki-einzel").unwrap()["ZUI"].0["text"], "Zoomen!");
         assert!(!store.bag_tiddlers("wiki-einzel").unwrap().contains_key("$:/core"));
     }
 }

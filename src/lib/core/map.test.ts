@@ -21,6 +21,7 @@ import {
 } from './map';
 import { renderMarkdown } from './markdown';
 import { locateQuote } from './snippets';
+import { changedFields, lineDiff } from './diff';
 
 function sample() {
   const m = newMap('Test', 'm_t');
@@ -155,6 +156,18 @@ describe('snippet anchors', () => {
     expect(locateQuote(text, 'Zoom', 'steht ', ' nochmal')).toBe(25);
     expect(locateQuote(text, 'Zoom', 'mit ', '.')).toBe(48);
     expect(locateQuote(text, 'fehlt')).toBe(-1);
+  });
+});
+
+describe('diff', () => {
+  it('marks added and deleted lines and keeps the rest', () => {
+    const d = lineDiff('a\nb\nc\nd', 'a\nB\nc\nd\ne');
+    expect(d.map((l) => (l.op === 'same' ? ' ' : l.op === 'add' ? '+' : '-') + l.text)).toEqual([' a', '-b', '+B', ' c', ' d', '+e']);
+    expect(lineDiff('x', 'x')).toEqual([{ op: 'same', text: 'x' }]);
+  });
+
+  it('lists changed fields without dates', () => {
+    expect(changedFields({ title: 't', tags: 'a', modified: '1' }, { title: 't', tags: 'b', color: 'red', modified: '2' })).toEqual(['color', 'tags']);
   });
 });
 

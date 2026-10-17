@@ -5,7 +5,7 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions, WikiBag, WikiRecipe } from './types';
+import type { Backend, LibraryInfo, MapInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiOverlay, WikiRecipe } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 
@@ -487,13 +487,72 @@ export class DemoBackend implements Backend {
     const top = r.bags[r.bags.length - 1];
     const bags = !top || top.startsWith('@map:') || this.bags.find((b) => b.name === top)?.readonly ? [...r.bags, own] : r.bags;
     if (!this.bags.some((b) => b.name === own) && bags.includes(own)) await this.putWikiBag({ name: own, description: `Eigener Bag von „${r.name}“`, readonly: false });
-    const out = { ...r, bags };
+    const out = { ...r, bags, plugins: r.plugins ?? true };
     this.recipes = [...this.recipes.filter((x) => x.name !== r.name), out];
     return structuredClone(out);
   }
 
   async deleteWikiRecipe(name: string) {
     this.recipes = this.recipes.filter((r) => r.name !== name);
+  }
+
+  /** Two wikis that cover the same glossary entry, to try the overlay tool. */
+  private overlays: WikiOverlay[] = [
+    {
+      title: 'Zoomable User Interface',
+      bag: 'glossar',
+      base: { title: 'Zoomable User Interface', tags: 'Glossar', text: 'Eine ZUI zeigt Inhalte auf einer unendlichen Fläche.\nMan zoomt hinein statt Fenster zu öffnen.' },
+      variants: [
+        {
+          recipe: 'Brausa',
+          identical: false,
+          kept: false,
+          fields: { title: 'Zoomable User Interface', tags: 'Glossar', text: 'Eine ZUI zeigt Inhalte auf einer unendlichen Fläche.\nMan zoomt hinein statt Fenster zu öffnen.\nBeispiele: Pad++, iMapping.' }
+        },
+        {
+          recipe: 'Lehre',
+          identical: false,
+          kept: false,
+          fields: { title: 'Zoomable User Interface', tags: 'Glossar', text: 'Eine ZUI zeigt Inhalte auf einer großen Fläche.\nMan zoomt hinein statt Fenster zu öffnen.' }
+        }
+      ]
+    },
+    {
+      title: 'Snippet',
+      bag: 'glossar',
+      base: { title: 'Snippet', text: 'Ausschnitt aus einem Dokument.' },
+      variants: [{ recipe: 'Brausa', identical: true, kept: false, fields: { title: 'Snippet', text: 'Ausschnitt aus einem Dokument.', modified: '20261017120000000' } }]
+    }
+  ];
+
+  async wikiOverlays() {
+    return structuredClone(this.overlays);
+  }
+
+  async resolveOverlay(title: string, bag: string, how: OverlayResolution) {
+    const o = this.overlays.find((x) => x.title === title && x.bag === bag);
+    if (!o) throw new Error(`„${title}“ wird nicht mehr überdeckt`);
+    const drop = (recipe: string) => (o.variants = o.variants.filter((v) => v.recipe !== recipe));
+    if (how.action === 'promote') {
+      o.base = { ...o.variants.find((v) => v.recipe === how.recipe)!.fields };
+      if (how.all) o.variants = [];
+      else drop(how.recipe);
+    } else if (how.action === 'merge') {
+      o.base = { ...o.base, text: how.text };
+      o.variants = [];
+    } else if (how.action === 'discard') drop(how.recipe);
+    else o.variants = o.variants.map((v) => (v.recipe === how.recipe ? { ...v, kept: how.keep } : v));
+    this.overlays = this.overlays.filter((x) => x.variants.length);
+  }
+
+  async wikiPlugins(): Promise<[string, string][]> {
+    return [
+      ['Markdown', '5.3.8'],
+      ['Graph', '1.11.0'],
+      ['Vis-Network', '10.6.3'],
+      ['Pinboard', '0.3.0'],
+      ['Kanban', '0.1.0']
+    ];
   }
 
   async syncWiki(): Promise<never> {

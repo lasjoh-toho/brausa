@@ -112,6 +112,12 @@
 
   <div class="section with-action">
     Wikis
+    <span class="grow"></span>
+    {#if wikis.overlays.length}
+      <button class="ov" class:pending={wikis.pending} title="Überdeckungen gemeinsamer Bags prüfen und auflösen" onclick={() => (wikis.overlaysOpen = true)}>
+        <Icon name="layers" size={12} />{wikis.pending || ''}
+      </button>
+    {/if}
     <button class="add" title="Neues Wiki aus Bags zusammenstellen (TiddlyWiki)" onclick={() => wikis.open('')}>
       <Icon name="plus" size={13} />
     </button>
@@ -261,6 +267,24 @@
   }
   .project:hover .rm {
     display: grid;
+  }
+  .grow {
+    flex: 1;
+  }
+  .ov {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 18px;
+    padding: 0 5px;
+    margin-right: 4px;
+    border-radius: 9px;
+    font-size: 10px;
+    color: var(--fg-faint);
+  }
+  .ov.pending {
+    color: var(--attr);
+    background: var(--attr-soft);
   }
   .sync {
     display: grid;

@@ -268,23 +268,48 @@ Modell übernimmt brausa, damit **mehrere Wikis gemeinsame Bags** nutzen
    - Tiddler einer **Karte** (Feld `brausa-id`): Titel, Text, Farbe und
      Status gehen zurück in die Map. Eine Umbenennung im Wiki benennt die
      Karte um.
-   - Tiddler aus einem **gemeinsamen, beschreibbaren Bag** gehen in diesen
-     Bag zurück, so dass alle Wikis mit diesem Bag die Änderung bekommen.
-     Das weicht bewusst vom MWS ab: Dort landen Änderungen immer im obersten
-     Bag und überdecken den gemeinsamen Tiddler nur.
-   - **Neue** Tiddler und Änderungen an schreibgeschützten Bags landen im
-     eigenen Bag des Wikis.
+   - Alles andere landet wie im MWS im **eigenen Bag** des Wikis. Ein
+     geänderter Tiddler aus einem gemeinsamen Bag wird dort **überdeckt**,
+     der gemeinsame bleibt unverändert. (Entscheidung vom 17.10.: so lassen.)
    - Hat sich ein Tiddler **auf beiden Seiten** geändert, gewinnt der Bag.
      Die Wiki-Fassung wird als `<Titel> (Konflikt <Datum>)` im eigenen Bag
      aufbewahrt. Nichts geht still verloren.
-   - Löschungen im Wiki löschen in beschreibbaren Bags; Karten werden nie
-     aus dem Wiki heraus gelöscht.
+   - Löschungen im Wiki löschen nur im eigenen Bag. Gemeinsame Tiddler und
+     Karten erscheinen beim nächsten Abgleich wieder; brausa sagt das an.
    - Zustands-Tiddler wie `$:/StoryList`, `$:/state/…` und `$:/temp/…`
      werden ignoriert.
 2. **Hinweg:** brausa schreibt alle Bags des Recipes ins Wiki. Im Ordner-Wiki
    werden nur geänderte Dateien geschrieben. Im Einzeldatei-Wiki wird der
    Tiddler-Speicher im HTML ersetzt, vorher legt brausa eine Sicherung in
    `.backups/` an, wie TiddlyDesktop-RS.
+
+**Überdeckungen auflösen** (Werkzeug unter *Wikis*): Es listet jeden
+Tiddler, den ein Wiki über einen gemeinsamen Bag gelegt hat, mit
+Zeilenvergleich gegen die gemeinsame Fassung und je Wiki einer Spalte. Für
+jede Überdeckung gibt es diese Möglichkeiten:
+
+- **Für alle übernehmen:** Die Fassung eines Wikis wird die gemeinsame, und
+  alle Überdeckungen des Tiddlers entfallen. Das vereinheitlicht ihn.
+- **Übernehmen:** wie oben, aber nur dieses Wiki gibt seine Fassung ab.
+- **Zusammenführen:** Man schreibt den gemeinsamen Text selbst, alle
+  Fassungen entfallen.
+- **Verwerfen:** Das Wiki bekommt wieder die gemeinsame Fassung.
+- **Als Variante behalten:** eine gewollte Abweichung, nach der nicht mehr
+  gefragt wird.
+- **Alle gleichen verwerfen:** für Überdeckungen, die sich nur im Datum
+  unterscheiden.
+
+Schreibgeschützte Bags erlauben nur Verwerfen und Behalten.
+
+**Mitgelieferte Plugins** (fester, schreibgeschützter Bag `@plugins`):
+
+- `tiddlywiki/markdown`
+- `flibbles/graph` mit `flibbles/vis-network`
+- `lasjoh-toho/pinboard` und `lasjoh-toho/kanban` aus dem tw5-graph-Fork
+
+Damit erscheint eine Map im Wiki ohne jede Installation als Pinboard (je
+Ebene ein Board) und als Kanban. Die Plugins werden mit
+`scripts/build-tw-plugins.sh` aus dem tw5-graph-Fork neu gebaut.
 
 **Einschränkungen:**
 - Ein Einzeldatei-Wiki darf beim Abgleich nicht offen sein, sonst
