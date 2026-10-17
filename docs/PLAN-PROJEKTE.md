@@ -237,18 +237,74 @@ Map **ist** ein Pinboard-Graph.
    bildet die ZUI auch im Wiki nach. Der Präsentationspfad (`steps`) kann
    ebenenübergreifend fliegen.
 
-### TiddlyDesktop-RS
+### TiddlyDesktop-RS (Stand Oktober 2026)
 
-TiddlyDesktop-RS kenne ich nicht im Detail. Der Plan setzt deshalb auf
-**Ordner-Wikis** und **Standard-Tiddlerformate** (`.tid` und JSON). Damit
-funktioniert die Anbindung mit jeder TiddlyWiki-Umgebung, auch ohne
-TiddlyDesktop-RS. Falls TiddlyDesktop-RS eine eigene Schnittstelle hat
-(Kommandozeile, IPC, Ordner-Watcher), kann brausa daran andocken: etwa mit
-„Wiki öffnen“ direkt aus einer Map. Dafür bräuchte ich das Repository.
+TiddlyDesktop-RS (BurningTreeC, Tauri + System-WebView) verwaltet
+**Einzeldatei-Wikis** (Speichern mit Strg+S, Backups in `.backups/`) und
+**Ordner-Wikis** (eigener Node.js-Prozess, speichert jede Änderung sofort als
+`.tid`). Eine Kommandozeile, ein URL-Schema oder eine API gibt es nicht.
+brausa dockt deshalb über die **Wiki-Dateien selbst** an: Es schreibt in ein
+Wiki, das TiddlyDesktop-RS öffnet, und liest Änderungen von dort zurück.
+TiddlyDesktop-RS bleibt dabei unverändert.
 
-Eine mögliche spätere Variante: brausa bettet das Wiki selbst in eine eigene
-WebView ein (Tauri kann mehrere WebViews). Dann wäre die Präsentation im Wiki
-ein Tab in brausa.
+### Bags und Recipes (nach dem MultiWikiServer)
+
+Der MultiWikiServer (MWS) speichert Tiddler in **Bags** (benannte Sammlungen).
+Ein **Recipe** ist eine geordnete Liste von Bags; zusammen ergeben sie ein
+Wiki. Bei gleichem Titel gewinnt der Bag weiter hinten im Recipe. Dieses
+Modell übernimmt brausa, damit **mehrere Wikis gemeinsame Bags** nutzen
+(Glossar, Personen, Vorlagen, Quellen …).
+
+| Begriff | In brausa |
+|---|---|
+| **Bag** | Ordner mit `.tid`-Dateien unter `<App-Daten>/tw/bags/<name>/`, optional schreibgeschützt |
+| **Map-Bag** | Eine Projektmap, als Bag gelesen: Karten, Pfeile und Snippets werden zu Tiddlern (Abbildung siehe oben). Er wird nicht gespeichert, sondern bei jedem Abgleich frisch erzeugt. |
+| **Recipe** | Name, Liste von Bags und ein **Ziel-Wiki**: ein Ordner-Wiki (`tiddlywiki.info` + `tiddlers/`) oder ein Einzeldatei-Wiki (`.html`). Der letzte Bag ist der eigene, beschreibbare Bag des Wikis. |
+
+**Abgleich** (ein Knopf pro Wiki, in beide Richtungen):
+
+1. **Rückweg:** brausa vergleicht das Wiki mit dem Stand des letzten
+   Abgleichs. Geänderte oder neue Tiddler werden so verteilt:
+   - Tiddler einer **Karte** (Feld `brausa-id`): Titel, Text, Farbe und
+     Status gehen zurück in die Map. Eine Umbenennung im Wiki benennt die
+     Karte um.
+   - Tiddler aus einem **gemeinsamen, beschreibbaren Bag** gehen in diesen
+     Bag zurück, so dass alle Wikis mit diesem Bag die Änderung bekommen.
+     Das weicht bewusst vom MWS ab: Dort landen Änderungen immer im obersten
+     Bag und überdecken den gemeinsamen Tiddler nur.
+   - **Neue** Tiddler und Änderungen an schreibgeschützten Bags landen im
+     eigenen Bag des Wikis.
+   - Hat sich ein Tiddler **auf beiden Seiten** geändert, gewinnt der Bag.
+     Die Wiki-Fassung wird als `<Titel> (Konflikt <Datum>)` im eigenen Bag
+     aufbewahrt. Nichts geht still verloren.
+   - Löschungen im Wiki löschen in beschreibbaren Bags; Karten werden nie
+     aus dem Wiki heraus gelöscht.
+   - Zustands-Tiddler wie `$:/StoryList`, `$:/state/…` und `$:/temp/…`
+     werden ignoriert.
+2. **Hinweg:** brausa schreibt alle Bags des Recipes ins Wiki. Im Ordner-Wiki
+   werden nur geänderte Dateien geschrieben. Im Einzeldatei-Wiki wird der
+   Tiddler-Speicher im HTML ersetzt, vorher legt brausa eine Sicherung in
+   `.backups/` an, wie TiddlyDesktop-RS.
+
+**Einschränkungen:**
+- Ein Einzeldatei-Wiki darf beim Abgleich nicht offen sein, sonst
+  überschreibt sein nächstes Speichern den Abgleich. brausa warnt, wenn die
+  Datei seit dem letzten Abgleich jünger ist als der Stand im Wiki.
+- Ein Ordner-Wiki übernimmt von außen geschriebene Dateien erst nach dem
+  Neuladen.
+
+**Ausbaustufe Live-Sync:** brausa bietet die MWS-Schnittstelle selbst an,
+lokal und nur auf 127.0.0.1. Das sind:
+
+- `GET /recipes/:r/tiddlers.json?last_known_tiddler_id=…`
+- `GET`/`PUT /recipes/:r/tiddlers/:title`
+- `GET`/`DELETE /bags/:b/tiddlers/:title`
+- `GET /recipes/:r/events` (Server-Sent Events)
+
+Ein Wiki mit dem MWS-Client-Plugin synchronisiert damit live mit brausa;
+gemeinsame Bags werden in allen offenen Wikis sofort sichtbar. Das hängt
+davon ab, wie stabil die MWS-API ist; sie wird gerade aus dem Kern in ein
+eigenes Projekt verlagert.
 
 ---
 
@@ -260,7 +316,7 @@ ein Tab in brausa.
 | **B – Map-Grundgerüst** ✅ | Datenformat, Renderer mit Pan/Zoom/Culling, Karten anlegen, bearbeiten, verschieben, Verbindungen ziehen, Undo | Erste nutzbare Map |
 | **C – Tiefe und ZUI** ✅ | Unterkarten, semantischer Zoom, Hineinfliegen, Breadcrumbs, Drag zwischen Ebenen | iMapping-artiges Arbeiten |
 | **D – Verzahnung** ✅ (ohne Suche nach Mustern über alle Bibliotheken) | Dateien als Karten mit Vorschaubild (über Index-IDs), Karten Dokumenten zuordnen, Kanban als Ansicht auf Karten („ins Kanban schicken“), Bausteine-Panel mit Suche und Ordnervorschlägen | Projektorganisation mit echten Dateien |
-| **E – TiddlyWiki** | Export Ordner/JSON, Import, danach Live-Sync; Drill-down im Pinboard-Fork | Projekte im Wiki vorstellen |
+| **E – TiddlyWiki** (Bags, Recipes und Abgleich ✅; Live-Sync und Drill-down offen) | Bags und Recipes, Abgleich mit Ordner- und Einzeldatei-Wikis (TiddlyDesktop-RS), danach Live-Sync über die MWS-Schnittstelle; Drill-down im Pinboard-Fork | Projekte im Wiki vorstellen, gemeinsame Bags in mehreren Wikis |
 | **F – Web und Lesen** (Leser, Snippets und Stapel ✅; Web-Pane und Clipper offen) | Web-Pane, PDF-/HTML-Leser, Snippets mit Rücksprung zur Quelle, Snippet-Stapel, Clipper | Recherche direkt in Maps |
 
 Reihenfolge-Empfehlung: **A vor B.** Maps verweisen auf Dateien, und das ist

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Entry } from '../core/types';
   import { app } from '../state/app.svelte';
+  import { wikis } from '../state/wikis.svelte';
   import { drag } from '../state/drag.svelte';
   import { tagColor } from '../core/tags';
   import TreeNode from './TreeNode.svelte';
@@ -23,6 +24,17 @@
       .sort((a, b) => b[1] - a[1])
       .slice(0, 14)
   );
+
+  // Map bags list the projects' maps, so reload when projects change.
+  $effect(() => {
+    void app.libraries.length;
+    void wikis.load();
+  });
+
+  function openTarget(path: string, kind: string) {
+    if (kind === 'folder') app.navigate(path);
+    else void app.backend.openDefault(path).catch((e) => app.toast(String(e).replace(/^Error: /, ''), true));
+  }
 
   function filterTag(t: string) {
     const term = '#' + t;
@@ -96,6 +108,37 @@
     </div>
   {:else}
     <p class="hint">Ordner öffnen und mit + als Projekt einbeziehen.</p>
+  {/each}
+
+  <div class="section with-action">
+    Wikis
+    <button class="add" title="Neues Wiki aus Bags zusammenstellen (TiddlyWiki)" onclick={() => wikis.open('')}>
+      <Icon name="plus" size={13} />
+    </button>
+  </div>
+  {#each wikis.recipes as w (w.name)}
+    <div
+      class="place project"
+      role="button"
+      tabindex="0"
+      title="{w.target.path}&#10;{w.bags.length} Bags{w.lastSync ? ` · zuletzt abgeglichen ${new Date(w.lastSync).toLocaleString()}` : ''}"
+      onclick={() => wikis.open(w.name)}
+      onkeydown={(e) => e.key === 'Enter' && wikis.open(w.name)}
+    >
+      <Icon name="book" size={15} />
+      <span class="pname">{w.name}</span>
+      <button class="rm" title="Wiki öffnen" onclick={(e) => (e.stopPropagation(), openTarget(w.target.path, w.target.kind))}>
+        <Icon name="open" size={11} />
+      </button>
+      <button
+        class="sync"
+        class:spin={wikis.syncing === w.name}
+        title="Abgleichen: Änderungen aus dem Wiki übernehmen, dann ins Wiki schreiben"
+        onclick={(e) => (e.stopPropagation(), wikis.sync(w.name))}><Icon name="sync" size={12} /></button
+      >
+    </div>
+  {:else}
+    <p class="hint">Maps und gemeinsame Bags als TiddlyWiki – mit + anlegen.</p>
   {/each}
 
   <div class="section">Ordner</div>
@@ -218,6 +261,22 @@
   }
   .project:hover .rm {
     display: grid;
+  }
+  .sync {
+    display: grid;
+    place-items: center;
+    color: var(--fg-faint);
+  }
+  .sync:hover {
+    color: var(--accent);
+  }
+  .sync.spin :global(svg) {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .hint {
     margin: 0 8px;

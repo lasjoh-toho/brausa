@@ -1,6 +1,7 @@
 mod fsops;
 mod library;
 mod maps;
+mod tw;
 mod media;
 mod meta;
 
@@ -22,6 +23,9 @@ struct Watcher(Mutex<Option<Debouncer<notify_debouncer_mini::notify::Recommended
 
 /// Central metadata index (all projects + global store).
 struct Index(Mutex<Registry>);
+
+/// TiddlyWiki bags and recipes (serialised: one sync at a time).
+struct Wikis(Mutex<tw::Store>);
 
 type CmdResult<T> = Result<T, String>;
 
@@ -223,6 +227,46 @@ async fn locate_files(state: State<'_, Index>, ids: Vec<String>) -> CmdResult<st
 }
 
 #[tauri::command]
+async fn tw_bags(w: State<'_, Wikis>) -> CmdResult<Vec<tw::BagInfo>> {
+    Ok(w.0.lock().map_err(err)?.bags())
+}
+
+#[tauri::command]
+async fn tw_put_bag(w: State<'_, Wikis>, bag: tw::BagInfo) -> CmdResult<()> {
+    w.0.lock().map_err(err)?.put_bag(&bag).map_err(err)
+}
+
+#[tauri::command]
+async fn tw_delete_bag(w: State<'_, Wikis>, name: String) -> CmdResult<()> {
+    w.0.lock().map_err(err)?.delete_bag(&name).map_err(err)
+}
+
+#[tauri::command]
+async fn tw_recipes(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Recipe>> {
+    Ok(w.0.lock().map_err(err)?.recipes())
+}
+
+#[tauri::command]
+async fn tw_put_recipe(w: State<'_, Wikis>, recipe: tw::Recipe) -> CmdResult<tw::Recipe> {
+    w.0.lock().map_err(err)?.put_recipe(recipe).map_err(err)
+}
+
+#[tauri::command]
+async fn tw_delete_recipe(w: State<'_, Wikis>, name: String) -> CmdResult<()> {
+    w.0.lock().map_err(err)?.delete_recipe(&name).map_err(err)
+}
+
+/// Two-way sync of one wiki; maps changed from the wiki are refreshed in the index too.
+#[tauri::command]
+async fn tw_sync(state: State<'_, Index>, w: State<'_, Wikis>, name: String) -> CmdResult<tw::SyncReport> {
+    let rep = w.0.lock().map_err(err)?.sync(&name).map_err(err)?;
+    if !rep.maps.is_empty() {
+        sync_refs(&state)?;
+    }
+    Ok(rep)
+}
+
+#[tauri::command]
 fn reconcile(app: AppHandle) {
     reconcile_async(app, None);
 }
@@ -328,6 +372,7 @@ pub fn run() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             app.manage(Index(Mutex::new(Registry::open(&dir)?)));
+            app.manage(Wikis(Mutex::new(tw::Store::open(&dir)?)));
             // Repair on start, then every 10 minutes (catches changes outside the watched folder).
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -361,7 +406,14 @@ pub fn run() {
             save_map,
             delete_map,
             link_files,
-            locate_files
+            locate_files,
+            tw_bags,
+            tw_put_bag,
+            tw_delete_bag,
+            tw_recipes,
+            tw_put_recipe,
+            tw_delete_recipe,
+            tw_sync
         ])
         .run(tauri::generate_context!())
         .expect("error while running brausa");

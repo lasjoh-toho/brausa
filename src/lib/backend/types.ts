@@ -31,6 +31,33 @@ export interface MapInfo {
   updated: string | null;
 }
 
+/** TiddlyWiki bag (MultiWikiServer model): a named set of tiddlers. */
+export interface WikiBag {
+  name: string;
+  description: string;
+  readonly: boolean;
+  tiddlers: number;
+}
+
+/** A wiki = ordered list of bags (later wins) synced with a wiki folder or single-file wiki. */
+export interface WikiRecipe {
+  name: string;
+  description: string;
+  /** `@map:<root>|<mapId>` uses a project map as bag. */
+  bags: string[];
+  target: { kind: 'folder' | 'file'; path: string };
+  lastSync?: string | null;
+}
+
+export interface WikiSyncReport {
+  pulled: string[];
+  conflicts: string[];
+  deleted: string[];
+  pushed: number;
+  maps: [string, string][];
+  warnings: string[];
+}
+
 /** What a background reconcile changed. */
 export interface IndexReport {
   relinked: [string, string][];
@@ -101,4 +128,13 @@ export interface Backend {
   linkFiles(paths: string[]): Promise<{ path: string; id: string }[]>;
   /** Current path per id, null when the file is missing. */
   locateFiles(ids: string[]): Promise<Record<string, string | null>>;
+
+  /** TiddlyWiki: bags, recipes and two-way sync (see docs/PLAN-PROJEKTE.md §3). */
+  wikiBags(): Promise<WikiBag[]>;
+  putWikiBag(bag: Omit<WikiBag, 'tiddlers'>): Promise<void>;
+  deleteWikiBag(name: string): Promise<void>;
+  wikiRecipes(): Promise<WikiRecipe[]>;
+  putWikiRecipe(r: WikiRecipe): Promise<WikiRecipe>;
+  deleteWikiRecipe(name: string): Promise<void>;
+  syncWiki(name: string): Promise<WikiSyncReport>;
 }

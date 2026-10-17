@@ -5,7 +5,7 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions } from './types';
+import type { Backend, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions, WikiBag, WikiRecipe } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 
@@ -456,6 +456,48 @@ export class DemoBackend implements Backend {
         return [id, p && this.find(p) ? p : null];
       })
     );
+  }
+
+  // TiddlyWiki: bags and recipes in memory; syncing needs the real app (files on disk).
+  private bags: WikiBag[] = [
+    { name: 'glossar', description: 'Begriffe für alle Wikis', readonly: false, tiddlers: 12 },
+    { name: 'vorlagen', description: 'Seitenvorlagen', readonly: true, tiddlers: 4 }
+  ];
+  private recipes: WikiRecipe[] = [];
+
+  async wikiBags() {
+    return this.bags.map((b) => ({ ...b }));
+  }
+
+  async putWikiBag(bag: Omit<WikiBag, 'tiddlers'>) {
+    this.bags = [...this.bags.filter((b) => b.name !== bag.name), { ...bag, tiddlers: 0 }].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async deleteWikiBag(name: string) {
+    if (this.recipes.some((r) => r.bags.includes(name))) throw new Error(`Bag „${name}“ wird noch von einem Wiki benutzt`);
+    this.bags = this.bags.filter((b) => b.name !== name);
+  }
+
+  async wikiRecipes() {
+    return structuredClone(this.recipes);
+  }
+
+  async putWikiRecipe(r: WikiRecipe) {
+    const own = `wiki-${r.name}`;
+    const top = r.bags[r.bags.length - 1];
+    const bags = !top || top.startsWith('@map:') || this.bags.find((b) => b.name === top)?.readonly ? [...r.bags, own] : r.bags;
+    if (!this.bags.some((b) => b.name === own) && bags.includes(own)) await this.putWikiBag({ name: own, description: `Eigener Bag von „${r.name}“`, readonly: false });
+    const out = { ...r, bags };
+    this.recipes = [...this.recipes.filter((x) => x.name !== r.name), out];
+    return structuredClone(out);
+  }
+
+  async deleteWikiRecipe(name: string) {
+    this.recipes = this.recipes.filter((r) => r.name !== name);
+  }
+
+  async syncWiki(): Promise<never> {
+    throw new Error('Demo-Modus: Der Abgleich mit TiddlyWiki braucht die App (Dateien auf der Festplatte).');
   }
 
   async deleteMap(root: string, id: string) {

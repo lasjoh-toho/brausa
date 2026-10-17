@@ -40,7 +40,9 @@
     redo: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3',
     chevronDown: 'M6 9l6 6 6-6',
     arrow: 'M4 12h15M13 6l6 6-6 6',
-    line: 'M4 12h16'
+    line: 'M4 12h16',
+    book: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11',
+    sync: 'M20 11a8 8 0 0 0-14.6-4.5M4 4v4h4M4 13a8 8 0 0 0 14.6 4.5M20 20v-4h-4'
   };
   let { name, size = 16 }: { name: string; size?: number } = $props();
 </script>
