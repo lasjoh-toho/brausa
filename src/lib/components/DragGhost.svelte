@@ -7,14 +7,18 @@
 
 {#if drag.active}
   <div class="ghost" style:transform="translate({drag.x + 14}px, {drag.y + 14}px)">
-    <div class="stack">
-      {#each stack as e, i (e.path)}
-        <div class="card" style:rotate="{(i - 1) * 5}deg" style:z-index={3 - i}>
-          {#if e.thumb}<img src={e.thumb} alt="" />{:else}<span>{e.ext || '▢'}</span>{/if}
-        </div>
-      {/each}
-      {#if drag.items.length > 1}<span class="badge">{drag.items.length}</span>{/if}
-    </div>
+    {#if drag.title}
+      <div class="quote">{drag.title}</div>
+    {:else}
+      <div class="stack">
+        {#each stack as e, i (e.path)}
+          <div class="card" style:rotate="{(i - 1) * 5}deg" style:z-index={3 - i}>
+            {#if e.thumb}<img src={e.thumb} alt="" />{:else}<span>{e.ext || '▢'}</span>{/if}
+          </div>
+        {/each}
+        {#if drag.items.length > 1}<span class="badge">{drag.items.length}</span>{/if}
+      </div>
+    {/if}
     {#if drag.label}
       <div class="label" class:copy={drag.copy}>{drag.label}</div>
     {:else}
@@ -33,6 +37,18 @@
     align-items: flex-start;
     gap: 8px;
     pointer-events: none;
+  }
+  .quote {
+    max-width: 240px;
+    max-height: 90px;
+    overflow: hidden;
+    padding: 8px 10px;
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    background: var(--bg-elev);
+    box-shadow: var(--shadow);
+    font-size: 12px;
+    line-height: 1.4;
   }
   .stack {
     position: relative;

@@ -7,6 +7,7 @@ import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
 import type { Backend, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
+import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 
 interface Node {
   entry: Entry;
@@ -155,6 +156,7 @@ export class DemoBackend implements Backend {
       });
     this.addFile(`${HOME}/Projekte/Brausa`, 'Konzept[Work planung].pdf', { size: 340_000, mtime: now - 2 * DAY });
     this.addFile(`${HOME}/Projekte/Brausa`, 'notizen.md', { size: 4_100, tags: ['Work'] });
+    this.addFile(`${HOME}/Projekte/Brausa`, 'Recherche ZUI.html', { size: DEMO_HTML.length, mtime: now - 3 * DAY });
     this.addFile(`${HOME}/Dokumente`, 'Steuer-2025.pdf', { size: 1_200_000, tags: ['Privat/Finanzen'], mtime: now - 90 * DAY });
     this.addFile(`${HOME}/Dokumente`, 'Mietvertrag.pdf', { size: 800_000, tags: ['Privat/Wohnung'], mtime: now - 400 * DAY });
     this.addFile(`${HOME}/Downloads`, 'installer.dmg', { size: 180_000_000 });
@@ -283,6 +285,22 @@ export class DemoBackend implements Backend {
 
   fileUrl(entry: Entry) {
     return entry.thumb ?? null;
+  }
+
+  assetUrl() {
+    return null;
+  }
+
+  async fileData(path: string) {
+    if (!this.find(path)) throw new Error('Nicht gefunden');
+    if (extOf(path) !== 'pdf') throw new Error('Demo-Modus: nur PDFs haben Inhalt');
+    return DEMO_PDF.slice().buffer as ArrayBuffer;
+  }
+
+  async readText(path: string) {
+    if (!this.find(path)) throw new Error('Nicht gefunden');
+    if (extOf(path) === 'html') return DEMO_HTML;
+    return '# Notizen\n\nDie Map soll **Snippets** aus PDFs und Webseiten aufnehmen.\n\n- Stapel wie in LiquidText\n- Rücksprung zur Quelle\n';
   }
 
   async mediaInfo(paths: string[]): Promise<MediaInfo[]> {

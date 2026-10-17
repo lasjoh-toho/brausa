@@ -26,12 +26,21 @@ export interface CardRef {
   dir?: boolean;
   /** Set at load time when the index no longer finds the file. */
   missing?: boolean;
+  /** Snippet anchor: PDF page (1-based) and rectangles on it (0..1 of the page). */
+  page?: number;
+  rects?: { x: number; y: number; w: number; h: number }[];
+  /** Snippet anchor for text documents (W3C text quote selector). */
+  quote?: string;
+  prefix?: string;
+  suffix?: string;
   href?: string;
   title?: string;
 }
 
 export interface MapCard {
   id: string;
+  /** Plain card (default), excerpt from a document, or a stack of excerpts. */
+  kind?: 'snippet' | 'stack';
   title: string;
   /** Markdown (TiddlyWiki wikitext later, see PLAN-PROJEKTE.md). */
   text: string;
@@ -339,4 +348,75 @@ export function edgePoint(r: Rect, px: number, py: number): { x: number; y: numb
   if (!dx && !dy) return { x: cx, y: cy };
   const t = Math.min(dx ? r.w / 2 / Math.abs(dx) : Infinity, dy ? r.h / 2 / Math.abs(dy) : Infinity);
   return { x: cx + dx * Math.min(t, 1), y: cy + dy * Math.min(t, 1) };
+}
+
+// ---------------------------------------------------------------- stacks
+
+export const STACK_GAP = 6;
+
+/** Snippets (and plain cards) can be joined into a vertical stack, like in LiquidText. */
+export function stackOf(m: ProjectMap, id: string): string | null {
+  const p = m.cards[id]?.parent;
+  return p && m.cards[p].kind === 'stack' ? p : null;
+}
+
+/** Put `id` above or below `target`; creates a stack where `target` is if needed. */
+export function stackInsert(m: ProjectMap, id: string, target: string, where: 'before' | 'after') {
+  if (id === target || isInside(m, target, id)) return;
+  let stack = stackOf(m, target);
+  if (!stack) {
+    const t = m.cards[target];
+    const s = addCard(m, t.parent, { x: t.x, y: t.y }, { kind: 'stack', title: '', inner: 1, w: t.w, h: t.h });
+    stack = s.id;
+    moveInto(m, target, stack, 0);
+  }
+  const list = m.cards[stack].children;
+  const from = stackOf(m, id);
+  if (from === stack) list.splice(list.indexOf(id), 1);
+  const at = list.indexOf(target) + (where === 'after' ? 1 : 0);
+  if (from === stack) list.splice(at, 0, id);
+  else moveInto(m, id, stack, at);
+  tidyStacks(m);
+}
+
+function moveInto(m: ProjectMap, id: string, parent: string, index: number) {
+  const c = m.cards[id];
+  const old = siblings(m, c.parent);
+  old.splice(old.indexOf(id), 1);
+  c.parent = parent;
+  m.cards[parent].children.splice(index, 0, id);
+}
+
+/** Lay out every stack (children top to bottom) and dissolve stacks with fewer than two cards. */
+export function tidyStacks(m: ProjectMap) {
+  for (const s of Object.values(m.cards).filter((c) => c.kind === 'stack')) {
+    if (s.children.length < 2) {
+      // A stack of one is just a card again.
+      for (const id of s.children) {
+        const c = m.cards[id];
+        c.parent = s.parent;
+        c.x = s.x;
+        c.y = s.y;
+        siblings(m, s.parent).push(id);
+      }
+      const list = siblings(m, s.parent);
+      list.splice(list.indexOf(s.id), 1);
+      m.links = m.links.filter((l) => l.from !== s.id && l.to !== s.id);
+      delete m.cards[s.id];
+      continue;
+    }
+    let y = 0;
+    let w = 0;
+    for (const id of s.children) {
+      const c = m.cards[id];
+      c.x = 0;
+      c.y = y;
+      y += c.h + STACK_GAP;
+      w = Math.max(w, c.w);
+    }
+    s.inner = 1;
+    s.w = w + 2 * PAD;
+    s.h = HEADER + y - STACK_GAP + PAD;
+    if (s.parent) growToFit(m, s.parent);
+  }
 }

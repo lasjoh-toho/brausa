@@ -22,6 +22,9 @@
     focusCard,
     growToFit,
     innerOf,
+    stackInsert,
+    stackOf,
+    tidyStacks,
     isInside,
     planeFrame,
     reparent,
@@ -38,6 +41,7 @@
     type Rect
   } from '../core/map';
   import { renderMarkdown } from '../core/markdown';
+  import type { Snippet } from '../core/snippets';
   import { isToggleKey, modLabel } from '../platform';
   import Icon from './Icon.svelte';
   import BoardSwitch from './BoardSwitch.svelte';
@@ -134,48 +138,86 @@
 
   // ---------------------------------------------------------------- files
 
-  type Target = { id: string | null; zone: 'nest' | 'link' };
+  type Target = { id: string | null; zone: 'nest' | 'link' | 'before' | 'after' };
+
+  /** Snippets join into stacks when dropped on the top or bottom edge of a snippet (or a stacked card). */
+  function canStack(target: string, snippet: boolean) {
+    const t = m!.cards[target];
+    return t.kind !== 'stack' && (snippet || t.kind === 'snippet' || !!stackOf(m!, target));
+  }
+
+  function rectOf(id: string) {
+    return document.querySelector(`[data-card="${id}"]`)!.getBoundingClientRect();
+  }
+
+  function stackZone(id: string, y: number): 'before' | 'after' | null {
+    const r = rectOf(id);
+    const band = Math.min(r.height * 0.25, 28);
+    return y < r.top + band ? 'before' : y > r.bottom - band ? 'after' : null;
+  }
 
   /** Where dropped files go: onto the free plane, into a card, or (right edge) linked to a card. */
-  function fileTarget(x: number, y: number): Target {
+  function fileTarget(x: number, y: number, snippet: boolean): Target {
     const id = cardAt({ clientX: x, clientY: y });
     if (!id) return { id: null, zone: 'nest' };
-    const r = document.querySelector(`[data-card="${id}"]`)!.getBoundingClientRect();
+    const stack = canStack(id, snippet) ? stackZone(id, y) : null;
+    if (stack) return { id, zone: stack };
+    const r = rectOf(id);
     return { id, zone: x > r.right - Math.min(r.width * 0.35, 120) ? 'link' : 'nest' };
   }
 
-  const fileDrop = $derived(drag.active && drag.hit?.kind === 'board' && m ? fileTarget(drag.x, drag.y) : null);
+  const isSnippetDrag = $derived(!!(drag.data as { snippet?: Snippet } | undefined)?.snippet);
+  const fileDrop = $derived(drag.active && drag.hit?.kind === 'board' && m ? fileTarget(drag.x, drag.y, isSnippetDrag) : null);
 
   $effect(() => {
     const t = fileDrop;
     const title = t?.id ? `„${m!.cards[t.id].title || 'Ohne Titel'}“` : '';
-    drag.boardHint = !t ? '' : t.zone === 'link' ? `Mit ${title} verknüpfen` : t.id ? `Als Karte in ${title} legen` : 'Als Karte ablegen';
+    const what = isSnippetDrag ? 'Snippet' : 'Karte';
+    drag.boardHint = !t
+      ? ''
+      : t.zone === 'link'
+        ? `Mit ${title} verknüpfen`
+        : t.zone === 'before' || t.zone === 'after'
+          ? `${t.zone === 'before' ? 'Über' : 'Unter'} ${title} stapeln`
+          : t.id
+            ? `Als ${what} in ${title} legen`
+            : `Als ${what} ablegen`;
   });
 
-  async function dropFiles(items: Entry[], x: number, y: number) {
+  /** Card height for a snippet so its quote fits (about 34 characters per line). */
+  const snippetHeight = (quote: string) => Math.min(420, Math.max(96, HEADER + 30 + Math.ceil(quote.length / 34) * 19));
+
+  async function dropFiles(items: Entry[], x: number, y: number, data?: unknown) {
     if (!m) return;
-    const t = fileTarget(x, y);
+    const snippet = (data as { snippet?: Snippet } | undefined)?.snippet;
+    const t = fileTarget(x, y, !!snippet);
     let refs: CardRef[];
     try {
       refs = await board.refsFor(items);
     } catch (e) {
       return app.toast(String(e), true);
     }
+    if (snippet) refs = [{ ...refs[0], ...snippet, quote: snippet.quote }];
     if (t.id && t.zone === 'link') return attach(t.id, refs);
-    const parent = t.id ?? ctx;
+    const stackOn = t.id && (t.zone === 'before' || t.zone === 'after') ? { id: t.id, where: t.zone } : null;
+    const parent = stackOn ? null : (t.id ?? ctx);
     const p = local({ clientX: x, clientY: y });
     const created: string[] = [];
-    board.mutate((mm) =>
+    board.mutate((mm) => {
       refs.forEach((ref, i) => {
-        const id = placeCard(mm, parent, p.x, p.y, 0.1, { title: ref.name ?? '', refs: [ref], h: board.isImage(ref) ? 190 : 120 });
+        const init: Partial<MapCard> = snippet
+          ? { kind: 'snippet', title: ref.name + (ref.page ? ` · S. ${ref.page}` : ''), text: snippet.quote, refs: [ref], w: 260, h: snippetHeight(snippet.quote) }
+          : { title: ref.name ?? '', refs: [ref], h: board.isImage(ref) ? 190 : 120 };
+        const id = placeCard(mm, stackOn ? mm.cards[stackOn.id].parent : parent, p.x, p.y, 0.1, init);
         // Several files: a small grid from the drop point.
         const c = mm.cards[id];
         c.x += (i % 4) * 240;
         c.y += Math.floor(i / 4) * 210;
+        if (stackOn) stackInsert(mm, id, stackOn.id, stackOn.where);
         created.push(id);
-      })
-    );
-    if (parent) board.mutate((mm) => growToFit(mm, parent));
+      });
+      if (parent) growToFit(mm, parent);
+    });
     board.selection.clear();
     created.forEach((id) => board.selection.add(id));
   }
@@ -204,6 +246,7 @@
   let moving = $state<Set<string>>(new Set());
   let wire = $state<{ from: string; x: number; y: number; to: string | null } | null>(null);
   let linkTo = $state<HTMLElement | null>(null);
+  let stackHint = $state<{ id: string; where: 'before' | 'after' } | null>(null);
 
   function local(e: { clientX: number; clientY: number }) {
     const b = el.getBoundingClientRect();
@@ -316,8 +359,12 @@
         linkTo?.classList.remove('link-target');
         linkTo = f;
         f?.classList.add('link-target');
+        const hovered = cardAt(ev, (x) => ids.some((i) => isInside(m!, x, i)));
+        // Top/bottom edge of a snippet: stack instead of nesting.
+        const z = !f && !ev.altKey && ids.length === 1 && hovered && canStack(hovered, m!.cards[ids[0]].kind === 'snippet') ? stackZone(hovered, ev.clientY) : null;
+        stackHint = z ? { id: hovered!, where: z } : null;
         // Alt keeps the card on its level; otherwise the card under the pointer becomes its new parent.
-        const target = f || ev.altKey ? parent : (cardAt(ev, (x) => ids.some((i) => isInside(m!, x, i))) ?? ctx);
+        const target = f || ev.altKey || z ? parent : (hovered ?? ctx);
         drop = target !== parent ? target : undefined;
       },
       () => {
@@ -334,16 +381,19 @@
             .catch((e) => app.toast(String(e), true));
         } else if (active) {
           const target = drop;
-          if (target !== undefined)
+          if (stackHint) stackInsert(m!, ids[0], stackHint.id, stackHint.where);
+          else if (target !== undefined)
             for (const id of ids) {
               const r = worldRect(m!, id);
               reparent(m!, id, target, { x: r.x, y: r.y });
             }
           else if (parent) growToFit(m!, parent);
+          tidyStacks(m!);
           board.checkpoint(before);
         }
         moving = new Set();
         drop = undefined;
+        stackHint = null;
       }
     );
   }
@@ -363,6 +413,7 @@
       () => {
         growToFit(m!, id);
         if (c.parent) growToFit(m!, c.parent);
+        tidyStacks(m!);
         board.checkpoint(before);
       }
     );
@@ -511,7 +562,10 @@
       board.link = null;
     } else if (board.selection.size) {
       const ids = [...board.selection];
-      board.mutate((mm) => deleteCards(mm, ids));
+      board.mutate((mm) => {
+        deleteCards(mm, ids);
+        tidyStacks(mm);
+      });
       board.selection.clear();
     }
   }
@@ -596,8 +650,11 @@
       {@const c = v.c}
       {@const ref = fileRef(c)}
       {@const pic = ref && board.isImage(ref) ? board.thumbs.get(ref.path!) : null}
+      {@const hint = stackHint?.id === v.id ? stackHint.where : fileDrop?.id === v.id && (fileDrop.zone === 'before' || fileDrop.zone === 'after') ? fileDrop.zone : null}
       <div
-        class="card {v.lod}"
+        class="card {v.lod} {c.kind ?? ''}"
+        class:stack-before={hint === 'before'}
+        class:stack-after={hint === 'after'}
         class:sel={board.selection.has(v.id)}
         class:drop={fileDrop?.id === v.id && fileDrop.zone === 'nest'}
         class:linkzone={fileDrop?.id === v.id && fileDrop.zone === 'link'}
@@ -614,11 +671,13 @@
         {#if v.lod === 'full'}
           <div class="inner" style:width="{c.w}px" style:height="{c.h}px" style:transform="scale({v.k})">
             <div class="head" style:height="{HEADER}px">
-              <span class="t">{c.title || 'Ohne Titel'}</span>
+              <span class="t">{c.kind === 'stack' ? `Stapel · ${c.children.length}` : c.title || 'Ohne Titel'}</span>
               {#if c.status}<span class="status">{c.status}</span>{/if}
             </div>
             {#if pic}<img class="pic" class:full={!c.text} src={pic} alt="" draggable="false" />{/if}
-            {#if c.text}<div class="text">{@html renderMarkdown(c.text)}</div>{/if}
+            {#if c.kind === 'snippet'}
+              <blockquote class="quote">{c.text}</blockquote>
+            {:else if c.text}<div class="text">{@html renderMarkdown(c.text)}</div>{/if}
             {#if c.refs?.length}
               <div class="refs">
                 {#each c.refs as r, i (r.id ?? r.href ?? i)}
@@ -777,7 +836,8 @@
     position: relative;
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    /* clip, not hidden: text selection in the reader must not auto-scroll the map */
+    overflow: clip;
     outline: none;
     background-color: var(--bg);
     background-image: radial-gradient(circle, var(--line) 1px, transparent 1.2px);
@@ -813,6 +873,59 @@
     outline: 2px dashed var(--accent);
     outline-offset: 2px;
     background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
+  }
+  .card.stack {
+    background: transparent;
+    border-style: dashed;
+    box-shadow: none;
+  }
+  .card.stack .head {
+    background: transparent;
+    border-bottom: 0;
+  }
+  .card.stack .head .t {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fg-muted);
+  }
+  .card.snippet {
+    border-left: 3px solid color-mix(in srgb, var(--c) 60%, #f5b301);
+  }
+  .card.snippet .head .t {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fg-muted);
+  }
+  .quote {
+    margin: 0;
+    padding: 6px 12px 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--fg);
+    overflow: hidden;
+    max-height: calc(100% - 30px - 28px);
+    white-space: pre-wrap;
+  }
+  .card.stack-before::after,
+  .card.stack-after::after {
+    content: '';
+    position: absolute;
+    left: -4px;
+    right: -4px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+    z-index: 3;
+  }
+  .card.stack-before::after {
+    top: -6px;
+  }
+  .card.stack-after::after {
+    bottom: -6px;
+  }
+  .card.stack-before,
+  .card.stack-after {
+    overflow: visible;
   }
   .card.linkzone {
     outline: 2px solid var(--attr);

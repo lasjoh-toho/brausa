@@ -13,10 +13,14 @@ import {
   newMap,
   normalizeMap,
   reparent,
+  stackInsert,
+  tidyStacks,
+  STACK_GAP,
   worldRect,
   zoomAt
 } from './map';
 import { renderMarkdown } from './markdown';
+import { locateQuote } from './snippets';
 
 function sample() {
   const m = newMap('Test', 'm_t');
@@ -114,6 +118,43 @@ describe('map mutations', () => {
     expect(m.roots).toEqual(['a']);
     expect(m.cards.a.children).toEqual(['b']);
     expect(m.links).toEqual([]);
+  });
+});
+
+describe('stacks', () => {
+  it('joins snippets into a stack, keeps order and dissolves single-card stacks', () => {
+    const m = newMap('S', 'm_s');
+    const a = addCard(m, null, { x: 100, y: 50 }, { kind: 'snippet', h: 60 });
+    const b = addCard(m, null, { x: 500, y: 0 }, { kind: 'snippet', h: 80 });
+    const c = addCard(m, null, { x: 900, y: 0 }, { kind: 'snippet', h: 40 });
+    stackInsert(m, b.id, a.id, 'after');
+    const stack = m.cards[a.parent!];
+    expect(stack.kind).toBe('stack');
+    expect(stack.children).toEqual([a.id, b.id]);
+    expect([stack.x, stack.y]).toEqual([100, 50]);
+    expect(b.y).toBe(60 + STACK_GAP);
+    stackInsert(m, c.id, a.id, 'before');
+    expect(stack.children).toEqual([c.id, a.id, b.id]);
+    // Reorder inside the stack.
+    stackInsert(m, c.id, b.id, 'after');
+    expect(stack.children).toEqual([a.id, b.id, c.id]);
+    // Take two out: the stack disappears and the last card stays where the stack was.
+    reparent(m, b.id, null, { x: 0, y: 0 });
+    reparent(m, c.id, null, { x: 0, y: 300 });
+    tidyStacks(m);
+    expect(m.cards[stack.id]).toBeUndefined();
+    expect(a.parent).toBeNull();
+    expect([a.x, a.y]).toEqual([100, 50]);
+    expect(m.roots).toContain(a.id);
+  });
+});
+
+describe('snippet anchors', () => {
+  it('finds the occurrence whose context matches best', () => {
+    const text = 'Zoom ist gut. Hier steht Zoom nochmal. Ende mit Zoom.';
+    expect(locateQuote(text, 'Zoom', 'steht ', ' nochmal')).toBe(25);
+    expect(locateQuote(text, 'Zoom', 'mit ', '.')).toBe(48);
+    expect(locateQuote(text, 'fehlt')).toBe(-1);
   });
 });
 

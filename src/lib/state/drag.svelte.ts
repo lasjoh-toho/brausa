@@ -19,7 +19,16 @@ import { app } from './app.svelte';
 export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
-export type BoardDrop = (items: Entry[], x: number, y: number) => void | Promise<void>;
+export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
+
+export interface DragOptions {
+  /** Extra payload for the drop target (e.g. a text snippet from the reader). */
+  data?: unknown;
+  /** Only these targets accept the drag (default: all). */
+  accepts?: DropKind[];
+  /** Short label for the ghost instead of file names. */
+  title?: string;
+}
 
 export interface DropHit {
   kind: DropKind;
@@ -45,6 +54,9 @@ class DragController {
   /** Set by the project map while hovering it: what a drop would do. */
   boardHint = $state('');
   onBoardDrop: BoardDrop | null = null;
+  data = $state<unknown>(undefined);
+  accepts: DropKind[] | null = null;
+  title = $state('');
 
   private autoExpanded = new Set<string>();
   private springTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,7 +94,7 @@ class DragController {
    * Call from a pointerdown handler. The drag only starts after the pointer
    * moved a few pixels; a plain click calls `onClick` instead.
    */
-  begin(e: PointerEvent, getItems: () => Entry[], source: string, onClick?: (e: PointerEvent) => void) {
+  begin(e: PointerEvent, getItems: () => Entry[], source: string, onClick?: (e: PointerEvent) => void, opts: DragOptions = {}) {
     if (e.button !== 0) return;
     e.preventDefault(); // no native text selection / image drag
     const sx = e.clientX;
@@ -95,6 +107,9 @@ class DragController {
         if (!items.length) return end();
         this.items = items;
         this.source = source;
+        this.data = opts.data;
+        this.accepts = opts.accepts ?? null;
+        this.title = opts.title ?? '';
         this.active = true;
         document.body.classList.add('dragging');
       }
@@ -106,10 +121,10 @@ class DragController {
 
     const up = (ev: PointerEvent) => {
       const wasActive = this.active;
-      const snap = { hit: this.hit, items: this.items, source: this.source, copy: this.copy };
+      const snap = { hit: this.hit, items: this.items, source: this.source, copy: this.copy, data: this.data };
       end();
       if (wasActive) {
-        if (snap.hit?.kind === 'board') void this.onBoardDrop?.(snap.items, ev.clientX, ev.clientY);
+        if (snap.hit?.kind === 'board') void this.onBoardDrop?.(snap.items, ev.clientX, ev.clientY, snap.data);
         else if (snap.hit) void performDrop(snap.hit, snap.items, snap.source, snap.copy);
       } else onClick?.(ev);
     };
@@ -144,6 +159,9 @@ class DragController {
     this.autoExpanded.clear();
     this.active = false;
     this.items = [];
+    this.data = undefined;
+    this.accepts = null;
+    this.title = '';
     this.hit = null;
     this.trail = null;
     this.gridOpen = false;
@@ -161,6 +179,11 @@ class DragController {
       return;
     }
     const kind = t.dataset.drop as DropKind;
+    if (this.accepts && !this.accepts.includes(kind)) {
+      this.hit = null;
+      this.spring(null);
+      return;
+    }
     const hit: DropHit = { kind, path: t.dataset.path, key: t.dataset.key };
     if (kind === 'grid-cell') hit.cell = Number(t.dataset.cell);
     if (kind === 'folder') {

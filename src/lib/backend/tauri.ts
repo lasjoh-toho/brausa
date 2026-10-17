@@ -66,6 +66,21 @@ export class TauriBackend implements Backend {
     return WEB_IMAGE.has(entry.ext) ? convertFileSrc(entry.path) : null;
   }
 
+  assetUrl(path: string) {
+    return convertFileSrc(path);
+  }
+
+  // Files are read through the asset protocol (scope: all files), like thumbnails.
+  async fileData(path: string) {
+    const r = await fetch(convertFileSrc(path));
+    if (!r.ok) throw new Error(`„${path}“ ließ sich nicht lesen (${r.status})`);
+    return r.arrayBuffer();
+  }
+
+  async readText(path: string) {
+    return new TextDecoder().decode(await this.fileData(path));
+  }
+
   mediaInfo(paths: string[]) {
     return invoke<MediaInfo[]>('media_info', { paths });
   }

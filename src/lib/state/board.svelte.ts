@@ -23,6 +23,9 @@ import { store } from '../platform';
 
 type Snapshot = string;
 
+/** Opened in brausa's reader instead of the default app (snippets need it). */
+export const READABLE = new Set(['pdf', 'html', 'htm', 'md', 'markdown', 'txt']);
+
 const HISTORY = 100;
 
 class BoardState {
@@ -39,6 +42,9 @@ class BoardState {
   loading = $state(false);
   mode = $state<'map' | 'kanban'>(store.get('boardMode', 'map'));
   panelOpen = $state(store.get('boardPanel', false));
+  /** Document open in the reader next to the map (PDF, HTML, Markdown, text). */
+  reader = $state<{ ref: CardRef; seq: number } | null>(null);
+  readerWidth = $state(store.get('readerWidth', 520));
   /** Preview images for file cards, by path. */
   thumbs = new SvelteMap<string, string | null>();
 
@@ -137,8 +143,43 @@ class BoardState {
       .catch(() => {});
   }
 
+  async openExternal(path: string) {
+    try {
+      await app.backend.openDefault(path);
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    }
+  }
+
+  /** Show a document in the reader; with an anchor (snippet) it scrolls there and flashes it. */
+  openReader(r: CardRef) {
+    const seq = (this.reader?.seq ?? 0) + 1;
+    this.reader = { ref: r, seq };
+    // Opened from the file list: get the index id so this document's snippets are highlighted.
+    if (!r.id && r.path)
+      void app.backend.linkFiles([r.path]).then(([l]) => {
+        if (this.reader?.seq === seq) this.reader = { ref: { ...r, id: l.id }, seq };
+      });
+  }
+
+  closeReader() {
+    this.reader = null;
+  }
+
+  setReaderWidth(w: number) {
+    this.readerWidth = Math.round(Math.min(Math.max(w, 300), this.vw + this.readerWidth - 240));
+    store.set('readerWidth', this.readerWidth);
+  }
+
+  /** All snippet anchors on this map that point into the document with this index id. */
+  snippetsOf(id: string | undefined): CardRef[] {
+    if (!id || !this.map) return [];
+    return Object.values(this.map.cards).flatMap((c) => (c.refs ?? []).filter((r) => r.id === id && (r.page || r.quote)));
+  }
+
   async openRef(r: CardRef) {
     if (!r.path || r.missing) return app.toast(`„${r.name ?? 'Datei'}“ wurde nicht gefunden`, true);
+    if (!r.dir && READABLE.has(r.ext ?? '')) return this.openReader(r);
     if (r.dir) {
       app.setView('stream');
       return app.navigate(r.path);

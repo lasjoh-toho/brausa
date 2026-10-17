@@ -70,6 +70,11 @@ export interface Backend {
   thumbnail(entry: Entry, size: number): Promise<string | null>;
   /** URL for showing the original file in the webview (preview), or null. */
   fileUrl(entry: Entry): string | null;
+  /** URL for any local file (images inside HTML documents), or null. */
+  assetUrl(path: string): string | null;
+  /** Raw bytes (PDF reader) and text (HTML/Markdown reader) of a file. */
+  fileData(path: string): Promise<ArrayBuffer>;
+  readText(path: string): Promise<string>;
   /** EXIF GPS + capture date, batched. */
   mediaInfo(paths: string[]): Promise<MediaInfo[]>;
   rename(path: string, newName: string): Promise<Entry>;
