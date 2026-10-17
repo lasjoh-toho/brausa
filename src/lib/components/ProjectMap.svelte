@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { app } from '../state/app.svelte';
   import { board } from '../state/board.svelte';
+  import { drag } from '../state/drag.svelte';
+  import type { Entry } from '../core/types';
   import {
     HEADER,
     PAD,
@@ -28,6 +30,8 @@
     toScreen,
     worldRect,
     zoomAt,
+    DEFAULT_STATUSES,
+    type CardRef,
     type Frame,
     type MapCard,
     type ProjectMap,
@@ -36,6 +40,7 @@
   import { renderMarkdown } from '../core/markdown';
   import { isToggleKey, modLabel } from '../platform';
   import Icon from './Icon.svelte';
+  import BoardSwitch from './BoardSwitch.svelte';
 
   const COLORS = ['#0090ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
 
@@ -49,12 +54,14 @@
   }
 
   let el: HTMLElement;
-  const project = $derived(app.libraryOf(app.cwd));
 
-  $effect(() => {
-    void board.open(project?.root ?? null);
+  onMount(() => {
+    drag.onBoardDrop = dropFiles;
   });
-  onDestroy(() => void board.flush(true));
+  onDestroy(() => {
+    drag.onBoardDrop = null;
+    drag.boardHint = '';
+  });
 
   const m = $derived(board.map);
   const cam = $derived(board.cam);
@@ -84,6 +91,16 @@
   });
 
   const byId = $derived(new Map(vis.map((v) => [v.id, v])));
+
+  /** First file reference: what a file card shows and opens. */
+  const fileRef = (c: MapCard): CardRef | undefined => c.refs?.find((r) => r.kind === 'file');
+
+  $effect(() => {
+    for (const v of vis) {
+      const r = fileRef(v.c);
+      if (v.lod !== 'dot' && board.isImage(r)) board.requestThumb(r!);
+    }
+  });
 
   function screenRect(id: string): Rect {
     const c = m!.cards[id];
@@ -115,11 +132,78 @@
     });
   });
 
+  // ---------------------------------------------------------------- files
+
+  type Target = { id: string | null; zone: 'nest' | 'link' };
+
+  /** Where dropped files go: onto the free plane, into a card, or (right edge) linked to a card. */
+  function fileTarget(x: number, y: number): Target {
+    const id = cardAt({ clientX: x, clientY: y });
+    if (!id) return { id: null, zone: 'nest' };
+    const r = document.querySelector(`[data-card="${id}"]`)!.getBoundingClientRect();
+    return { id, zone: x > r.right - Math.min(r.width * 0.35, 120) ? 'link' : 'nest' };
+  }
+
+  const fileDrop = $derived(drag.active && drag.hit?.kind === 'board' && m ? fileTarget(drag.x, drag.y) : null);
+
+  $effect(() => {
+    const t = fileDrop;
+    const title = t?.id ? `„${m!.cards[t.id].title || 'Ohne Titel'}“` : '';
+    drag.boardHint = !t ? '' : t.zone === 'link' ? `Mit ${title} verknüpfen` : t.id ? `Als Karte in ${title} legen` : 'Als Karte ablegen';
+  });
+
+  async function dropFiles(items: Entry[], x: number, y: number) {
+    if (!m) return;
+    const t = fileTarget(x, y);
+    let refs: CardRef[];
+    try {
+      refs = await board.refsFor(items);
+    } catch (e) {
+      return app.toast(String(e), true);
+    }
+    if (t.id && t.zone === 'link') return attach(t.id, refs);
+    const parent = t.id ?? ctx;
+    const p = local({ clientX: x, clientY: y });
+    const created: string[] = [];
+    board.mutate((mm) =>
+      refs.forEach((ref, i) => {
+        const id = placeCard(mm, parent, p.x, p.y, 0.1, { title: ref.name ?? '', refs: [ref], h: board.isImage(ref) ? 190 : 120 });
+        // Several files: a small grid from the drop point.
+        const c = mm.cards[id];
+        c.x += (i % 4) * 240;
+        c.y += Math.floor(i / 4) * 210;
+        created.push(id);
+      })
+    );
+    if (parent) board.mutate((mm) => growToFit(mm, parent));
+    board.selection.clear();
+    created.forEach((id) => board.selection.add(id));
+  }
+
+  /** Add file references to a card (e.g. an idea that belongs to a document). */
+  function attach(id: string, refs: CardRef[]) {
+    const c = m!.cards[id];
+    const fresh = refs.filter((r) => !c.refs?.some((x) => x.id === r.id));
+    if (!fresh.length) return;
+    board.mutate((mm) => (mm.cards[id].refs = [...(mm.cards[id].refs ?? []), ...fresh]));
+    app.toast(`„${c.title || 'Karte'}“ verknüpft mit ${fresh.map((r) => r.name).join(', ')}`);
+  }
+
+  /** A file (tray, file list) under the pointer while dragging a card. */
+  function fileAt(e: { clientX: number; clientY: number }): HTMLElement | null {
+    for (const n of document.elementsFromPoint(e.clientX, e.clientY)) {
+      const f = (n as HTMLElement).closest?.<HTMLElement>('[data-file-path]');
+      if (f) return f;
+    }
+    return null;
+  }
+
   // ---------------------------------------------------------------- gestures
 
   let drop = $state<string | null | undefined>(undefined); // undefined = no reparent pending
   let moving = $state<Set<string>>(new Set());
   let wire = $state<{ from: string; x: number; y: number; to: string | null } | null>(null);
+  let linkTo = $state<HTMLElement | null>(null);
 
   function local(e: { clientX: number; clientY: number }) {
     const b = el.getBoundingClientRect();
@@ -162,6 +246,12 @@
     }
     if (!id) return;
     board.link = null;
+    const ref = t.closest<HTMLElement>('[data-ref]')?.dataset.ref;
+    if (ref !== undefined) {
+      const r = m.cards[id].refs?.[Number(ref)];
+      if (r) void board.openRef(r);
+      return;
+    }
     if (handle === 'zoom') return flyInto(id);
     if (handle === 'resize') return resize(e, id);
     if (handle === 'connect') return connect(e, id);
@@ -221,12 +311,28 @@
           c.y = o.y + (p.y - s.y) / k;
           if (parent) (c.x = Math.max(0, c.x)), (c.y = Math.max(0, c.y));
         }
+        // Over a file outside the map (tray, file list): link instead of moving.
+        const f = fileAt(ev);
+        linkTo?.classList.remove('link-target');
+        linkTo = f;
+        f?.classList.add('link-target');
         // Alt keeps the card on its level; otherwise the card under the pointer becomes its new parent.
-        const target = ev.altKey ? parent : (cardAt(ev, (x) => ids.some((i) => isInside(m!, x, i))) ?? ctx);
+        const target = f || ev.altKey ? parent : (cardAt(ev, (x) => ids.some((i) => isInside(m!, x, i))) ?? ctx);
         drop = target !== parent ? target : undefined;
       },
       () => {
-        if (active) {
+        const file = linkTo;
+        if (file) {
+          file.classList.remove('link-target');
+          linkTo = null;
+          for (const id of ids) Object.assign(m!.cards[id], start.get(id));
+          const path = file.dataset.filePath!;
+          const name = path.split(/[\\/]/).pop() ?? path;
+          void board
+            .refsFor([{ path, name, ext: name.includes('.') ? name.split('.').pop()!.toLowerCase() : '', kind: file.dataset.dir ? 'dir' : 'file', size: 0, mtime: 0, ctime: 0, tags: [] }])
+            .then((refs) => ids.forEach((id) => attach(id, refs)))
+            .catch((e) => app.toast(String(e), true));
+        } else if (active) {
           const target = drop;
           if (target !== undefined)
             for (const id of ids) {
@@ -296,6 +402,9 @@
     const t = e.target as HTMLElement;
     const id = t.closest<HTMLElement>('[data-card]')?.dataset.card ?? null;
     if (id && t.closest('.head')) return startEdit(id);
+    // File cards open their file; a card with children keeps double-click for new sub-cards.
+    const ref = id ? fileRef(m.cards[id]) : undefined;
+    if (id && ref && !m.cards[id].children.length) return void board.openRef(ref);
     const parent = id ?? ctx;
     const p = local(e);
     let created = '';
@@ -324,12 +433,12 @@
    * sits inside the card). Cards always start at the same size in plane units,
    * so title bar and text keep their proportions on every level.
    */
-  function placeCard(mm: ProjectMap, parent: string | null, sx: number, sy: number, anchor: number): string {
-    const w = 220, h = 140;
+  function placeCard(mm: ProjectMap, parent: string | null, sx: number, sy: number, anchor: number, init: Partial<MapCard> = {}): string {
+    const w = init.w ?? 220, h = init.h ?? 140;
     const wp = screenToWorld(board.cam, sx, sy);
     const at = toPlane(planeFrame(mm, parent), wp.x, wp.y);
     const x = at.x - w * anchor, y = at.y - h * anchor;
-    return addCard(mm, parent, { x: parent ? Math.max(0, x) : x, y: parent ? Math.max(0, y) : y }, { w, h }).id;
+    return addCard(mm, parent, { x: parent ? Math.max(0, x) : x, y: parent ? Math.max(0, y) : y }, { ...init, w, h }).id;
   }
 
   function newCardAtCenter() {
@@ -380,6 +489,16 @@
     const w = Math.max(300, Math.min(r.w, 520));
     return { x: Math.min(Math.max(8, r.x), board.vw - w - 8), y: Math.min(Math.max(8, r.y), board.vh - 260), w };
   });
+
+  const statuses = $derived(m?.statuses ?? DEFAULT_STATUSES);
+  const selInKanban = $derived(m ? [...board.selection].every((id) => m.cards[id]?.status) : false);
+
+  /** The Kanban is a view on the cards: sending a card there means giving it a status. */
+  function toKanban() {
+    const on = !selInKanban;
+    board.mutate((mm) => board.selection.forEach((id) => (mm.cards[id].status = on ? (mm.cards[id].status ?? statuses[0]) : null)));
+    app.toast(on ? `Im Kanban unter „${statuses[0]}“` : 'Aus dem Kanban genommen');
+  }
 
   function setColor(color: string | null) {
     board.mutate((mm) => board.selection.forEach((id) => (mm.cards[id].color = color)));
@@ -466,24 +585,23 @@
   tabindex="-1"
   role="application"
   aria-label="Projektmap"
+  data-drop="board"
 >
-  {#if !project}
-    <div class="empty">
-      <Icon name="nodes" size={28} />
-      <p>Maps gehören zu einem Projekt.</p>
-      <button class="btn primary" onclick={() => app.addProject(app.cwd)}>„{app.cwd.split(/[\\/]/).pop()}“ als Projekt einbeziehen</button>
-    </div>
-  {:else if m}
+  {#if m}
     {#if ctx}
       <div class="backdrop" style:--c={m.cards[ctx].color ?? 'var(--fg-faint)'}></div>
     {/if}
 
     {#each vis as v (v.id)}
       {@const c = v.c}
+      {@const ref = fileRef(c)}
+      {@const pic = ref && board.isImage(ref) ? board.thumbs.get(ref.path!) : null}
       <div
         class="card {v.lod}"
         class:sel={board.selection.has(v.id)}
-        class:drop={drop === v.id}
+        class:drop={fileDrop?.id === v.id && fileDrop.zone === 'nest'}
+        class:linkzone={fileDrop?.id === v.id && fileDrop.zone === 'link'}
+        class:target={drop === v.id}
         class:moving={[...moving].some((x) => isInside(m, v.id, x))}
         class:wired={wire?.to === v.id}
         data-card={v.id}
@@ -495,10 +613,24 @@
       >
         {#if v.lod === 'full'}
           <div class="inner" style:width="{c.w}px" style:height="{c.h}px" style:transform="scale({v.k})">
-            <div class="head" style:height="{HEADER}px"><span class="t">{c.title || 'Ohne Titel'}</span></div>
+            <div class="head" style:height="{HEADER}px">
+              <span class="t">{c.title || 'Ohne Titel'}</span>
+              {#if c.status}<span class="status">{c.status}</span>{/if}
+            </div>
+            {#if pic}<img class="pic" class:full={!c.text} src={pic} alt="" draggable="false" />{/if}
             {#if c.text}<div class="text">{@html renderMarkdown(c.text)}</div>{/if}
+            {#if c.refs?.length}
+              <div class="refs">
+                {#each c.refs as r, i (r.id ?? r.href ?? i)}
+                  <button class="ref" class:missing={r.missing} data-ref={i} title={r.missing ? 'Nicht gefunden' : r.path}>
+                    <Icon name={r.dir ? 'folder' : 'file'} size={11} />{r.name ?? r.title ?? r.href}
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </div>
         {:else if v.lod === 'title'}
+          {#if pic}<img class="pic mini-pic" src={pic} alt="" draggable="false" />{/if}
           <div class="mini">{c.title || 'Ohne Titel'}</div>
         {/if}
         {#if c.children.length && !v.open && v.lod !== 'dot'}
@@ -607,6 +739,8 @@
     </nav>
 
     <div class="tools ui">
+      <BoardSwitch />
+      <span class="div"></span>
       <button class="btn" onclick={newCardAtCenter} title="Neue Karte (N) – oder Doppelklick auf eine freie Stelle"><Icon name="plus" size={14} /> Karte</button>
       <button class="btn icon" onclick={up} disabled={!focus} title="Eine Ebene hinauf (Esc)"><Icon name="zoomOut" size={15} /></button>
       <button class="btn icon" onclick={() => board.overview()} title="Ganze Map (0)"><Icon name="fit" size={15} /></button>
@@ -625,6 +759,9 @@
           <button class="btn icon" title="Bearbeiten (F2)" onclick={() => startEdit([...board.selection][0])}><Icon name="pencil" size={14} /></button>
           <button class="btn icon" title="Hineinzoomen (Enter)" onclick={() => flyInto([...board.selection][0])}><Icon name="zoomIn" size={14} /></button>
         {/if}
+        <button class="btn" class:on={selInKanban} title={selInKanban ? 'Aus dem Kanban nehmen' : 'Ins Kanban schicken'} onclick={toKanban}>
+          <Icon name="kanban" size={14} /> Kanban
+        </button>
         <button class="btn icon" title="Löschen (Entf)" onclick={removeSelected}><Icon name="trash" size={14} /></button>
       </div>
     {/if}
@@ -670,11 +807,17 @@
     outline-offset: 1px;
     overflow: visible;
   }
+  .card.target,
   .card.drop,
   .card.wired {
     outline: 2px dashed var(--accent);
     outline-offset: 2px;
     background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
+  }
+  .card.linkzone {
+    outline: 2px solid var(--attr);
+    outline-offset: 2px;
+    box-shadow: inset -36px 0 0 var(--attr-soft);
   }
   .card.moving {
     pointer-events: none;
@@ -737,7 +880,70 @@
     padding: 0 3px;
     border-radius: 3px;
   }
+  .status {
+    margin-left: auto;
+    padding: 1px 7px;
+    border-radius: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg-muted);
+    background: var(--bg-elev);
+    white-space: nowrap;
+  }
+  .pic {
+    display: block;
+    width: 100%;
+    height: 60%;
+    object-fit: cover;
+    background: var(--bg-sunken);
+  }
+  .pic.full {
+    height: calc(100% - 30px - 26px);
+  }
+  .mini-pic {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    opacity: 0.85;
+  }
+  .refs {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    bottom: 5px;
+    display: flex;
+    gap: 4px;
+    overflow: hidden;
+  }
+  .ref {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--fg-muted);
+    background: var(--bg-sunken);
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .ref:hover {
+    color: var(--accent);
+  }
+  .ref.missing {
+    text-decoration: line-through;
+    color: var(--danger);
+  }
+  :global(.link-target) {
+    outline: 2px solid var(--attr) !important;
+    outline-offset: 2px;
+  }
   .mini {
+    position: relative;
     padding: 1px 4px;
     font-size: 11px;
     font-weight: 600;
@@ -915,6 +1121,7 @@
     top: 10px;
     right: 12px;
     display: flex;
+    align-items: center;
     gap: 2px;
     padding: 3px;
     border-radius: 9px;
@@ -999,15 +1206,6 @@
   .hint {
     font-size: 11px;
     color: var(--fg-faint);
-  }
-  .empty {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: 10px;
-    color: var(--fg-muted);
   }
   .hint-empty {
     position: absolute;

@@ -92,4 +92,8 @@ export interface Backend {
   loadMap(root: string, id: string): Promise<ProjectMap>;
   saveMap(root: string, map: ProjectMap): Promise<void>;
   deleteMap(root: string, id: string): Promise<void>;
+  /** Stable index ids for files placed on a map (they follow the file when it moves). */
+  linkFiles(paths: string[]): Promise<{ path: string; id: string }[]>;
+  /** Current path per id, null when the file is missing. */
+  locateFiles(ids: string[]): Promise<Record<string, string | null>>;
 }

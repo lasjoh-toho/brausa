@@ -259,7 +259,7 @@ ein Tab in brausa.
 | **A – Index** | `meta.jsonl` und SQLite-Cache, Datei-Identität, Abgleich und Reparatur, Migration der Sidecars, Statusanzeige | Ein `.brausa/` pro Bibliothek; Tags überleben Verschieben im Finder |
 | **B – Map-Grundgerüst** ✅ | Datenformat, Renderer mit Pan/Zoom/Culling, Karten anlegen, bearbeiten, verschieben, Verbindungen ziehen, Undo | Erste nutzbare Map |
 | **C – Tiefe und ZUI** ✅ | Unterkarten, semantischer Zoom, Hineinfliegen, Breadcrumbs, Drag zwischen Ebenen | iMapping-artiges Arbeiten |
-| **D – Verzahnung** | Dateien als Karten mit Vorschaubild (über Index-IDs), Karten Dokumenten zuordnen, Kanban als Ansicht auf Karten („ins Kanban schicken“), Bausteine-Panel mit Suche und Ordnervorschlägen | Projektorganisation mit echten Dateien |
+| **D – Verzahnung** ✅ (ohne Suche nach Mustern über alle Bibliotheken) | Dateien als Karten mit Vorschaubild (über Index-IDs), Karten Dokumenten zuordnen, Kanban als Ansicht auf Karten („ins Kanban schicken“), Bausteine-Panel mit Suche und Ordnervorschlägen | Projektorganisation mit echten Dateien |
 | **E – TiddlyWiki** | Export Ordner/JSON, Import, danach Live-Sync; Drill-down im Pinboard-Fork | Projekte im Wiki vorstellen |
 | **F – Web und Lesen** | Web-Pane, PDF-/HTML-Leser, Snippets mit Rücksprung zur Quelle, Snippet-Stapel, Clipper | Recherche direkt in Maps |
 

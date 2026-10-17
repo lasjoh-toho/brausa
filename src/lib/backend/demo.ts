@@ -234,6 +234,7 @@ export class DemoBackend implements Backend {
       target.children.set(name, clone);
       if (mode === 'move') parent.children.delete(src.entry.name);
       res.moved[p] = dest;
+      this.relink(p, dest);
     }
     return res;
   }
@@ -277,7 +278,7 @@ export class DemoBackend implements Backend {
   }
 
   async thumbnail(entry: Entry) {
-    return entry.thumb ?? null;
+    return entry.thumb ?? this.find(entry.path)?.entry.thumb ?? null;
   }
 
   fileUrl(entry: Entry) {
@@ -300,6 +301,7 @@ export class DemoBackend implements Backend {
     if (name !== node.entry.name && parent.children.has(name)) throw new Error(`„${name}“ existiert bereits`);
     parent.children.delete(node.entry.name);
     this.retarget(node, joinPath(dirname(path), name));
+    this.relink(path, joinPath(dirname(path), name));
     node.entry.ext = node.children ? '' : extOf(name);
     parent.children.set(name, node);
     return this.decorate(node.entry);
@@ -393,6 +395,49 @@ export class DemoBackend implements Backend {
   async saveMap(root: string, map: ProjectMap) {
     this.requireProject(root);
     this.writeMaps(root, { ...this.readMaps(root), [map.id]: structuredClone(map) });
+  }
+
+  /** File ids for map cards (id → path), kept in localStorage like the maps. */
+  private linked = new Map<string, string>(
+    (() => {
+      try {
+        return JSON.parse(localStorage.getItem('brausa.demo.linked') ?? '[]');
+      } catch {
+        return [];
+      }
+    })()
+  );
+
+  private saveLinked() {
+    try {
+      localStorage.setItem('brausa.demo.linked', JSON.stringify([...this.linked]));
+    } catch {
+      /* private mode */
+    }
+  }
+
+  private relink(from: string, to: string) {
+    for (const [id, p] of this.linked) if (p === from || isWithin(p, from)) this.linked.set(id, to + p.slice(from.length));
+    this.saveLinked();
+  }
+
+  async linkFiles(paths: string[]) {
+    const out = paths.map((path) => {
+      let id = [...this.linked].find(([, p]) => p === path)?.[0];
+      if (!id) this.linked.set((id = 'f_' + (this.linked.size + 1).toString(36) + Date.now().toString(36)), path);
+      return { path, id };
+    });
+    this.saveLinked();
+    return out;
+  }
+
+  async locateFiles(ids: string[]) {
+    return Object.fromEntries(
+      ids.map((id) => {
+        const p = this.linked.get(id);
+        return [id, p && this.find(p) ? p : null];
+      })
+    );
   }
 
   async deleteMap(root: string, id: string) {

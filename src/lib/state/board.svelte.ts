@@ -2,7 +2,7 @@
  * State of the project map ("board") view: which map of which project is
  * open, the camera, selection, undo history and debounced saving.
  */
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { app } from './app.svelte';
 import type { MapInfo } from '../backend/types';
 import {
@@ -12,9 +12,13 @@ import {
   normalizeMap,
   planeFrame,
   applyFrame,
+  worldRect,
   type Camera,
+  type CardRef,
   type ProjectMap
 } from '../core/map';
+import type { Entry } from '../core/types';
+import { family } from '../core/format';
 import { store } from '../platform';
 
 type Snapshot = string;
@@ -33,6 +37,10 @@ class BoardState {
   link = $state<string | null>(null);
   editing = $state<string | null>(null);
   loading = $state(false);
+  mode = $state<'map' | 'kanban'>(store.get('boardMode', 'map'));
+  panelOpen = $state(store.get('boardPanel', false));
+  /** Preview images for file cards, by path. */
+  thumbs = new SvelteMap<string, string | null>();
 
   private undoStack: Snapshot[] = [];
   private redoStack: Snapshot[] = [];
@@ -71,6 +79,75 @@ class BoardState {
     store.set('map:' + this.root, id);
     if (m.view) this.cam = m.view;
     else this.overview(false);
+    void this.refreshRefs();
+  }
+
+  setMode(mode: 'map' | 'kanban') {
+    this.mode = mode;
+    store.set('boardMode', mode);
+  }
+
+  togglePanel() {
+    this.panelOpen = !this.panelOpen;
+    store.set('boardPanel', this.panelOpen);
+  }
+
+  /** Files may have moved or vanished since the map was saved: ask the index. */
+  async refreshRefs() {
+    const m = this.map;
+    if (!m) return;
+    const refs = Object.values(m.cards).flatMap((c) => (c.refs ?? []).filter((r) => r.kind === 'file' && r.id));
+    if (!refs.length) return;
+    try {
+      const where = await app.backend.locateFiles([...new Set(refs.map((r) => r.id!))]);
+      let moved = false;
+      for (const r of refs) {
+        const p = where[r.id!];
+        r.missing = p === null;
+        if (p && p !== r.path) {
+          r.path = p;
+          r.name = p.split(/[\\/]/).pop();
+          moved = true;
+        }
+      }
+      if (moved) this.changed();
+    } catch (e) {
+      app.toast(String(e), true);
+    }
+  }
+
+  /** Index ids for entries, as card references. */
+  async refsFor(entries: Entry[]): Promise<CardRef[]> {
+    const links = await app.backend.linkFiles(entries.map((e) => e.path));
+    return entries.map((e, i) => ({ kind: 'file', id: links[i].id, path: e.path, name: e.name, ext: e.ext, dir: e.kind === 'dir' }));
+  }
+
+  isImage(r: CardRef | undefined): boolean {
+    return !!r?.path && !r.dir && !r.missing && family(r.ext ?? '', 'file') === 'image';
+  }
+
+  requestThumb(r: CardRef) {
+    const p = r.path!;
+    if (this.thumbs.has(p)) return;
+    this.thumbs.set(p, null);
+    const e = { path: p, name: r.name ?? '', ext: r.ext ?? '', kind: 'file', size: 0, mtime: 0, ctime: 0, tags: [] } satisfies Entry;
+    app.backend
+      .thumbnail(e, 480)
+      .then((url) => this.thumbs.set(p, url))
+      .catch(() => {});
+  }
+
+  async openRef(r: CardRef) {
+    if (!r.path || r.missing) return app.toast(`„${r.name ?? 'Datei'}“ wurde nicht gefunden`, true);
+    if (r.dir) {
+      app.setView('stream');
+      return app.navigate(r.path);
+    }
+    try {
+      await app.backend.openDefault(r.path);
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    }
   }
 
   async create(title: string) {
@@ -212,6 +289,14 @@ class BoardState {
       else this.saveCamSoon();
     };
     this.anim = requestAnimationFrame(frame);
+  }
+
+  /** Fly to a card (e.g. from the Kanban). */
+  reveal(id: string) {
+    if (!this.map?.cards[id]) return;
+    this.selection.clear();
+    this.selection.add(id);
+    this.flyTo(fitRect(worldRect(this.map, id), this.vw, this.vh, 0.2));
   }
 
   /** Show the whole map (or a plane's content). */

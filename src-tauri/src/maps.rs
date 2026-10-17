@@ -7,6 +7,7 @@
 use serde::Serialize;
 use serde_json::Value;
 use std::{
+    collections::HashMap,
     fs, io,
     path::{Path, PathBuf},
 };
@@ -68,6 +69,25 @@ pub fn save(root: &Path, map: &Value) -> io::Result<()> {
     fs::rename(tmp, p)
 }
 
+/// How many cards in all maps of these projects point at each index record.
+pub fn ref_counts<'a>(roots: impl IntoIterator<Item = &'a Path>) -> HashMap<String, u32> {
+    let mut out = HashMap::new();
+    for root in roots {
+        for info in list(root) {
+            let Ok(m) = load(root, &info.id) else { continue };
+            let cards = m.get("cards").and_then(Value::as_object).into_iter().flat_map(|c| c.values());
+            for r in cards.filter_map(|c| c.get("refs")?.as_array()).flatten() {
+                if r.get("kind").and_then(Value::as_str) == Some("file") {
+                    if let Some(id) = r.get("id").and_then(Value::as_str) {
+                        *out.entry(id.to_string()).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 pub fn delete(root: &Path, id: &str) -> io::Result<()> {
     match fs::remove_file(file(root, id)?) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -93,6 +113,18 @@ mod tests {
         delete(root, "m_b").unwrap();
         delete(root, "m_b").unwrap(); // idempotent
         assert_eq!(list(root).len(), 1);
+    }
+
+    #[test]
+    fn counts_file_references_across_maps() {
+        let t = tempfile::tempdir().unwrap();
+        let card = |id: &str| json!({"refs": [{"kind": "file", "id": id}, {"kind": "url", "href": "x"}]});
+        save(t.path(), &json!({"id": "a", "cards": {"c1": card("f_1"), "c2": card("f_2")}})).unwrap();
+        save(t.path(), &json!({"id": "b", "cards": {"c1": card("f_1")}})).unwrap();
+        let n = ref_counts([t.path()]);
+        assert_eq!(n.get("f_1"), Some(&2));
+        assert_eq!(n.get("f_2"), Some(&1));
+        assert_eq!(n.len(), 2);
     }
 
     #[test]

@@ -276,6 +276,44 @@ impl Library {
         }
     }
 
+    /// Make sure `p` has a record (map cards point at files by record id) and return its id.
+    pub fn ensure(&mut self, p: &Path) -> String {
+        let key = self.key(p);
+        if let Some(i) = self.idx(&key) {
+            if self.records[i].refs == 0 {
+                self.records[i].refs = 1;
+                self.dirty = true;
+            }
+            return self.records[i].id.clone();
+        }
+        let mut r = self.fresh_record(p);
+        r.refs = 1;
+        let id = r.id.clone();
+        self.records.push(r);
+        self.dirty = true;
+        id
+    }
+
+    /// Current absolute path of a record, unless the file is missing.
+    pub fn locate(&self, id: &str) -> Option<PathBuf> {
+        self.records.iter().find(|r| r.id == id && r.orphaned.is_none()).map(|r| self.abs(&r.path))
+    }
+
+    /// Set the number of map cards pointing at each record; records that only
+    /// existed for a card are dropped once no card needs them.
+    pub fn set_refs(&mut self, counts: &HashMap<String, u32>) {
+        for r in &mut self.records {
+            let n = counts.get(&r.id).copied().unwrap_or(0);
+            if r.refs != n {
+                r.refs = n;
+                self.dirty = true;
+            }
+        }
+        let before = self.records.len();
+        self.records.retain(|r| !r.is_empty());
+        self.dirty |= self.records.len() != before;
+    }
+
     /// Apply a tag/color patch. Creates the record on first use, drops it again when empty.
     pub fn patch(&mut self, p: &Path, patch: &MetaPatch) -> Record {
         let key = self.key(p);
@@ -650,6 +688,27 @@ impl Registry {
         Ok(n)
     }
 
+    /// Give each path a stable id for map cards (creates index records as needed).
+    pub fn link(&mut self, p: &Path) -> io::Result<String> {
+        let lib = self.owner_mut(p);
+        let id = lib.ensure(p);
+        lib.save()?;
+        Ok(id)
+    }
+
+    pub fn locate(&self, id: &str) -> Option<PathBuf> {
+        self.libs.iter().chain(std::iter::once(&self.global)).find_map(|l| l.locate(id))
+    }
+
+    /// Reference counts from all maps of all projects (see `maps::ref_counts`).
+    pub fn set_refs(&mut self, counts: &HashMap<String, u32>) -> io::Result<()> {
+        for lib in self.libs.iter_mut().chain(std::iter::once(&mut self.global)) {
+            lib.set_refs(counts);
+            lib.save()?;
+        }
+        Ok(())
+    }
+
     pub fn trashed(&mut self, p: &Path) -> io::Result<()> {
         let lib = self.owner_mut(p);
         lib.mark_orphan(p);
@@ -686,6 +745,24 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linked_files_keep_their_id_across_moves_until_unreferenced() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().join("proj");
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("plan.pdf"), b"%PDF plan").unwrap();
+        let mut reg = Registry::open(&t.path().join("app")).unwrap();
+        reg.add(&root, None).unwrap();
+        let id = reg.link(&root.join("plan.pdf")).unwrap();
+        assert_eq!(reg.link(&root.join("plan.pdf")).unwrap(), id);
+        fs::rename(root.join("plan.pdf"), root.join("sub/plan-v2.pdf")).unwrap();
+        reg.reconcile_all();
+        assert_eq!(reg.locate(&id), Some(root.join("sub/plan-v2.pdf")));
+        // No map needs it any more and it carries no tags: the record goes away.
+        reg.set_refs(&HashMap::new()).unwrap();
+        assert_eq!(reg.locate(&id), None);
+    }
 
     fn tags(t: &[&str]) -> MetaPatch {
         MetaPatch { add_tags: t.iter().map(|s| s.to_string()).collect(), remove_tags: vec![], color: None }

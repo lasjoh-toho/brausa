@@ -125,4 +125,12 @@ export class TauriBackend implements Backend {
   deleteMap(root: string, id: string) {
     return invoke<void>('delete_map', { root, id });
   }
+
+  linkFiles(paths: string[]) {
+    return invoke<{ path: string; id: string }[]>('link_files', { paths });
+  }
+
+  locateFiles(ids: string[]) {
+    return invoke<Record<string, string | null>>('locate_files', { ids });
+  }
 }

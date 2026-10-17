@@ -13,12 +13,19 @@ export const PAD = 10;
 export const DEFAULT_INNER = 0.25;
 export const MIN_W = 90;
 export const MIN_H = HEADER + 18;
+export const DEFAULT_STATUSES = ['Offen', 'In Arbeit', 'Erledigt'];
 
 export interface CardRef {
   kind: 'file' | 'url' | 'tiddler';
   /** Index id (files) — survives moves outside brausa. */
   id?: string;
+  /** Last known path; refreshed from the index when the map opens. */
   path?: string;
+  name?: string;
+  ext?: string;
+  dir?: boolean;
+  /** Set at load time when the index no longer finds the file. */
+  missing?: boolean;
   href?: string;
   title?: string;
 }
@@ -60,6 +67,8 @@ export interface ProjectMap {
   /** Top-level card ids, back to front. */
   roots: string[];
   links: MapLink[];
+  /** Kanban columns for cards (`status`); see DEFAULT_STATUSES. */
+  statuses?: string[];
   /** Last camera, restored when the map is opened again. */
   view?: Camera;
   updated?: string;

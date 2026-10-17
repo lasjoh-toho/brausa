@@ -15,7 +15,7 @@
   import GridEditor from './lib/components/GridEditor.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import ContextMenu from './lib/components/ContextMenu.svelte';
-  import ProjectMap from './lib/components/ProjectMap.svelte';
+  import ProjectBoard from './lib/components/ProjectBoard.svelte';
 
   let toolbar: Toolbar;
   let accent = $state<{ color: string; light: boolean } | null>(null);
@@ -92,7 +92,7 @@
   <Sidebar />
   <main>
     <Toolbar bind:this={toolbar} {accent} />
-    {#if app.view === 'board'}<ProjectMap />{:else}<Canvas />{/if}
+    {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
     <Tray onTag={() => (tagSource = 'staging')} />
   </main>
 

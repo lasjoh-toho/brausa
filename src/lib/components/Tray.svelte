@@ -27,7 +27,7 @@
 
     <div class="items">
       {#each app.staging as e (e.path)}
-        <div class="item" animate:flip={{ duration: 180 }} title={e.path}>
+        <div class="item" animate:flip={{ duration: 180 }} title={e.path} data-file-path={e.path} data-dir={e.kind === 'dir' ? '' : undefined}>
           <div
             class="thumb"
             role="button"

@@ -179,14 +179,47 @@ async fn load_map(state: State<'_, Index>, root: String, id: String) -> CmdResul
     maps::load(&project_root(&state, &root)?, &id).map_err(err)
 }
 
+/// Keep index records alive exactly as long as some map card points at them.
+fn sync_refs(state: &State<'_, Index>) -> CmdResult<()> {
+    let mut reg = state.0.lock().map_err(err)?;
+    let roots: Vec<PathBuf> = reg.infos().into_iter().filter_map(|i| i.root.map(PathBuf::from)).collect();
+    let counts = maps::ref_counts(roots.iter().map(PathBuf::as_path));
+    reg.set_refs(&counts).map_err(err)
+}
+
 #[tauri::command]
 async fn save_map(state: State<'_, Index>, root: String, map: serde_json::Value) -> CmdResult<()> {
-    maps::save(&project_root(&state, &root)?, &map).map_err(err)
+    maps::save(&project_root(&state, &root)?, &map).map_err(err)?;
+    sync_refs(&state)
 }
 
 #[tauri::command]
 async fn delete_map(state: State<'_, Index>, root: String, id: String) -> CmdResult<()> {
-    maps::delete(&project_root(&state, &root)?, &id).map_err(err)
+    maps::delete(&project_root(&state, &root)?, &id).map_err(err)?;
+    sync_refs(&state)
+}
+
+#[derive(Serialize)]
+struct FileLink {
+    path: String,
+    id: String,
+}
+
+/// Stable ids for files placed on a map; they follow the file when it moves.
+#[tauri::command]
+async fn link_files(state: State<'_, Index>, paths: Vec<String>) -> CmdResult<Vec<FileLink>> {
+    let mut reg = state.0.lock().map_err(err)?;
+    paths.into_iter().map(|path| Ok(FileLink { id: reg.link(Path::new(&path)).map_err(err)?, path })).collect()
+}
+
+/// Current paths for file ids (null = missing).
+#[tauri::command]
+async fn locate_files(state: State<'_, Index>, ids: Vec<String>) -> CmdResult<std::collections::HashMap<String, Option<String>>> {
+    let reg = state.0.lock().map_err(err)?;
+    Ok(ids.into_iter().map(|id| {
+        let p = reg.locate(&id).map(|p| p.to_string_lossy().to_string());
+        (id, p)
+    }).collect())
 }
 
 #[tauri::command]
@@ -326,7 +359,9 @@ pub fn run() {
             list_maps,
             load_map,
             save_map,
-            delete_map
+            delete_map,
+            link_files,
+            locate_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running brausa");
