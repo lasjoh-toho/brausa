@@ -10,11 +10,19 @@
 
 ## Was drin ist
 
-- Ordnerbaum, der beim Ziehen über einem Ordner aufklappt; Dual-Zone-Drop: links verschieben, rechts Tags und Farbe übernehmen
-- Breadcrumb-Drop-Leiste und konfigurierbares Ablage-Raster
-- Stream über Unterordner, Kanban, Zeitachse, einfache Karte
+**Neu in 0.2**
+- **Projekte mit zentralem Index:** Ordner unter *Projekte* einbeziehen. Tags und Farben liegen in `<Projekt>/.brausa/meta.jsonl` statt in einer Datei pro Ordner. Dateien, die im Finder oder Explorer verschoben oder umbenannt wurden, werden wiedererkannt. Alte Sidecars werden automatisch übernommen.
+- **Kalender-Heatmap:** zoombar (Jahre → Jahr → Monat). Ziehen setzt einen Zeitfilter, wählbar nach geändert, erstellt oder aufgenommen (EXIF).
+- **Karte** mit OpenStreetMap für Fotos mit GPS
+- **Schnelle Vorschaubilder:** Hochkant-Fotos werden richtig gedreht.
+- **Dateiaktionen:** Doppelklick öffnet in der Standard-App, dazu Kontextmenü, Umbenennen, Papierkorb und neuer Ordner.
+- **Live-Aktualisierung,** wenn andere Programme Dateien ändern
+
+**Seit 0.1**
+- Ordnerbaum, der beim Ziehen über einem Ordner aufklappt; Dual-Zone-Drop (links verschieben, rechts Tags und Farbe übernehmen)
+- Breadcrumb-Drop-Leiste und Ablage-Raster
+- Stream über Unterordner, Kanban, Zeitachse
 - Lasso, Auswahl per Muster (`*.png > 5MB`, `#tag`), Ablage-Tray
-- Tags (`T`), hierarchisch, gespeichert in `.brausa/<datei>.meta.json`
-- Zoom-Vorschau, die unter die Toolbar fließt; Rückgängig für Verschieben
+- Hierarchische Tags (`T`), Zoom-Vorschau, Rückgängig für Verschieben
 
 Details und Roadmap: [README](https://github.com/lasjoh-toho/brausa#readme) · [Konzept](https://github.com/lasjoh-toho/brausa/blob/main/docs/KONZEPT.md)
