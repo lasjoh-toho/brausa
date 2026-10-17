@@ -1,7 +1,8 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
-import type { Backend, IndexReport, LibraryInfo, MediaInfo, TransferResult, WalkOptions } from './types';
+import type { ProjectMap } from '../core/map';
+import type { Backend, IndexReport, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions } from './types';
 
 /** Formats the webview can show as-is. Raster thumbnails come from the Rust cache instead. */
 const WEB_IMAGE = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp']);
@@ -107,5 +108,29 @@ export class TauriBackend implements Backend {
 
   onIndexReport(cb: (r: IndexReport) => void) {
     return listen<IndexReport>('index-report', (ev) => cb(ev.payload));
+  }
+
+  listMaps(root: string) {
+    return invoke<MapInfo[]>('list_maps', { root });
+  }
+
+  loadMap(root: string, id: string) {
+    return invoke<ProjectMap>('load_map', { root, id });
+  }
+
+  saveMap(root: string, map: ProjectMap) {
+    return invoke<void>('save_map', { root, map });
+  }
+
+  deleteMap(root: string, id: string) {
+    return invoke<void>('delete_map', { root, id });
+  }
+
+  linkFiles(paths: string[]) {
+    return invoke<{ path: string; id: string }[]>('link_files', { paths });
+  }
+
+  locateFiles(ids: string[]) {
+    return invoke<Record<string, string | null>>('locate_files', { ids });
   }
 }

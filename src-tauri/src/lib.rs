@@ -1,5 +1,6 @@
 mod fsops;
 mod library;
+mod maps;
 mod media;
 mod meta;
 
@@ -158,6 +159,69 @@ async fn remove_library(state: State<'_, Index>, root: String) -> CmdResult<()> 
     state.0.lock().map_err(err)?.remove(Path::new(&root)).map_err(err)
 }
 
+/// Maps may only be stored inside a registered project.
+fn project_root(state: &State<'_, Index>, root: &str) -> CmdResult<PathBuf> {
+    let reg = state.0.lock().map_err(err)?;
+    if reg.infos().iter().any(|i| i.root.as_deref() == Some(root)) {
+        Ok(PathBuf::from(root))
+    } else {
+        Err(format!("„{root}“ ist kein Projekt"))
+    }
+}
+
+#[tauri::command]
+async fn list_maps(state: State<'_, Index>, root: String) -> CmdResult<Vec<maps::MapInfo>> {
+    Ok(maps::list(&project_root(&state, &root)?))
+}
+
+#[tauri::command]
+async fn load_map(state: State<'_, Index>, root: String, id: String) -> CmdResult<serde_json::Value> {
+    maps::load(&project_root(&state, &root)?, &id).map_err(err)
+}
+
+/// Keep index records alive exactly as long as some map card points at them.
+fn sync_refs(state: &State<'_, Index>) -> CmdResult<()> {
+    let mut reg = state.0.lock().map_err(err)?;
+    let roots: Vec<PathBuf> = reg.infos().into_iter().filter_map(|i| i.root.map(PathBuf::from)).collect();
+    let counts = maps::ref_counts(roots.iter().map(PathBuf::as_path));
+    reg.set_refs(&counts).map_err(err)
+}
+
+#[tauri::command]
+async fn save_map(state: State<'_, Index>, root: String, map: serde_json::Value) -> CmdResult<()> {
+    maps::save(&project_root(&state, &root)?, &map).map_err(err)?;
+    sync_refs(&state)
+}
+
+#[tauri::command]
+async fn delete_map(state: State<'_, Index>, root: String, id: String) -> CmdResult<()> {
+    maps::delete(&project_root(&state, &root)?, &id).map_err(err)?;
+    sync_refs(&state)
+}
+
+#[derive(Serialize)]
+struct FileLink {
+    path: String,
+    id: String,
+}
+
+/// Stable ids for files placed on a map; they follow the file when it moves.
+#[tauri::command]
+async fn link_files(state: State<'_, Index>, paths: Vec<String>) -> CmdResult<Vec<FileLink>> {
+    let mut reg = state.0.lock().map_err(err)?;
+    paths.into_iter().map(|path| Ok(FileLink { id: reg.link(Path::new(&path)).map_err(err)?, path })).collect()
+}
+
+/// Current paths for file ids (null = missing).
+#[tauri::command]
+async fn locate_files(state: State<'_, Index>, ids: Vec<String>) -> CmdResult<std::collections::HashMap<String, Option<String>>> {
+    let reg = state.0.lock().map_err(err)?;
+    Ok(ids.into_iter().map(|id| {
+        let p = reg.locate(&id).map(|p| p.to_string_lossy().to_string());
+        (id, p)
+    }).collect())
+}
+
 #[tauri::command]
 fn reconcile(app: AppHandle) {
     reconcile_async(app, None);
@@ -291,7 +355,13 @@ pub fn run() {
             libraries,
             add_library,
             remove_library,
-            reconcile
+            reconcile,
+            list_maps,
+            load_map,
+            save_map,
+            delete_map,
+            link_files,
+            locate_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running brausa");

@@ -14,7 +14,7 @@ Lock-in und flachen Bild-Streams statt tiefer Ordnerbäume.
 | **Kanban nach Tags** | **Vorschau fließt unter die Toolbar** |
 | ![](docs/img/kanban.jpg) | ![](docs/img/vorschau.jpg) |
 
-## Was schon geht (v0.1)
+## Was schon geht
 
 | Bereich | Funktion |
 |---|---|
@@ -31,6 +31,9 @@ Lock-in und flachen Bild-Streams statt tiefer Ordnerbäume.
 | **Ablage-Tray** | Dateien aus beliebigen Ordnern sammeln (Drag oder `S`). Der Inhalt bleibt beim Navigieren erhalten und lässt sich als Gruppe verschieben oder taggen. |
 | **Tags** | `T` öffnet die Quick-Tag-Leiste mit Autovervollständigung, zuletzt benutzten Tags und Farben. Hierarchische Tags (`Work/Design/UI` erscheint auch unter `#Work`). Gespeichert im zentralen Index (siehe Projekte); Tags im Dateinamen (`Foto[urlaub strand].jpg`) werden mitgelesen. |
 | **Projekte & Index** | Jeder Ordner lässt sich mit **+** unter *Projekte* einbeziehen und bekommt einen eigenen Index in `<Projekt>/.brausa/meta.jsonl` (lesbar, sortiert, git-tauglich). Dateien außerhalb von Projekten landen im globalen Index. brausa erkennt Dateien, die in anderen Programmen verschoben oder umbenannt wurden, über Datei-ID und Prüfsumme wieder; Metadaten verschwundener Dateien bleiben 30 Tage erhalten. Alte `.brausa/*.meta.json`-Sidecars werden automatisch übernommen. |
+| **Projektmap** | Unendliche, zoombare Fläche pro Projekt (Symbol ganz rechts in der Ansichtsleiste), gespeichert in `<Projekt>/.brausa/maps/`. Doppelklick legt eine Karte an (Titel + Markdown-Text). **Karte auf eine andere ziehen macht sie zur Unterkarte** (⌥/Alt hält sie auf ihrer Ebene). Mit dem Punkt am rechten Rand zieht man **Pfeile**, auch über Ebenen hinweg; Pfeile lassen sich beschriften. Mausrad zoomt stufenlos, `↵` fliegt in eine Karte, `Esc` eine Ebene hinauf, die Breadcrumb zeigt, wo man ist. Farben, Größe ändern, Rückgängig/Wiederholen. Mehrere Maps pro Projekt. |
+| **Dateien auf der Map** | Das Ordner-Symbol oben rechts öffnet die Dateien des Projekts. Datei (auch aus Ordnerbaum oder Ablage) auf die Map ziehen ergibt eine Karte mit Vorschaubild; Doppelklick öffnet sie in der Standard-App. Auf den **rechten Rand** einer Karte gezogen, wird die Datei mit der Karte **verknüpft**. Umgekehrt verknüpft eine Karte, die man auf eine Datei in der Liste oder Ablage zieht, sich mit ihr. Karten merken sich Dateien über den Index: im Finder verschoben oder umbenannt, bleibt die Verknüpfung erhalten. |
+| **Kanban für Karten** | „Kanban“ in der Auswahlleiste schickt Karten ins Projekt-Kanban (Map/Kanban oben rechts umschalten). Spalten = Status, Karten zwischen Spalten ziehen, eigene Spalten anlegen; ein Klick zeigt die Karte auf der Map. |
 | **Vorschau** | Doppelklick oder Leertaste: Das Bild wächst aus der Kachel bis unter die Toolbar, die zu Glas in der Bildfarbe wird. ←/→ blättert. |
 | **Rückgängig** | Verschieben lässt sich über die Meldung unten rechts zurücknehmen. |
 
@@ -81,3 +84,17 @@ docs/KONZEPT.md     Konzept, Architektur, Roadmap
 | `⌘/Strg+[` / `]` | Zurück / Vor |
 | `Esc` | Funnel bzw. Auswahl aufheben, Drag abbrechen |
 | `⌥` (macOS) bzw. `Strg` beim Ziehen | Kopieren statt Verschieben |
+
+**In der Projektmap**
+
+| Taste | Aktion |
+|---|---|
+| Doppelklick (frei / in einer Karte) | Neue Karte bzw. Unterkarte |
+| Doppelklick auf den Kartentitel, `F2` | Bearbeiten (`⌘/Strg+↵` oder `Esc` beendet) |
+| `N` | Neue Karte in der Mitte |
+| `↵` | In die ausgewählte Karte hineinfliegen |
+| `Esc` | Auswahl aufheben, sonst eine Ebene hinauf |
+| `0` | Ganze Map zeigen |
+| `Entf` / `⌫` | Karte oder Pfeil löschen |
+| `⌘/Strg+Z`, `⌘/Strg+⇧Z` | Rückgängig, Wiederholen |
+| Ziehen mit `⌥`/Alt | Verschieben, ohne zu verschachteln |

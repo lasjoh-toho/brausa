@@ -2,7 +2,7 @@
  * Pointer-event based drag & drop controller.
  *
  * Drop targets are plain elements with data attributes:
- *   data-drop="folder|crumb|tray|canvas|column|grid-trigger|grid-cell"
+ *   data-drop="folder|crumb|tray|canvas|column|grid-trigger|grid-cell|board"
  *   data-path="/abs/path"          (folder, crumb)
  *   data-zones="dual"              (folder: left = move/copy, right = assign attributes)
  *   data-expandable                (folder: spring-loads on hover)
@@ -16,7 +16,10 @@ import { UNTAGGED } from '../core/views';
 import { isCopyKey } from '../platform';
 import { app } from './app.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board';
+
+/** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
+export type BoardDrop = (items: Entry[], x: number, y: number) => void | Promise<void>;
 
 export interface DropHit {
   kind: DropKind;
@@ -39,6 +42,9 @@ class DragController {
   /** Last folder hovered in the tree/canvas; drives the breadcrumb drop bar. */
   trail = $state<string | null>(null);
   gridOpen = $state(false);
+  /** Set by the project map while hovering it: what a drop would do. */
+  boardHint = $state('');
+  onBoardDrop: BoardDrop | null = null;
 
   private autoExpanded = new Set<string>();
   private springTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,6 +69,8 @@ class DragController {
         return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? 'Tag entfernen' : `#${h.key} setzen`) : `Nach „${h.key}“ verschieben`;
       case 'grid-trigger':
         return 'Ablagezonen öffnen';
+      case 'board':
+        return this.boardHint;
       case 'grid-cell': {
         const c = app.gridConfig.cells[h.cell ?? -1];
         return c?.tag ? `#${c.tag} zuweisen` : c ? `${this.copy ? 'Kopieren' : 'Verschieben'} nach „${c.label}“` : '';
@@ -101,7 +109,8 @@ class DragController {
       const snap = { hit: this.hit, items: this.items, source: this.source, copy: this.copy };
       end();
       if (wasActive) {
-        if (snap.hit) void performDrop(snap.hit, snap.items, snap.source, snap.copy);
+        if (snap.hit?.kind === 'board') void this.onBoardDrop?.(snap.items, ev.clientX, ev.clientY);
+        else if (snap.hit) void performDrop(snap.hit, snap.items, snap.source, snap.copy);
       } else onClick?.(ev);
     };
 

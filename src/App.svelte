@@ -15,6 +15,7 @@
   import GridEditor from './lib/components/GridEditor.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import ContextMenu from './lib/components/ContextMenu.svelte';
+  import ProjectBoard from './lib/components/ProjectBoard.svelte';
 
   let toolbar: Toolbar;
   let accent = $state<{ color: string; light: boolean } | null>(null);
@@ -44,7 +45,7 @@
       e.preventDefault();
       return;
     }
-    if (typing(e) || drag.active || tagSource || app.preview || app.menu || app.renaming) return;
+    if (app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.renaming) return;
 
     const sel = app.selectedEntries;
     const k = e.key.toLowerCase();
@@ -91,7 +92,7 @@
   <Sidebar />
   <main>
     <Toolbar bind:this={toolbar} {accent} />
-    <Canvas />
+    {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
     <Tray onTag={() => (tagSource = 'staging')} />
   </main>
 
