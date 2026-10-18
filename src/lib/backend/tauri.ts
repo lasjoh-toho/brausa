@@ -2,7 +2,20 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { ProjectMap } from '../core/map';
-import type { Backend, IndexReport, LibraryInfo, MapInfo, MediaInfo, TransferResult, WalkOptions } from './types';
+import type {
+  Backend,
+  IndexReport,
+  LibraryInfo,
+  MapInfo,
+  MediaInfo,
+  TransferResult,
+  WalkOptions,
+  OverlayResolution,
+  WikiBag,
+  WikiOverlay,
+  WikiRecipe,
+  WikiSyncReport
+} from './types';
 
 /** Formats the webview can show as-is. Raster thumbnails come from the Rust cache instead. */
 const WEB_IMAGE = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp']);
@@ -64,6 +77,21 @@ export class TauriBackend implements Backend {
 
   fileUrl(entry: Entry) {
     return WEB_IMAGE.has(entry.ext) ? convertFileSrc(entry.path) : null;
+  }
+
+  assetUrl(path: string) {
+    return convertFileSrc(path);
+  }
+
+  // Files are read through the asset protocol (scope: all files), like thumbnails.
+  async fileData(path: string) {
+    const r = await fetch(convertFileSrc(path));
+    if (!r.ok) throw new Error(`„${path}“ ließ sich nicht lesen (${r.status})`);
+    return r.arrayBuffer();
+  }
+
+  async readText(path: string) {
+    return new TextDecoder().decode(await this.fileData(path));
   }
 
   mediaInfo(paths: string[]) {
@@ -132,5 +160,45 @@ export class TauriBackend implements Backend {
 
   locateFiles(ids: string[]) {
     return invoke<Record<string, string | null>>('locate_files', { ids });
+  }
+
+  wikiBags() {
+    return invoke<WikiBag[]>('tw_bags');
+  }
+
+  putWikiBag(bag: Omit<WikiBag, 'tiddlers'>) {
+    return invoke<void>('tw_put_bag', { bag });
+  }
+
+  deleteWikiBag(name: string) {
+    return invoke<void>('tw_delete_bag', { name });
+  }
+
+  wikiRecipes() {
+    return invoke<WikiRecipe[]>('tw_recipes');
+  }
+
+  putWikiRecipe(recipe: WikiRecipe) {
+    return invoke<WikiRecipe>('tw_put_recipe', { recipe });
+  }
+
+  deleteWikiRecipe(name: string) {
+    return invoke<void>('tw_delete_recipe', { name });
+  }
+
+  syncWiki(name: string) {
+    return invoke<WikiSyncReport>('tw_sync', { name });
+  }
+
+  wikiOverlays() {
+    return invoke<WikiOverlay[]>('tw_overlays');
+  }
+
+  resolveOverlay(title: string, bag: string, how: OverlayResolution) {
+    return invoke<void>('tw_resolve_overlay', { title, bag, how });
+  }
+
+  wikiPlugins() {
+    return invoke<[string, string][]>('tw_plugins');
   }
 }

@@ -2,6 +2,7 @@
   import type { Entry } from '../core/types';
   import { app } from '../state/app.svelte';
   import { drag } from '../state/drag.svelte';
+  import { board, READABLE } from '../state/board.svelte';
   import { filterEntries } from '../core/views';
   import { family } from '../core/format';
   import Icon from './Icon.svelte';
@@ -74,7 +75,7 @@
         title={e.path}
         data-file-path={e.path}
         onpointerdown={(ev) => drag.begin(ev, () => [e], 'panel')}
-        ondblclick={() => app.open(e)}
+        ondblclick={() => (READABLE.has(e.ext) ? board.openReader({ kind: 'file', path: e.path, name: e.name, ext: e.ext }) : app.open(e))}
       >
         <div class="thumb">
           {#if t}<img src={t} alt="" draggable="false" />{:else}<span>{e.ext || family(e.ext)}</span>{/if}

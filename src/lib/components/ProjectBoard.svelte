@@ -5,6 +5,8 @@
   import ProjectMap from './ProjectMap.svelte';
   import CardKanban from './CardKanban.svelte';
   import FilePanel from './FilePanel.svelte';
+  // pdf.js is large: load the reader only when a document is opened.
+  const loadReader = () => import('./Reader.svelte');
   import Icon from './Icon.svelte';
 
   /** Maps belong to the project the current folder is in. */
@@ -32,8 +34,10 @@
       <button class="btn primary" onclick={() => app.addProject(app.cwd)}>„{app.cwd.split(/[\\/]/).pop()}“ als Projekt einbeziehen</button>
     </div>
   {:else if board.mode === 'kanban'}
+    {#if board.reader}{#await loadReader() then R}<R.default />{/await}{/if}
     <CardKanban />
   {:else}
+    {#if board.reader}{#await loadReader() then R}<R.default />{/await}{/if}
     <ProjectMap />
   {/if}
   {#if project?.root && board.panelOpen}

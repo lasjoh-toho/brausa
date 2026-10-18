@@ -13,10 +13,15 @@ import {
   newMap,
   normalizeMap,
   reparent,
+  stackInsert,
+  tidyStacks,
+  STACK_GAP,
   worldRect,
   zoomAt
 } from './map';
 import { renderMarkdown } from './markdown';
+import { locateQuote } from './snippets';
+import { changedFields, lineDiff } from './diff';
 
 function sample() {
   const m = newMap('Test', 'm_t');
@@ -114,6 +119,55 @@ describe('map mutations', () => {
     expect(m.roots).toEqual(['a']);
     expect(m.cards.a.children).toEqual(['b']);
     expect(m.links).toEqual([]);
+  });
+});
+
+describe('stacks', () => {
+  it('joins snippets into a stack, keeps order and dissolves single-card stacks', () => {
+    const m = newMap('S', 'm_s');
+    const a = addCard(m, null, { x: 100, y: 50 }, { kind: 'snippet', h: 60 });
+    const b = addCard(m, null, { x: 500, y: 0 }, { kind: 'snippet', h: 80 });
+    const c = addCard(m, null, { x: 900, y: 0 }, { kind: 'snippet', h: 40 });
+    stackInsert(m, b.id, a.id, 'after');
+    const stack = m.cards[a.parent!];
+    expect(stack.kind).toBe('stack');
+    expect(stack.children).toEqual([a.id, b.id]);
+    expect([stack.x, stack.y]).toEqual([100, 50]);
+    expect(b.y).toBe(60 + STACK_GAP);
+    stackInsert(m, c.id, a.id, 'before');
+    expect(stack.children).toEqual([c.id, a.id, b.id]);
+    // Reorder inside the stack.
+    stackInsert(m, c.id, b.id, 'after');
+    expect(stack.children).toEqual([a.id, b.id, c.id]);
+    // Take two out: the stack disappears and the last card stays where the stack was.
+    reparent(m, b.id, null, { x: 0, y: 0 });
+    reparent(m, c.id, null, { x: 0, y: 300 });
+    tidyStacks(m);
+    expect(m.cards[stack.id]).toBeUndefined();
+    expect(a.parent).toBeNull();
+    expect([a.x, a.y]).toEqual([100, 50]);
+    expect(m.roots).toContain(a.id);
+  });
+});
+
+describe('snippet anchors', () => {
+  it('finds the occurrence whose context matches best', () => {
+    const text = 'Zoom ist gut. Hier steht Zoom nochmal. Ende mit Zoom.';
+    expect(locateQuote(text, 'Zoom', 'steht ', ' nochmal')).toBe(25);
+    expect(locateQuote(text, 'Zoom', 'mit ', '.')).toBe(48);
+    expect(locateQuote(text, 'fehlt')).toBe(-1);
+  });
+});
+
+describe('diff', () => {
+  it('marks added and deleted lines and keeps the rest', () => {
+    const d = lineDiff('a\nb\nc\nd', 'a\nB\nc\nd\ne');
+    expect(d.map((l) => (l.op === 'same' ? ' ' : l.op === 'add' ? '+' : '-') + l.text)).toEqual([' a', '-b', '+B', ' c', ' d', '+e']);
+    expect(lineDiff('x', 'x')).toEqual([{ op: 'same', text: 'x' }]);
+  });
+
+  it('lists changed fields without dates', () => {
+    expect(changedFields({ title: 't', tags: 'a', modified: '1' }, { title: 't', tags: 'b', color: 'red', modified: '2' })).toEqual(['color', 'tags']);
   });
 });
 
