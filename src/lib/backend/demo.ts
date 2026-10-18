@@ -5,7 +5,7 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiOverlay, WikiRecipe } from './types';
+import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiOverlay, WikiRecipe } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 
@@ -371,6 +371,81 @@ export class DemoBackend implements Backend {
     return () => {};
   }
 
+  // Projects: the demo starts with the former folder project and a free one gathered from two places.
+  private projs: ProjectInfo[] = [
+    { id: 'p_brausa', name: 'Brausa', color: null, files: [], folders: [`${HOME}/Projekte/Brausa`], root: `${HOME}/Projekte/Brausa` },
+    { id: 'p_reise', name: 'Reise 2026', color: null, files: [], folders: [], root: '/.projects/p_reise' }
+  ];
+  private projsSeeded = false;
+
+  private async seedProjects() {
+    if (this.projsSeeded) return;
+    this.projsSeeded = true;
+    // A few photos and a document from different folders.
+    const pics = (await this.walk(`${HOME}/Bilder`, { limit: 200 })).filter((e) => e.kind === 'file').slice(0, 5);
+    const docs = (await this.listDir(`${HOME}/Dokumente`)).filter((e) => e.kind === 'file').slice(0, 1);
+    this.projs[1].files = (await this.linkFiles([...pics, ...docs].map((e) => e.path))).map((l) => l.id);
+  }
+
+  async projects() {
+    await this.seedProjects();
+    return this.projs.map((p) => ({ ...p, files: [...p.files], folders: [...p.folders] }));
+  }
+
+  async createProject(name: string) {
+    if (!name.trim()) throw new Error('Der Projektname fehlt');
+    const id = 'p_' + Date.now().toString(36);
+    const p: ProjectInfo = { id, name: name.trim(), color: null, files: [], folders: [], root: `/.projects/${id}` };
+    this.projs.push(p);
+    return { ...p };
+  }
+
+  private proj(id: string) {
+    const p = this.projs.find((x) => x.id === id);
+    if (!p) throw new Error(`Projekt „${id}“ gibt es nicht`);
+    return p;
+  }
+
+  async updateProject(id: string, patch: { name?: string; color?: string | null }) {
+    const p = this.proj(id);
+    if (patch.name !== undefined) p.name = patch.name.trim() || p.name;
+    if (patch.color !== undefined) p.color = patch.color;
+  }
+
+  async deleteProject(id: string) {
+    this.projs = this.projs.filter((p) => p.id !== id);
+  }
+
+  async addToProject(id: string, paths: string[]) {
+    const p = this.proj(id);
+    const before = p.files.length + p.folders.length;
+    const dirs = paths.filter((x) => this.find(x)?.entry.kind === 'dir');
+    const ids = (await this.linkFiles(paths.filter((x) => !dirs.includes(x)))).map((l) => l.id);
+    p.files = [...new Set([...p.files, ...ids])];
+    p.folders = [...new Set([...p.folders, ...dirs])];
+    return p.files.length + p.folders.length - before;
+  }
+
+  async removeFromProject(id: string, paths: string[]) {
+    const p = this.proj(id);
+    const before = p.files.length + p.folders.length;
+    p.files = p.files.filter((f) => !paths.includes(this.linked.get(f) ?? ''));
+    p.folders = p.folders.filter((d) => !paths.includes(d));
+    return before - p.files.length - p.folders.length;
+  }
+
+  async projectEntries(id: string) {
+    await this.seedProjects();
+    const p = this.proj(id);
+    const out: Entry[] = [];
+    for (const f of p.files) {
+      const n = this.linked.get(f) && this.find(this.linked.get(f)!);
+      if (n) out.push({ ...n.entry, relDir: dirname(n.entry.path).split('/').pop() });
+    }
+    for (const d of p.folders) out.push(...(await this.walk(d, { limit: 5000 })));
+    return [...new Map(out.map((e) => [e.path, e])).values()];
+  }
+
   // Maps persist in localStorage so the demo keeps what you draw.
   private mapKey(root: string) {
     return 'brausa.demo.maps:' + root;
@@ -395,7 +470,7 @@ export class DemoBackend implements Backend {
   }
 
   private requireProject(root: string) {
-    if (!this.libs.some((l) => l.root === root)) throw new Error(`„${root}“ ist kein Projekt`);
+    if (!this.libs.some((l) => l.root === root) && !this.projs.some((p) => p.root === root)) throw new Error(`„${root}“ ist kein Projekt`);
   }
 
   async listMaps(root: string): Promise<MapInfo[]> {

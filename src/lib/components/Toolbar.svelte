@@ -48,7 +48,13 @@
   </div>
 
   <nav class="crumbs" aria-label="Pfad">
-    {#each path as c, i (c.path)}
+    {#if app.currentProject}
+      <span class="crumb last proj" title="Projekt: Dateien aus allen Orten. Ziehen fügt hinzu, Entf nimmt heraus (die Dateien bleiben).">
+        <Icon name="kanban" size={13} />
+        {app.currentProject.name}
+      </span>
+    {/if}
+    {#each app.currentProject ? [] : path as c, i (c.path)}
       {#if i > 0}<span class="sep">/</span>{/if}
       <button
         class="crumb"
@@ -149,6 +155,11 @@
 </header>
 
 <style>
+  .proj {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
   .types {
     position: relative;
     cursor: pointer;

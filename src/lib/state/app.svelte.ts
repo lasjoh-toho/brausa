@@ -8,6 +8,7 @@ import type { Backend } from '../backend';
 import type { IndexReport, LibraryInfo } from '../backend/types';
 import { createBackend } from '../backend';
 import { parseCategories } from '../core/pattern';
+import type { ProjectInfo } from '../backend/types';
 import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
 import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
@@ -52,6 +53,13 @@ class AppState {
   home = $state('');
   /** Projects: folders with their own index. */
   libraries = $state<LibraryInfo[]>([]);
+  /** Projects: named collections of files and folders from anywhere. */
+  projects = $state<ProjectInfo[]>([]);
+  /** Project shown instead of a folder (all its files, wherever they are). */
+  project = $state<string | null>(store.get('project', null));
+  currentProject = $derived(this.projects.find((p) => p.id === this.project) ?? null);
+  /** Last project worked on; the map view falls back to it. */
+  lastProject = $state<string | null>(store.get('lastProject', null));
   places = $state<{ name: string; path: string }[]>([]);
   cwd = $state('');
   history = $state<string[]>([]);
@@ -108,10 +116,15 @@ class AppState {
       search: this.searchMode === 'filter' ? this.search : '',
       funnel: this.funnel,
       cats: this.typeFilter ? parseCategories(this.typeFilter) : null,
-      showDirs: !this.recursive && !this.typeFilter,
+      showDirs: !this.recursive && !this.typeFilter && !this.project,
       sort: this.sort,
       desc: this.desc
     })
+  );
+
+  /** The project the map view works on: the open one, else one holding this folder, else the last one. */
+  boardProject = $derived(
+    this.currentProject ?? this.projectOf(this.cwd) ?? this.projects.find((p) => p.id === this.lastProject) ?? null
   );
 
   /** What the canvas shows. */
@@ -144,37 +157,106 @@ class AppState {
     for (const p of this.expanded) this.loadChildren(p);
     await this.backend.onChange((paths) => this.onFsChange(paths));
     await this.loadLibraries();
+    await this.loadProjects();
+    if (this.project) await this.refresh();
     await this.backend.onIndexReport((r) => this.onIndexReport(r));
+  }
+
+  // ---------------------------------------------------------------- projects
+
+  async loadProjects() {
+    this.projects = await this.backend.projects();
+    if (this.project && !this.projects.some((p) => p.id === this.project)) this.setProject(null);
+  }
+
+  private setProject(id: string | null) {
+    this.project = id;
+    store.set('project', id);
+    if (id) {
+      this.lastProject = id;
+      store.set('lastProject', id);
+    }
+  }
+
+  /** A project holding this folder (as one of its folders), if any. */
+  projectOf(path: string): ProjectInfo | null {
+    return this.projects.find((p) => p.folders.some((f) => isWithin(path, f))) ?? null;
+  }
+
+  /** Show a project: all its files from all places, in every view. */
+  async openProject(id: string) {
+    // Back (⌘[) returns to the folder shown before.
+    if (!this.project && this.cwd) {
+      this.history.push(this.cwd);
+      this.future = [];
+    }
+    this.setProject(id);
+    this.funnel = null;
+    this.dateFilter = null;
+    this.selection.clear();
+    this.anchor = null;
+    await this.refresh();
+  }
+
+  async createProject(name: string, open = true) {
+    try {
+      const p = await this.backend.createProject(name);
+      await this.loadProjects();
+      if (open) await this.openProject(p.id);
+      return p;
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+      return null;
+    }
+  }
+
+  async renameProject(id: string, name: string) {
+    try {
+      await this.backend.updateProject(id, { name });
+      await this.loadProjects();
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    }
+  }
+
+  async deleteProject(id: string) {
+    const p = this.projects.find((x) => x.id === id);
+    await this.backend.deleteProject(id);
+    if (this.project === id) await this.navigate(this.cwd);
+    await this.loadProjects();
+    this.toast(`Projekt „${p?.name ?? ''}“ gelöscht. Die Dateien selbst bleiben, wo sie sind.`);
+  }
+
+  /** Files and folders join a project; they stay where they are. */
+  async addToProject(id: string, entries: Entry[]) {
+    const p = this.projects.find((x) => x.id === id);
+    try {
+      const n = await this.backend.addToProject(id, entries.map((e) => e.path));
+      await this.loadProjects();
+      this.toast(n ? `${n} ${n === 1 ? 'Objekt' : 'Objekte'} zu „${p?.name}“ hinzugefügt` : `Schon in „${p?.name}“`);
+      if (this.project === id) await this.refresh(true);
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    }
+  }
+
+  /** Takes files out of the open project (not from the disk). */
+  async removeFromProject(entries: Entry[]) {
+    const p = this.currentProject;
+    if (!p || !entries.length) return;
+    const n = await this.backend.removeFromProject(p.id, entries.map((e) => e.path));
+    const left = entries.length - n;
+    this.toast(
+      `${n} aus „${p.name}“ entfernt` + (left ? ` · ${left} gehören über einen Projektordner dazu und bleiben` : '') + '. Auf der Festplatte ändert sich nichts.'
+    );
+    await this.loadProjects();
+    await this.refresh(true);
   }
 
   // ---------------------------------------------------------------- projects / index
 
   async loadLibraries() {
     this.libraries = (await this.backend.libraries()).sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  /** The project a path belongs to (innermost), if any. */
-  libraryOf(path: string): LibraryInfo | null {
-    let best: LibraryInfo | null = null;
-    for (const l of this.libraries)
-      if (l.root && isWithin(path, l.root) && (!best || l.root.length > best.root!.length)) best = l;
-    return best;
-  }
-
-  async addProject(root: string) {
-    try {
-      const lib = await this.backend.addLibrary(root);
-      await this.loadLibraries();
-      this.toast(`„${lib.name}“ ist jetzt ein Projekt mit eigenem Index`);
-    } catch (e) {
-      this.toast(String(e), true);
-    }
-  }
-
-  async removeProject(root: string) {
-    await this.backend.removeLibrary(root);
-    await this.loadLibraries();
-    this.toast('Projekt entfernt. Dateien und der .brausa-Ordner bleiben erhalten.');
   }
 
   private onIndexReport(r: IndexReport) {
@@ -211,6 +293,7 @@ class AppState {
       this.future = [];
     }
     this.cwd = path;
+    this.setProject(null);
     this.funnel = null;
     this.dateFilter = null;
     this.selection.clear();
@@ -245,7 +328,11 @@ class AppState {
     try {
       const forceRecursive = this.view === 'kanban' && this.kanbanBy === 'subfolder';
       const recursive = this.recursive || forceRecursive;
-      const fresh = recursive ? await this.backend.walk(this.cwd, { maxDepth: 12 }) : await this.backend.listDir(this.cwd);
+      const fresh = this.project
+        ? await this.backend.projectEntries(this.project)
+        : recursive
+          ? await this.backend.walk(this.cwd, { maxDepth: 12 })
+          : await this.backend.listDir(this.cwd);
       // Keep lazily loaded EXIF data across refreshes.
       const prev = new Map(this.raw.map((e) => [e.path, e]));
       this.raw = fresh.map((e) => {
@@ -253,7 +340,7 @@ class AppState {
         return o && o.mtime === e.mtime && (o.taken !== undefined || o.geo) ? { ...e, taken: e.taken ?? o.taken, geo: e.geo ?? o.geo } : e;
       });
       this.learnTags(this.raw.flatMap((e) => e.tags));
-      if (!quiet) this.backend.watch(this.cwd, recursive).catch(() => {});
+      if (!quiet && !this.project) this.backend.watch(this.cwd, recursive).catch(() => {});
       if (this.view === 'map' || (this.view === 'calendar' && this.dateField === 'taken')) void this.loadMediaInfo();
     } catch (e) {
       this.toast(String(e), true);

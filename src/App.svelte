@@ -63,7 +63,9 @@
       if (sel.length === 1) app.renaming = sel[0].path;
       e.preventDefault();
     } else if ((isMac && mod && e.key === 'Backspace') || (!isMac && e.key === 'Delete')) {
-      app.trash(sel);
+      // In a project, Entf takes files out of the project; they stay on disk.
+      if (app.project) app.removeFromProject(sel);
+      else app.trash(sel);
       e.preventDefault();
     } else if (mod && e.key.toLowerCase() === 'a') {
       app.selectAll();

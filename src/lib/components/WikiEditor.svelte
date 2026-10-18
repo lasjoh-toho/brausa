@@ -9,7 +9,7 @@
   let { onclose }: { onclose: () => void } = $props();
 
   const original = wikis.editing ? (wikis.recipes.find((r) => r.name === wikis.editing) ?? null) : null;
-  const project = app.libraryOf(app.cwd);
+  const project = app.boardProject;
 
   let r = $state<WikiRecipe>(
     original
@@ -18,7 +18,7 @@
           name: project?.name ?? '',
           description: '',
           bags: wikis.maps.filter((m) => project && m.bag.startsWith(`@map:${project.root}|`)).map((m) => m.bag),
-          target: { kind: 'folder', path: project?.root ? `${project.root}/${project.name}-wiki` : '' },
+          target: { kind: 'folder', path: project ? `${project.folders[0] ?? app.cwd}/${project.name}-wiki` : '' },
           plugins: true
         }
   );

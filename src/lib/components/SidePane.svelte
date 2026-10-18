@@ -103,7 +103,7 @@
   }
 
   const hitHere = $derived(drag.active && drag.hit?.kind === 'folder' && drag.hit.path === path);
-  const places = $derived([...app.places, ...app.libraries.filter((l) => l.root).map((l) => ({ name: l.name, path: l.root! }))]);
+  const places = $derived([...app.places, ...app.projects.flatMap((p) => p.folders.map((f) => ({ name: `${p.name}: ${basename(f)}`, path: f })))]);
 </script>
 
 <aside class="pane" style:width="{width}px">

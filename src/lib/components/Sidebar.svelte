@@ -25,9 +25,14 @@
       .slice(0, 14)
   );
 
+  /** New project being named (null: no input), project being renamed, project asking to confirm deletion. */
+  let naming = $state<string | null>(null);
+  let renaming = $state<string | null>(null);
+  let deleting = $state<string | null>(null);
+
   // Map bags list the projects' maps, so reload when projects change.
   $effect(() => {
-    void app.libraries.length;
+    void app.projects.length;
     void wikis.load();
   });
 
@@ -54,7 +59,7 @@
     {@const hit = drag.active && drag.hit?.kind === 'folder' && drag.hit.path === p.path}
     <div
       class="place"
-      class:current={app.cwd === p.path}
+      class:current={!app.project && app.cwd === p.path}
       class:hit
       data-drop="folder"
       data-path={p.path}
@@ -76,38 +81,69 @@
 
   <div class="section with-action">
     Projekte
-    {#if app.cwd && !app.libraries.some((l) => l.root === app.cwd)}
-      <button class="add" title="Aktuellen Ordner als Projekt einbeziehen" onclick={() => app.addProject(app.cwd)}>
-        <Icon name="plus" size={13} />
-      </button>
-    {/if}
+    <button class="add" title="Neues Projekt (frei benannt, Dateien von überall)" onclick={() => ((naming = ''), (renaming = null))}>
+      <Icon name="plus" size={13} />
+    </button>
   </div>
-  {#each app.libraries as l (l.id)}
-    {@const hit = drag.active && drag.hit?.kind === 'folder' && drag.hit.path === l.root}
-    <div
-      class="place project"
-      class:current={app.cwd === l.root}
-      class:hit
-      data-drop="folder"
-      data-path={l.root}
-      role="button"
-      tabindex="0"
-      title="{l.root}&#10;{l.files} Dateien mit Metadaten{l.orphans ? ` · ${l.orphans} vermisst` : ''}"
-      onpointerdown={(e) => drag.begin(e, () => [{ ...homeEntry, path: l.root!, name: l.name }], 'tree', () => app.navigate(l.root!))}
-      onkeydown={(e) => e.key === 'Enter' && app.navigate(l.root!)}
-    >
-      <Icon name="kanban" size={15} />
-      <span class="pname">{l.name}</span>
-      {#if l.orphans}<span class="warn" title="{l.orphans} Dateien vermisst">{l.orphans}</span>{/if}
-      <button
-        class="rm"
-        title="Nicht mehr als Projekt führen (Dateien bleiben)"
-        onpointerdown={(e) => e.stopPropagation()}
-        onclick={() => app.removeProject(l.root!)}><Icon name="x" size={11} /></button
+  {#if naming !== null}
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      class="pinput"
+      bind:value={naming}
+      placeholder="Projektname"
+      autofocus
+      onkeydown={(e) => {
+        if (e.key === 'Enter' && naming?.trim()) void app.createProject(naming).then(() => (naming = null));
+        else if (e.key === 'Escape') naming = null;
+      }}
+      onblur={() => !naming?.trim() && (naming = null)}
+    />
+  {/if}
+  {#each app.projects as p (p.id)}
+    {@const hit = drag.active && drag.hit?.kind === 'project' && drag.hit.key === p.id}
+    {#if renaming === p.id}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="pinput"
+        value={p.name}
+        autofocus
+        onkeydown={(e) => {
+          if (e.key === 'Enter') void app.renameProject(p.id, e.currentTarget.value).then(() => (renaming = null));
+          else if (e.key === 'Escape') renaming = null;
+        }}
+        onblur={() => (renaming = null)}
+      />
+    {:else}
+      <div
+        class="place project"
+        class:current={app.project === p.id}
+        class:hit
+        data-drop="project"
+        data-key={p.id}
+        role="button"
+        tabindex="0"
+        title="{p.name}: {p.files.length} Dateien{p.folders.length ? `, ${p.folders.length} Ordner` : ''}&#10;Dateien und Ordner hierher ziehen fügt sie hinzu (sie bleiben, wo sie sind)."
+        onclick={() => app.openProject(p.id)}
+        ondblclick={() => (renaming = p.id)}
+        onkeydown={(e) => e.key === 'Enter' && app.openProject(p.id)}
       >
-    </div>
+        <Icon name="kanban" size={15} />
+        <span class="pname">{p.name}</span>
+        {#if deleting === p.id}
+          <button class="rm sure" onclick={(e) => (e.stopPropagation(), (deleting = null), void app.deleteProject(p.id))}>Löschen?</button>
+        {:else}
+          <button class="rm" title="Umbenennen" onclick={(e) => (e.stopPropagation(), (renaming = p.id))}><Icon name="pencil" size={11} /></button>
+          <button
+            class="rm"
+            title="Projekt löschen (die Dateien bleiben, wo sie sind)"
+            onclick={(e) => (e.stopPropagation(), (deleting = p.id), setTimeout(() => deleting === p.id && (deleting = null), 3000))}
+            ><Icon name="x" size={11} /></button
+          >
+        {/if}
+      </div>
+    {/if}
   {:else}
-    <p class="hint">Ordner öffnen und mit + als Projekt einbeziehen.</p>
+    {#if naming === null}<p class="hint">Mit + ein Projekt anlegen, dann Dateien und Ordner von überall darauf ziehen.</p>{/if}
   {/each}
 
   <div class="section with-action">
@@ -246,6 +282,23 @@
     background: var(--bg-sunken);
     color: var(--fg);
   }
+  .pinput {
+    width: 100%;
+    margin: 2px 0;
+    padding: 4px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--accent);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+  }
+  .rm.sure {
+    width: auto;
+    padding: 0 6px;
+    color: var(--danger);
+    font-size: 11px;
+    opacity: 1;
+  }
   .pname {
     flex: 1;
     min-width: 0;
@@ -253,20 +306,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .warn {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 0 5px;
-    border-radius: 8px;
-    background: var(--attr-soft);
-    color: var(--attr);
-  }
   .project .rm {
     display: none;
     color: var(--fg-faint);
   }
   .project:hover .rm {
     display: grid;
+  }
+  .project .rm.sure {
+    display: inline-flex;
   }
   .grow {
     flex: 1;

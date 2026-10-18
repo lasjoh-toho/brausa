@@ -25,6 +25,19 @@ export interface LibraryInfo {
   orphans: number;
 }
 
+/** A project: a named collection of files and folders from anywhere (not a folder). */
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  color: string | null;
+  /** Index ids of single files (they follow the file when it moves). */
+  files: string[];
+  /** Folders whose whole content belongs to the project. */
+  folders: string[];
+  /** Where the project's maps live (pass to listMaps & co.). */
+  root: string;
+}
+
 export interface MapInfo {
   id: string;
   title: string;
@@ -138,6 +151,19 @@ export interface Backend {
   addLibrary(root: string, name?: string): Promise<LibraryInfo>;
   removeLibrary(root: string): Promise<void>;
   onIndexReport(cb: (r: IndexReport) => void): Promise<() => void>;
+
+  /** Projects: free collections; adding a folder adds everything in it. */
+  projects(): Promise<ProjectInfo[]>;
+  createProject(name: string): Promise<ProjectInfo>;
+  updateProject(id: string, patch: { name?: string; color?: string | null }): Promise<void>;
+  /** Deletes the project and its maps; the files themselves stay. */
+  deleteProject(id: string): Promise<void>;
+  /** Adds files and folders; returns how many were new. */
+  addToProject(id: string, paths: string[]): Promise<number>;
+  /** Takes files and folders out of the project (they stay on disk); returns how many were members. */
+  removeFromProject(id: string, paths: string[]): Promise<number>;
+  /** All files of a project: its single files and the content of its folders. */
+  projectEntries(id: string): Promise<Entry[]>;
 
   /** Project maps, stored in `<root>/.brausa/maps/`. `root` must be a project. */
   listMaps(root: string): Promise<MapInfo[]>;
