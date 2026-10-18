@@ -1,0 +1,76 @@
+// Syntax colours for the text preview, loaded on demand: highlight.js core plus the languages brausa recognises.
+import hljs from 'highlight.js/lib/core';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import php from 'highlight.js/lib/languages/php';
+import css from 'highlight.js/lib/languages/css';
+import scss from 'highlight.js/lib/languages/scss';
+import less from 'highlight.js/lib/languages/less';
+import json from 'highlight.js/lib/languages/json';
+import xml from 'highlight.js/lib/languages/xml';
+import yaml from 'highlight.js/lib/languages/yaml';
+import ini from 'highlight.js/lib/languages/ini';
+import properties from 'highlight.js/lib/languages/properties';
+import python from 'highlight.js/lib/languages/python';
+import ruby from 'highlight.js/lib/languages/ruby';
+import goLang from 'highlight.js/lib/languages/go';
+import rust from 'highlight.js/lib/languages/rust';
+import java from 'highlight.js/lib/languages/java';
+import kotlin from 'highlight.js/lib/languages/kotlin';
+import cLang from 'highlight.js/lib/languages/c';
+import cpp from 'highlight.js/lib/languages/cpp';
+import csharp from 'highlight.js/lib/languages/csharp';
+import swift from 'highlight.js/lib/languages/swift';
+import objectivec from 'highlight.js/lib/languages/objectivec';
+import bash from 'highlight.js/lib/languages/bash';
+import powershell from 'highlight.js/lib/languages/powershell';
+import dosLang from 'highlight.js/lib/languages/dos';
+import sql from 'highlight.js/lib/languages/sql';
+import latex from 'highlight.js/lib/languages/latex';
+import rLang from 'highlight.js/lib/languages/r';
+import lua from 'highlight.js/lib/languages/lua';
+import perl from 'highlight.js/lib/languages/perl';
+import dart from 'highlight.js/lib/languages/dart';
+import gradle from 'highlight.js/lib/languages/gradle';
+import diff from 'highlight.js/lib/languages/diff';
+import markdown from 'highlight.js/lib/languages/markdown';
+
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('php', php);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('scss', scss);
+hljs.registerLanguage('less', less);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('xml', xml);
+hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('ini', ini);
+hljs.registerLanguage('properties', properties);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('ruby', ruby);
+hljs.registerLanguage('go', goLang);
+hljs.registerLanguage('rust', rust);
+hljs.registerLanguage('java', java);
+hljs.registerLanguage('kotlin', kotlin);
+hljs.registerLanguage('c', cLang);
+hljs.registerLanguage('cpp', cpp);
+hljs.registerLanguage('csharp', csharp);
+hljs.registerLanguage('swift', swift);
+hljs.registerLanguage('objectivec', objectivec);
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('powershell', powershell);
+hljs.registerLanguage('dos', dosLang);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('latex', latex);
+hljs.registerLanguage('r', rLang);
+hljs.registerLanguage('lua', lua);
+hljs.registerLanguage('perl', perl);
+hljs.registerLanguage('dart', dart);
+hljs.registerLanguage('gradle', gradle);
+hljs.registerLanguage('diff', diff);
+hljs.registerLanguage('markdown', markdown);
+
+/** HTML with highlight.js spans; the code itself is escaped. */
+export function highlight(code: string, lang: string): string {
+  return hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang, ignoreIllegals: true }).value : '';
+}

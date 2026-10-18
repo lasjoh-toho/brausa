@@ -15,15 +15,51 @@ export function formatDate(ms: number, locale = 'de-DE'): string {
 }
 
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp', 'heic', 'tif', 'tiff']);
-const VIDEO_EXT = new Set(['mp4', 'mov', 'webm', 'mkv', 'avi']);
+const VIDEO_EXT = new Set(['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'ogv']);
+const AUDIO_EXT = new Set(['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'oga', 'opus', 'aif', 'aiff']);
 const DOC_EXT = new Set(['pdf', 'doc', 'docx', 'odt', 'txt', 'md', 'rtf', 'pages']);
+const WEB_EXT = new Set(['html', 'htm', 'xhtml']);
+const OFFICE_EXT = new Set(['doc', 'docx', 'odt', 'rtf', 'pages', 'xls', 'xlsx', 'ods', 'numbers', 'ppt', 'pptx', 'odp', 'key', 'epub']);
+// Plain text and source code: shown as text in the preview.
+const TEXT_EXT = new Set(
+  (
+    'txt text md markdown log csv tsv json jsonl xml yml yaml toml ini cfg conf env properties ' +
+    'php js mjs cjs ts tsx jsx css scss sass less svelte vue astro py rb go rs java kt kts c h cc cpp hpp cs swift m ' +
+    'sh bash zsh fish ps1 bat cmd sql tex bib r lua pl dart gradle tid diff patch srt vtt'
+  ).split(' ')
+);
 
-export type FileFamily = 'image' | 'video' | 'doc' | 'other' | 'dir';
+export type FileFamily = 'image' | 'video' | 'audio' | 'doc' | 'other' | 'dir';
 
 export function family(ext: string, kind: 'dir' | 'file' = 'file'): FileFamily {
   if (kind === 'dir') return 'dir';
   if (IMAGE_EXT.has(ext)) return 'image';
   if (VIDEO_EXT.has(ext)) return 'video';
+  if (AUDIO_EXT.has(ext)) return 'audio';
   if (DOC_EXT.has(ext)) return 'doc';
   return 'other';
+}
+
+/** What a file is, for the type filter (`is:video`) and for choosing a viewer in the preview. */
+export type Category = 'image' | 'video' | 'audio' | 'pdf' | 'web' | 'text' | 'office';
+
+export const CATEGORIES: { key: Category; label: string }[] = [
+  { key: 'image', label: 'Bilder' },
+  { key: 'video', label: 'Videos' },
+  { key: 'audio', label: 'Audio' },
+  { key: 'pdf', label: 'PDF' },
+  { key: 'text', label: 'Text und Code' },
+  { key: 'web', label: 'Webseiten' },
+  { key: 'office', label: 'Office' }
+];
+
+export function category(ext: string): Category | null {
+  if (IMAGE_EXT.has(ext)) return 'image';
+  if (VIDEO_EXT.has(ext)) return 'video';
+  if (AUDIO_EXT.has(ext)) return 'audio';
+  if (ext === 'pdf') return 'pdf';
+  if (WEB_EXT.has(ext)) return 'web';
+  if (TEXT_EXT.has(ext)) return 'text';
+  if (OFFICE_EXT.has(ext)) return 'office';
+  return null;
 }

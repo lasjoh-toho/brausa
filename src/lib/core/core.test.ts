@@ -13,6 +13,8 @@ import { parsePattern, selectByPattern } from './pattern';
 import { crumbs, dirname, isWithin, relativeTo } from './paths';
 import { filterEntries, groupEntries, UNTAGGED } from './views';
 import type { Entry } from './types';
+import { category } from './format';
+import { decisionFor, forget, hasScripts, remember, resolveLocal } from './htmlpreview';
 
 const DAY = 86400e3;
 const NOW = Date.UTC(2026, 9, 16);
@@ -187,5 +189,47 @@ describe('dates', () => {
     expect(formatRange({ field: 'mtime', from: f, to: t })).toBe('Oktober 2026');
     const [yf, yt] = yearRange(2026);
     expect(formatRange({ field: 'mtime', from: yf, to: yt })).toBe('2026');
+  });
+});
+
+describe('file types', () => {
+  it('sorts extensions into categories', () => {
+    expect(['a.MP4', 'b.mp3', 'c.php', 'd.html', 'e.pdf', 'f.heic', 'g.docx', 'h.zip'].map((n) => category(n.split('.')[1].toLowerCase()))).toEqual([
+      'video', 'audio', 'text', 'web', 'pdf', 'image', 'office', null
+    ]);
+  });
+  it('filters with is: in German and English, combined and negated', () => {
+    const es = ['a.jpg', 'b.mov', 'c.mp3', 'd.css', 'e.pdf'].map((n) => entry(n));
+    const names = (q: string) => filterEntries(es, { search: q }).map((e) => e.name);
+    expect(names('is:video')).toEqual(['b.mov']);
+    expect(names('is:medien')).toEqual(['a.jpg', 'b.mov', 'c.mp3']);
+    expect(names('is:bild,pdf')).toEqual(['a.jpg', 'e.pdf']);
+    expect(names('-is:medien')).toEqual(['d.css', 'e.pdf']);
+    expect(parsePattern('is:quatsch').errors.length).toBe(1);
+    expect(filterEntries(es, { cats: ['text'] }).map((e) => e.name)).toEqual(['d.css']);
+  });
+});
+
+describe('html preview', () => {
+  it('spots scripts', () => {
+    expect(hasScripts('<p>hi</p>')).toBe(false);
+    expect(hasScripts('<SCRIPT src=x.js></SCRIPT>')).toBe(true);
+    expect(hasScripts('<img onerror="x()">')).toBe(true);
+  });
+  it('resolves local resources and leaves remote ones alone', () => {
+    expect(resolveLocal('/a/b', 'img/x.png')).toBe('/a/b/img/x.png');
+    expect(resolveLocal('/a/b', '../c%20d.css?v=1')).toBe('/a/c d.css');
+    expect(resolveLocal('C:\\site', 'x.js')).toBe('C:\\site\\x.js');
+    expect(resolveLocal('/a', 'https://example.org/x.js')).toBeNull();
+    expect(resolveLocal('/a', 'data:image/png;base64,xx')).toBeNull();
+    expect(resolveLocal('/a', '#top')).toBeNull();
+  });
+  it('remembers per file before per folder, and forgets both', () => {
+    let d = remember({ files: {}, dirs: {} }, '/s/a.html', { allow: true, scope: 'dir' });
+    expect(decisionFor(d, '/s/b.html')).toBe(true);
+    d = remember(d, '/s/b.html', { allow: false, scope: 'file' });
+    expect(decisionFor(d, '/s/b.html')).toBe(false);
+    expect(decisionFor(d, '/t/c.html')).toBeNull();
+    expect(decisionFor(forget(d, '/s/b.html'), '/s/a.html')).toBeNull();
   });
 });

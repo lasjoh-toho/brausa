@@ -5,12 +5,14 @@
  *   #ToReview  -#Done       tag (hierarchical) / negated tag
  *   modified < 30d          modified within the last 30 days (also: created, age units s m h d w y)
  *   kind:dir   ext:jpg,png  entry kind / extension list
+ *   is:video   is:bild,pdf  file type (Bilder, Videos, Audio, PDF, Text/Code, Web, Office, Medien)
  *   size>=1.5GB             operators may be glued to the value or the field
  *   beach                   plain word: name contains (case-insensitive)
  *   -draft                  negated word
  */
 import type { Entry } from './types';
 import { hasTag } from './tags';
+import { category, type Category } from './format';
 
 export type Cmp = '<' | '<=' | '>' | '>=' | '=';
 
@@ -21,6 +23,7 @@ export type Term =
   | { type: 'age'; field: 'mtime' | 'ctime'; op: Cmp; ms: number }
   | { type: 'kind'; kind: 'dir' | 'file' }
   | { type: 'ext'; exts: string[]; neg: boolean }
+  | { type: 'cat'; cats: Category[]; neg: boolean }
   | { type: 'text'; text: string; neg: boolean };
 
 export interface Pattern {
@@ -51,6 +54,29 @@ const AGE_UNITS: Record<string, number> = {
   mo: 30 * 86400e3,
   y: 365 * 86400e3
 };
+
+// German and English names for `is:`; "medien" is images, videos and audio together.
+const CATEGORY_ALIASES: Record<string, Category[]> = {
+  image: ['image'], images: ['image'], bild: ['image'], bilder: ['image'], foto: ['image'], fotos: ['image'], photo: ['image'],
+  video: ['video'], videos: ['video'], film: ['video'], filme: ['video'],
+  audio: ['audio'], musik: ['audio'], music: ['audio'], ton: ['audio'],
+  pdf: ['pdf'],
+  text: ['text'], code: ['text'], quelltext: ['text'],
+  web: ['web'], html: ['web'], webseite: ['web'], webseiten: ['web'],
+  office: ['office'], dokument: ['office', 'pdf'], dokumente: ['office', 'pdf'], doc: ['office', 'pdf'], docs: ['office', 'pdf'],
+  medien: ['image', 'video', 'audio'], media: ['image', 'video', 'audio']
+};
+
+/** Categories named by an `is:` value like `video` or `bild,pdf`; null if one is unknown. */
+export function parseCategories(val: string): Category[] | null {
+  const out = new Set<Category>();
+  for (const v of val.toLowerCase().split(',').filter(Boolean)) {
+    const c = CATEGORY_ALIASES[v];
+    if (!c) return null;
+    c.forEach((x) => out.add(x));
+  }
+  return out.size ? [...out] : null;
+}
 
 const OP_RE = /^(<=|>=|<|>|=)/;
 const FIELD_ALIASES: Record<string, 'size' | 'mtime' | 'ctime'> = {
@@ -147,7 +173,11 @@ export function parsePattern(input: string): Pattern {
       if (key === 'ext') terms.push({ type: 'ext', exts: val.split(',').map((e) => e.replace(/^\./, '')), neg });
       else if (['dir', 'folder', 'ordner'].includes(val)) terms.push({ type: 'kind', kind: 'dir' });
       else if (['file', 'datei'].includes(val)) terms.push({ type: 'kind', kind: 'file' });
-      else errors.push(`Unbekannter Typ: ${val}`);
+      else {
+        const cats = parseCategories(val);
+        if (cats) terms.push({ type: 'cat', cats, neg });
+        else errors.push(`Unbekannter Typ: ${val}`);
+      }
       continue;
     }
 
@@ -192,6 +222,10 @@ export function matchTerm(e: Entry, t: Term, now: number): boolean {
       return e.kind === t.kind;
     case 'ext':
       return t.exts.includes(e.ext) !== t.neg;
+    case 'cat': {
+      const c = e.kind === 'file' ? category(e.ext) : null;
+      return (!!c && t.cats.includes(c)) !== t.neg;
+    }
     case 'text':
       return e.name.toLowerCase().includes(t.text) !== t.neg;
   }

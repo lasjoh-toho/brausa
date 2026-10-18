@@ -6,6 +6,7 @@
   import type { ViewMode } from '../core/views';
   import { modLabel } from '../platform';
   import Icon from './Icon.svelte';
+  import { CATEGORIES } from '../core/format';
 
   let { accent = null }: { accent?: { color: string; light: boolean } | null } = $props();
 
@@ -111,6 +112,14 @@
     <button class="btn" class:on={app.recursive} onclick={() => app.setRecursive(!app.recursive)} title="Unterordner flach anzeigen">
       <Icon name="stream" size={15} /> Stream
     </button>
+    <label class="btn types" class:on={!!app.typeFilter} title="Nur Dateien dieser Art zeigen (auch aus Unterordnern)">
+      <select value={app.typeFilter ?? ''} onchange={(ev) => app.setTypeFilter(ev.currentTarget.value || null)}>
+        <option value="">Alle Arten</option>
+        <option value="medien">Medien</option>
+        {#each CATEGORIES as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+      </select>
+      <Icon name="chevronDown" size={12} />
+    </label>
 
     <input
       class="zoom"
@@ -137,6 +146,24 @@
 </header>
 
 <style>
+  .types {
+    position: relative;
+    cursor: pointer;
+  }
+  .types select {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    padding-right: 4px;
+    cursor: pointer;
+    outline: none;
+  }
+  .types select option {
+    color: initial;
+  }
   .toolbar {
     position: relative;
     z-index: 30;
