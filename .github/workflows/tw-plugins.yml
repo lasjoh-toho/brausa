@@ -1,0 +1,58 @@
+name: TiddlyVisuals-Plugins
+
+# Follows the releases of TiddlyVisuals (Graph, Pinboard, Kanban) and proposes
+# each new one as a pull request that updates the plugins brausa bundles.
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: up
+        run: |
+          before=$(cat src-tauri/resources/tw-plugins/TIDDLYVISUALS)
+          scripts/update-tw-plugins.sh > versions.txt
+          cat versions.txt
+          tag=$(cat src-tauri/resources/tw-plugins/TIDDLYVISUALS)
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          git diff --quiet && echo "changed=false" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+      - if: steps.up.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ steps.up.outputs.before }}
+          TAG: ${{ steps.up.outputs.tag }}
+        run: |
+          branch="tw-plugins/$TAG"
+          if git ls-remote --exit-code origin "refs/heads/$branch" > /dev/null; then
+            echo "$branch gibt es schon"; exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git commit -qam "TiddlyWiki-Plugins aus TiddlyVisuals $TAG"
+          git push -q origin "$branch"
+          {
+            echo "TiddlyVisuals $BEFORE → **$TAG**: https://github.com/lasjoh-toho/TiddlyVisuals/releases/tag/$TAG"
+            echo
+            echo '```'; cat versions.txt; echo '```'
+            echo
+            echo "Branch: \`$branch\`"
+            echo
+            echo "Vor dem Mergen in einem abgeglichenen Wiki Pinboard und Kanban ansehen."
+            echo "CI startet für diesen PR erst nach einem weiteren Push (GitHub startet keine Workflows für PRs des Actions-Tokens)."
+          } > body.md
+          gh pr create --base main --head "$branch" --title "TiddlyWiki-Plugins: TiddlyVisuals $TAG" --body-file body.md \
+            || gh issue create --title "TiddlyVisuals $TAG verfügbar" --body-file body.md

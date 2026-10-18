@@ -1,0 +1,60 @@
+brausa für Windows – bitte zuerst lesen
+=======================================
+
+WICHTIGER HINWEIS: EXPERIMENTELLE SOFTWARE
+
+brausa ist eine frühe Vorab-Version (Preview) und wird aktiv weiterentwickelt. Die Software wurde nach bestem Wissen und Gewissen entwickelt und getestet. Trotzdem kann sie Fehler enthalten. brausa arbeitet direkt mit Ihren Dateien: Es verschiebt und benennt Dateien um, legt sie in den Papierkorb und schreibt Metadaten, Maps und Wiki-Dateien.
+
+Die Nutzung erfolgt auf eigene Gefahr. Soweit gesetzlich zulässig, wird keine Verantwortung und keine Haftung für Datenverlust, Schäden an Dateien oder am System oder sonstige Folgen der Nutzung übernommen. Es besteht kein Anspruch auf Fehlerbehebung, Support oder Weiterentwicklung.
+
+Deshalb bitte:
+- vor der ersten Nutzung eine aktuelle Datensicherung anlegen,
+- brausa zuerst mit Testordnern ausprobieren,
+- wichtige Projekte erst einbeziehen, wenn Sie brausa selbst geprüft haben.
+
+
+WARUM WINDOWS WARNT
+-------------------
+brausa ist nicht mit einem Code-Signing-Zertifikat signiert (das kostet jährlich
+Gebühren). Windows SmartScreen und manche Browser warnen deshalb vor dem
+Installationsprogramm. Die Warnung heißt nicht, dass Schadsoftware gefunden wurde,
+sondern nur, dass der Herausgeber nicht verifiziert ist. Laden Sie brausa nur von
+der offiziellen Seite herunter:
+https://github.com/lasjoh-toho/brausa/releases
+
+
+HERUNTERLADEN
+-------------
+Empfohlen ist brausa_<Version>_x64-setup.exe (installiert ohne Administratorrechte).
+Die .msi-Datei ist für verwaltete Rechner gedacht.
+
+Meldet Microsoft Edge „wird nicht häufig heruntergeladen“: in der Download-Liste
+auf „…“ > „Behalten“ klicken, dann „Mehr anzeigen“ > „Trotzdem behalten“.
+
+
+INSTALLIEREN UND FREIGEBEN
+--------------------------
+1. Die heruntergeladene Datei doppelklicken.
+2. Erscheint „Der Computer wurde durch Windows geschützt“:
+   auf „Weitere Informationen“ klicken, dann auf „Trotzdem ausführen“.
+3. Den Hinweis zur experimentellen Software lesen und bestätigen,
+   dann der Installation folgen.
+
+Alternative zu Schritt 2: Rechtsklick auf die Datei > Eigenschaften >
+unten bei „Sicherheit“ das Häkchen „Zulassen“ setzen > OK. Dann startet das
+Installationsprogramm ohne SmartScreen-Warnung.
+
+Intelligente App-Steuerung (Windows 11):
+Ist sie eingeschaltet, blockiert Windows unsignierte Programme ohne
+„Trotzdem ausführen“. Sie lässt sich unter Windows-Sicherheit >
+App- & Browsersteuerung ausschalten, aber danach nur durch Neuinstallation von
+Windows wieder einschalten. Überlegen Sie das gut; im Zweifel brausa auf diesem
+Rechner nicht verwenden.
+
+
+DEINSTALLIEREN
+--------------
+Einstellungen > Apps > Installierte Apps > brausa > Deinstallieren. Tags, Farben
+und Maps liegen in den Projektordnern unter „.brausa“ und bleiben erhalten.
+
+Mehr: https://github.com/lasjoh-toho/brausa#readme

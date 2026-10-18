@@ -14,6 +14,14 @@ Lock-in und flachen Bild-Streams statt tiefer Ordnerbäume.
 | **Kanban nach Tags** | **Vorschau fließt unter die Toolbar** |
 | ![](docs/img/kanban.jpg) | ![](docs/img/vorschau.jpg) |
 
+## Installieren
+
+Installer für macOS, Windows und Linux gibt es unter [Releases](https://github.com/lasjoh-toho/brausa/releases).
+
+> **Experimentelle Software.** brausa ist eine Vorab-Version und wurde nach bestem Wissen und Gewissen erstellt. Trotzdem kann sie Fehler enthalten und arbeitet direkt mit Ihren Dateien. Die Nutzung erfolgt auf eigene Gefahr; soweit gesetzlich zulässig, wird keine Verantwortung oder Haftung übernommen. Bitte vorher eine Datensicherung anlegen und zuerst mit Testordnern ausprobieren.
+
+brausa ist nicht bei Apple oder Microsoft signiert, deshalb muss man den ersten Start freigeben. Wie das geht, steht in [LIESMICH für macOS](packaging/LIESMICH-macOS.txt) (liegt auch im DMG) und [LIESMICH für Windows](packaging/LIESMICH-Windows.txt) (Hinweis im Installer, Datei im Programmordner).
+
 ## Was schon geht
 
 | Bereich | Funktion |

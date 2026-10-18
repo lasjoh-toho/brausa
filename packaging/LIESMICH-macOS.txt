@@ -1,0 +1,68 @@
+brausa für macOS – bitte zuerst lesen
+=====================================
+
+WICHTIGER HINWEIS: EXPERIMENTELLE SOFTWARE
+
+brausa ist eine frühe Vorab-Version (Preview) und wird aktiv weiterentwickelt. Die Software wurde nach bestem Wissen und Gewissen entwickelt und getestet. Trotzdem kann sie Fehler enthalten. brausa arbeitet direkt mit Ihren Dateien: Es verschiebt und benennt Dateien um, legt sie in den Papierkorb und schreibt Metadaten, Maps und Wiki-Dateien.
+
+Die Nutzung erfolgt auf eigene Gefahr. Soweit gesetzlich zulässig, wird keine Verantwortung und keine Haftung für Datenverlust, Schäden an Dateien oder am System oder sonstige Folgen der Nutzung übernommen. Es besteht kein Anspruch auf Fehlerbehebung, Support oder Weiterentwicklung.
+
+Deshalb bitte:
+- vor der ersten Nutzung eine aktuelle Datensicherung anlegen,
+- brausa zuerst mit Testordnern ausprobieren,
+- wichtige Projekte erst einbeziehen, wenn Sie brausa selbst geprüft haben.
+
+
+INSTALLIEREN
+------------
+1. brausa.app in den Ordner „Applications“ (Programme) ziehen.
+2. Das Laufwerk „brausa“ im Finder auswerfen.
+
+
+ERSTER START: BRAUSA FREIGEBEN
+------------------------------
+brausa ist nicht bei Apple signiert und beglaubigt (dafür ist ein kostenpflichtiges
+Entwicklerkonto nötig). macOS blockiert deshalb den ersten Start. Die Meldung heißt
+nicht, dass Schadsoftware gefunden wurde, sondern nur, dass Apple den Herausgeber
+nicht kennt. Laden Sie brausa nur von der offiziellen Seite herunter:
+https://github.com/lasjoh-toho/brausa/releases
+
+macOS 15 (Sequoia) und neuer:
+1. brausa im Programme-Ordner per Doppelklick starten.
+   Es erscheint „‚brausa‘ kann nicht geöffnet werden …“. Auf „Fertig“ klicken
+   (nicht „In den Papierkorb legen“).
+2. Systemeinstellungen > Datenschutz & Sicherheit öffnen und nach unten scrollen
+   bis „Sicherheit“.
+3. Bei „‚brausa‘ wurde blockiert …“ auf „Dennoch öffnen“ klicken, mit Passwort oder
+   Touch ID bestätigen und im nächsten Fenster nochmals „Dennoch öffnen“ wählen.
+
+macOS 14 (Sonoma) und älter:
+1. Im Programme-Ordner mit gedrückter ctrl-Taste auf brausa klicken
+   (oder Rechtsklick) und „Öffnen“ wählen.
+2. In der Rückfrage nochmals „Öffnen“ klicken.
+
+Danach startet brausa normal per Doppelklick. Nach einem Update auf eine neue
+Version kann die Freigabe noch einmal nötig sein.
+
+Falls macOS meldet, brausa sei „beschädigt“:
+Das ist dieselbe Sperre in strengerer Form. Im Terminal eingeben:
+
+    xattr -dr com.apple.quarantine /Applications/brausa.app
+
+und brausa danach wie oben öffnen.
+
+
+ZUGRIFF AUF ORDNER
+------------------
+Beim ersten Öffnen von Schreibtisch, Dokumente, Downloads oder externen Laufwerken
+fragt macOS, ob brausa darauf zugreifen darf. Mit „Erlauben“ bestätigen. Die
+Freigaben lassen sich unter Systemeinstellungen > Datenschutz & Sicherheit >
+Dateien und Ordner ändern.
+
+
+DEINSTALLIEREN
+--------------
+brausa.app aus dem Programme-Ordner in den Papierkorb legen. Tags, Farben und Maps
+liegen in den Projektordnern unter „.brausa“ und bleiben erhalten.
+
+Mehr: https://github.com/lasjoh-toho/brausa#readme

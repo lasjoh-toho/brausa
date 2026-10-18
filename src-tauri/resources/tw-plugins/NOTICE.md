@@ -1,12 +1,18 @@
 # Mitgelieferte TiddlyWiki-Plugins
 
 brausa schreibt diese Plugins in die Wikis, die es abgleicht (Bag `@plugins`).
-Neu bauen: `scripts/build-tw-plugins.sh <Pfad zu lasjoh-toho/tw5-graph>`.
+
+Graph, Pinboard und Kanban kommen aus den Releases von
+[TiddlyVisuals](https://lasjoh-toho.github.io/TiddlyVisuals/) (Fork von tw5-graph).
+Welches Release eingebaut ist, steht in `TIDDLYVISUALS`. Aktualisieren:
+`scripts/update-tw-plugins.sh [tag]`. Der Workflow *TiddlyVisuals-Plugins* prüft das
+jede Woche und schlägt neue Releases als Pull Request vor.
+Markdown und vis-network: `scripts/build-tw-plugins.sh <Pfad zu TiddlyVisuals>`.
 
 | Datei | Plugin | Lizenz |
 |---|---|---|
 | `markdown.json` | `$:/plugins/tiddlywiki/markdown` (TiddlyWiki 5.3.8, mit markdown-it) | BSD-3-Clause (TiddlyWiki), MIT (markdown-it) |
 | `graph.json` | `$:/plugins/flibbles/graph` (Flibbles, tw5-graph) | BSD-3-Clause |
 | `vis-network.json` | `$:/plugins/flibbles/vis-network` (mit vis-network) | BSD-3-Clause, Apache-2.0/MIT (vis-network) |
-| `pinboard.json` | `$:/plugins/lasjoh-toho/pinboard` | BSD-3-Clause (tw5-graph-Fork) |
-| `kanban.json` | `$:/plugins/lasjoh-toho/kanban` | BSD-3-Clause (tw5-graph-Fork) |
+| `pinboard.json` | `$:/plugins/lasjoh-toho/pinboard` (TiddlyVisuals) | BSD-3-Clause |
+| `kanban.json` | `$:/plugins/lasjoh-toho/kanban` (TiddlyVisuals) | BSD-3-Clause |
