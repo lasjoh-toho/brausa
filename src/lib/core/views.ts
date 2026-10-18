@@ -7,6 +7,7 @@ import { TAG_SEPARATOR, indexTags } from './tags';
 import { isWithin } from './paths';
 import { matches, parsePattern } from './pattern';
 import { inRange, type DateRange } from './dates';
+import { category, type Category } from './format';
 
 export type ViewMode = 'stream' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
 export type GroupBy = 'none' | 'tag' | 'subfolder' | 'month';
@@ -25,6 +26,8 @@ export interface ViewQuery {
   funnel?: string | null;
   /** Calendar heatmap filter. */
   date?: DateRange | null;
+  /** Type filter: only files of these categories. */
+  cats?: Category[] | null;
   /** Show directories in the canvas (off in stream mode). */
   showDirs?: boolean;
   sort?: SortKey;
@@ -37,6 +40,7 @@ export function filterEntries(entries: Entry[], q: ViewQuery, now = Date.now()):
   let out = entries;
   if (!q.showDirs) out = out.filter((e) => e.kind === 'file');
   if (q.funnel) out = out.filter((e) => isWithin(e.path, q.funnel!));
+  if (q.cats?.length) out = out.filter((e) => e.kind === 'file' && q.cats!.includes(category(e.ext)!));
   if (q.date) out = out.filter((e) => e.kind === 'file' && inRange(e, q.date!));
   if (q.search?.trim()) {
     const p = parsePattern(q.search);

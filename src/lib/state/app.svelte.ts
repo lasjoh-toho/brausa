@@ -7,6 +7,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
 import type { IndexReport, LibraryInfo } from '../backend/types';
 import { createBackend } from '../backend';
+import { parseCategories } from '../core/pattern';
 import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
 import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
@@ -67,6 +68,8 @@ class AppState {
   search = $state('');
   searchMode = $state<'filter' | 'select'>('filter');
   funnel = $state<string | null>(null);
+  /** Type filter from the toolbar (Bilder, Videos, …); null shows everything. */
+  typeFilter = $state<string | null>(store.get('typeFilter', null));
   tileSize = $state(store.get('tileSize', 180));
 
   selection = new SvelteSet<string>();
@@ -100,7 +103,8 @@ class AppState {
     filterEntries(this.raw, {
       search: this.searchMode === 'filter' ? this.search : '',
       funnel: this.funnel,
-      showDirs: !this.recursive,
+      cats: this.typeFilter ? parseCategories(this.typeFilter) : null,
+      showDirs: !this.recursive && !this.typeFilter,
       sort: this.sort,
       desc: this.desc
     })
@@ -253,6 +257,13 @@ class AppState {
     } finally {
       this.loading = false;
     }
+  }
+
+  /** Show only one kind of file; picking one also turns on Stream so subfolders count too. */
+  setTypeFilter(v: string | null) {
+    this.typeFilter = v;
+    store.set('typeFilter', v);
+    if (v && !this.recursive) this.setRecursive(true);
   }
 
   setRecursive(v: boolean) {

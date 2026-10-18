@@ -12,6 +12,11 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 
 ## Was drin ist
 
+**Neu in 0.5: Vorschau für alles, Filter nach Dateiart**
+- **Leertaste-Vorschau** jetzt auch für **Videos und Audio** (mit Player; was das System nicht abspielen kann, öffnet sich mit einem Klick in der Standard-App), **PDFs**, **Text und Code** (php, js, css, json, py … mit Syntax-Farben, Markdown formatiert) und **Webseiten** mit ihrem CSS und ihren Bildern.
+- **Webseiten mit Skripten:** brausa fragt vorher und warnt. Die Antwort lässt sich für die Datei oder den ganzen Ordner merken und über „Ändern“ zurücknehmen. Die Seite läuft abgeschottet ohne Zugriff auf brausa oder andere Dateien.
+- **Filter nach Dateiart:** „Alle Arten ▾“ neben Stream zeigt z. B. alle Videos aus allen Unterordnern. Im Suchfeld: `is:video`, `is:medien`, `is:bild,pdf`, `-is:bild`.
+
 **Neu in 0.4.1**
 - **LIESMICH** im DMG und im Windows-Installer: wie man die unsignierte App freigibt, dazu der Hinweis auf experimentelle Software. Die macOS-App ist jetzt ad-hoc signiert.
 - **Schöneres Kanban im Wiki:** Graph 1.13.1, Pinboard 0.3.0 und Kanban 0.3.1 aus [TiddlyVisuals](https://lasjoh-toho.github.io/TiddlyVisuals/), mit farbigen Spalten, Kartenansicht und gespeicherten Suchen.

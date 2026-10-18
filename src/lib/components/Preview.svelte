@@ -6,7 +6,9 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { app } from '../state/app.svelte';
-  import { formatDate, formatSize, family } from '../core/format';
+  import { category, formatDate, formatSize, family } from '../core/format';
+  import TextPreview from './TextPreview.svelte';
+  import HtmlPreview from './HtmlPreview.svelte';
   import { tagColor } from '../core/tags';
   import Icon from './Icon.svelte';
 
@@ -24,6 +26,15 @@
     if (!app.backend.fileUrl(entry)) app.backend.thumbnail(entry, 1600).then((u) => entry === e && (big = u));
   });
   const src = $derived(app.backend.fileUrl(e) ?? big ?? app.thumbOf(e));
+  const cat = $derived(category(e.ext));
+  // Media plays straight from the file; when the system cannot play it, offer the default app.
+  const media = $derived(cat === 'video' || cat === 'audio' ? app.backend.assetUrl(e.path) : null);
+  let mediaFailed = $state(false);
+  $effect(() => {
+    void e;
+    mediaFailed = false;
+    if (category(e.ext) !== 'image') onaccent(null);
+  });
   let box = $state<Box | null>(null);
   let animate = $state(false);
   let closing = false;
@@ -140,10 +151,30 @@
     >
       <img {src} alt={e.name} onload={loaded} draggable="false" />
     </div>
+  {:else if (cat === 'video' || cat === 'audio') && media && !mediaFailed}
+    <div class="sheet media" class:audio={cat === 'audio'}>
+      {#if cat === 'video'}
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <video src={media} controls autoplay onerror={() => (mediaFailed = true)}></video>
+      {:else}
+        <Icon name="audio" size={72} />
+        <audio src={media} controls autoplay onerror={() => (mediaFailed = true)}></audio>
+      {/if}
+    </div>
+  {:else if cat === 'pdf'}
+    <div class="sheet dark">
+      {#await import('./PdfPages.svelte') then m}<m.default path={e.path} />{/await}
+    </div>
+  {:else if cat === 'text'}
+    <div class="sheet"><TextPreview entry={e} /></div>
+  {:else if cat === 'web'}
+    <div class="sheet"><HtmlPreview entry={e} /></div>
   {:else}
     <div class="doc">
       <Icon name={family(e.ext) === 'other' ? 'file' : family(e.ext)} size={64} />
       <span>{e.ext.toUpperCase()}</span>
+      {#if mediaFailed}<span class="hint">Dieses Format kann brausa hier nicht abspielen.</span>{/if}
+      <button class="btn open" onclick={() => app.open(e)}><Icon name="open" size={14} /> In Standard-App öffnen</button>
     </div>
   {/if}
 
@@ -205,6 +236,53 @@
     color: #8a8a85;
     pointer-events: none;
     font-family: var(--mono);
+  }
+  .doc .hint {
+    font-family: var(--font, inherit);
+    font-size: 13px;
+  }
+  .doc .open {
+    pointer-events: auto;
+    font-family: var(--font, inherit);
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+  }
+  /* Documents and players: a panel between the toolbar and the info bar. */
+  .sheet {
+    position: absolute;
+    top: 60px;
+    bottom: 110px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(1100px, calc(100% - 140px));
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+  .sheet.dark {
+    background: #2a2a28;
+  }
+  .sheet.media {
+    display: grid;
+    place-items: center;
+    background: #000;
+    box-shadow: none;
+    width: calc(100% - 140px);
+  }
+  .sheet.media video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .sheet.audio {
+    background: transparent;
+    align-content: center;
+    gap: 24px;
+    color: #8a8a85;
+  }
+  .sheet.audio audio {
+    width: min(520px, 90%);
   }
   .info {
     position: absolute;
