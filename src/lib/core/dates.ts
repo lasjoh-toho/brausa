@@ -13,6 +13,43 @@ export interface DateRange {
   from: number;
   /** exclusive, ms */
   to: number;
+  /** Only these weekdays (0 = Monday … 6 = Sunday); missing means every day. */
+  weekdays?: number[];
+}
+
+export const WEEKDAY_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+/** Weekday with Monday = 0, like the rows of the year heatmap. */
+export function weekdayOf(ms: number): number {
+  return (new Date(ms).getDay() + 6) % 7;
+}
+
+/** Midnight `days` days after `ms` (local time, safe across DST changes). */
+export function addDays(ms: number, days: number): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days).getTime();
+}
+
+/**
+ * The frame dragged from cell A to cell B of the year heatmap (columns are
+ * weeks, rows weekdays): the days from the top-left to the bottom-right
+ * corner, limited to the weekdays the frame covers (none when it covers all).
+ */
+export function frameRange(field: DateField, a: { date: number; col: number; row: number }, b: { col: number; row: number }): DateRange {
+  const c1 = Math.min(a.col, b.col);
+  const c2 = Math.max(a.col, b.col);
+  const r1 = Math.min(a.row, b.row);
+  const r2 = Math.max(a.row, b.row);
+  const from = addDays(a.date, (c1 - a.col) * 7 + (r1 - a.row));
+  const to = addDays(a.date, (c2 - a.col) * 7 + (r2 - a.row) + 1);
+  const all = r1 === 0 && r2 === 6;
+  return { field, from, to, weekdays: all ? undefined : Array.from({ length: r2 - r1 + 1 }, (_, i) => r1 + i) };
+}
+
+/** Two selections together: the span of both, and the weekdays of either. */
+export function unionRange(a: DateRange, b: DateRange): DateRange {
+  const weekdays = a.weekdays && b.weekdays ? [...new Set([...a.weekdays, ...b.weekdays])].sort((x, y) => x - y) : undefined;
+  return { field: a.field, from: Math.min(a.from, b.from), to: Math.max(a.to, b.to), weekdays: weekdays?.length === 7 ? undefined : weekdays };
 }
 
 export const DATE_FIELD_LABEL: Record<DateField, string> = {
@@ -70,7 +107,7 @@ export function level(count: number, max: number): number {
 
 export function inRange(e: Entry, r: DateRange): boolean {
   const t = dateOf(e, r.field);
-  return t >= r.from && t < r.to;
+  return t >= r.from && t < r.to && (!r.weekdays || r.weekdays.includes(weekdayOf(t)));
 }
 
 /** Range covering a whole month (m = 0..11) or a whole year. */
@@ -108,6 +145,11 @@ export function monthGrid(y: number, m: number): { lead: number; days: { key: st
 }
 
 export function formatRange(r: DateRange, locale = 'de-DE'): string {
+  const days = r.weekdays ? ` · nur ${r.weekdays.map((w) => WEEKDAY_SHORT[w]).join(', ')}` : '';
+  return formatSpan(r, locale) + days;
+}
+
+function formatSpan(r: DateRange, locale: string): string {
   const a = new Date(r.from);
   const b = new Date(r.to - 1);
   const sameDay = dayKey(r.from) === dayKey(r.to - 1);

@@ -174,6 +174,10 @@
     cursor: col-resize;
     z-index: 2;
   }
+  .grip:hover,
+  .grip:active {
+    background: color-mix(in srgb, var(--accent) 45%, transparent);
+  }
   .head {
     display: flex;
     align-items: center;

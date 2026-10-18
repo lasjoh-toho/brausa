@@ -147,7 +147,7 @@ describe('views', () => {
   });
 });
 
-import { countDates, formatRange, level, monthGrid, monthRange, yearGrid, yearRange } from './dates';
+import { countDates, formatRange, frameRange, inRange, level, unionRange, monthGrid, monthRange, yearGrid, yearRange } from './dates';
 
 describe('dates', () => {
   const at = (y: number, m: number, d: number) => new Date(y, m, d, 12).getTime();
@@ -231,5 +231,27 @@ describe('html preview', () => {
     expect(decisionFor(d, '/s/b.html')).toBe(false);
     expect(decisionFor(d, '/t/c.html')).toBeNull();
     expect(decisionFor(forget(d, '/s/b.html'), '/s/a.html')).toBeNull();
+  });
+});
+
+describe('calendar frames', () => {
+  it('turns a frame over the heatmap into a span plus weekdays', () => {
+    // 2026-03-02 is a Monday; frame from that Monday (col 9, row 0) to the Tuesday three weeks later.
+    const mon = new Date(2026, 2, 2).getTime();
+    const r = frameRange('mtime', { date: mon, col: 9, row: 0 }, { col: 12, row: 1 });
+    expect(r.weekdays).toEqual([0, 1]);
+    expect(r.from).toBe(mon);
+    expect(r.to).toBe(new Date(2026, 2, 25).getTime()); // day after Tuesday 24th
+    const e = (d: number) => entry('x.jpg', { mtime: new Date(2026, 2, d, 12).getTime() });
+    expect(inRange(e(9), r)).toBe(true); // Monday
+    expect(inRange(e(11), r)).toBe(false); // Wednesday
+    expect(formatRange(r)).toContain('nur Mo, Di');
+    const full = frameRange('mtime', { date: mon, col: 9, row: 0 }, { col: 9, row: 6 });
+    expect(full.weekdays).toBeUndefined();
+  });
+  it('adds a second frame: both spans, weekdays of either', () => {
+    const a = { field: 'mtime' as const, from: 10, to: 20, weekdays: [0] };
+    const b = { field: 'mtime' as const, from: 15, to: 30, weekdays: [6] };
+    expect(unionRange(a, b)).toEqual({ field: 'mtime', from: 10, to: 30, weekdays: [0, 6] });
   });
 });

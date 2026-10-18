@@ -12,7 +12,12 @@
     DATE_FIELD_LABEL,
     dayKey,
     formatRange,
+    frameRange,
     level,
+    unionRange,
+    weekdayOf,
+    yearRange,
+    type DateRange,
     monthGrid,
     monthRange,
     yearGrid,
@@ -61,7 +66,7 @@
 
   // ------------------------------------------------------------ brushing
 
-  let brush = $state<{ from: number; to: number; a: [number, number] } | null>(null);
+  let brush = $state<DateRange | null>(null);
   const shown = $derived(brush ?? app.dateFilter);
 
   function cellRange(el: Element | null): [number, number] | null {
@@ -69,32 +74,69 @@
     return c ? [Number(c.dataset.from), Number(c.dataset.to)] : null;
   }
 
+  /** A day cell of the year heatmap: its week column and weekday row. */
+  function gridCell(el: Element | null): { date: number; col: number; row: number } | null {
+    const c = el?.closest<HTMLElement>('[data-row]');
+    return c ? { date: Number(c.dataset.from), col: Number(c.dataset.col), row: Number(c.dataset.row) } : null;
+  }
+
+  /**
+   * Drag across cells to choose a date range. In the year heatmap the drag
+   * draws a frame: weeks across, weekdays down, so a frame over the Monday row
+   * picks every Monday in those weeks. ⌘/Strg adds to the current selection.
+   */
   function down(e: PointerEvent) {
     if (e.button !== 0) return;
     const r = cellRange(e.target as Element);
     if (!r) return;
     e.preventDefault();
-    brush = { from: r[0], to: r[1], a: r };
+    const anchor = gridCell(e.target as Element);
+    const add = (e.metaKey || e.ctrlKey) && app.dateFilter ? app.dateFilter : null;
+    const span = (to: Element | null): DateRange | null => {
+      if (anchor) {
+        const g = gridCell(to);
+        return g ? frameRange(app.dateField, anchor, g) : null;
+      }
+      const c = cellRange(to);
+      return c ? { field: app.dateField, from: Math.min(r[0], c[0]), to: Math.max(r[1], c[1]) } : null;
+    };
+    brush = span(e.target as Element);
     const move = (ev: PointerEvent) => {
-      const c = cellRange(document.elementFromPoint(ev.clientX, ev.clientY));
-      if (c && brush) brush = { a: brush.a, from: Math.min(brush.a[0], c[0]), to: Math.max(brush.a[1], c[1]) };
+      const next = span(document.elementFromPoint(ev.clientX, ev.clientY));
+      if (next) brush = next;
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       if (!brush) return;
       const f = app.dateFilter;
+      const same = f && f.from === brush.from && f.to === brush.to && String(f.weekdays) === String(brush.weekdays);
       // Clicking the exact current selection again clears it.
-      if (f && f.from === brush.from && f.to === brush.to) app.setDateFilter(null);
-      else app.setDateFilter({ field: app.dateField, from: brush.from, to: brush.to });
+      if (same && !add) app.setDateFilter(null);
+      else app.setDateFilter(add ? unionRange(add, brush) : brush);
       brush = null;
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }
 
+  /** Click on a weekday label: only that weekday (or add/remove it) in the selected span. */
+  function toggleWeekday(w: number) {
+    const f = app.dateFilter;
+    if (!f) {
+      const [from, to] = yearRange(heatYear ?? y);
+      return app.setDateFilter({ field: app.dateField, from, to, weekdays: [w] });
+    }
+    const cur = f.weekdays ?? [0, 1, 2, 3, 4, 5, 6];
+    const next = cur.includes(w) ? cur.filter((x) => x !== w) : [...cur, w].sort((a, b) => a - b);
+    if (!next.length) return app.setDateFilter({ ...f, weekdays: undefined });
+    app.setDateFilter({ ...f, weekdays: next.length === 7 ? undefined : next });
+  }
+
   function selected(from: number, to: number) {
-    return !!shown && from >= shown.from && to <= shown.to;
+    if (!shown || from < shown.from || to > shown.to) return false;
+    // Day cells also have to be on a chosen weekday; month cells count when inside the span.
+    return !shown.weekdays || to - from > 1.5 * 86400e3 || shown.weekdays.includes(weekdayOf(from));
   }
 
   // ------------------------------------------------------------ zoom
@@ -174,7 +216,9 @@
       {/each}
     </div>
     <div class="wd">
-      {#each WEEKDAYS as w, i (w)}<span class:we={i > 4}>{w}</span>{/each}
+      {#each WEEKDAYS as w, i (w)}
+        <button class:we={i > 4} class:on={!!app.dateFilter?.weekdays?.includes(i)} onclick={() => toggleWeekday(i)} title="Nur {w} (Klick schaltet um)">{w}</button>
+      {/each}
     </div>
     <div class="days" style:grid-template-columns="repeat({ycols}, 1fr)">
       {#each yg as d (d.key)}
@@ -185,6 +229,8 @@
           class:sel={selected(d.date, d.date + 86400e3)}
           style:grid-column={d.col + 1}
           style:grid-row={d.row + 1}
+          data-row={d.row}
+          data-col={d.col}
           data-from={d.date}
           data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
           title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}: {n} Dateien"
@@ -295,7 +341,7 @@
   </div>
 
   <div class="legend">
-    <span>Ziehen: Zeitraum wählen · Doppelklick oder ⌘/Strg + Scrollen: zoomen</span>
+    <span>Ziehen: Zeitraum wählen, in der Jahres-Heatmap als Rahmen über Wochen und Wochentage · ⌘/Strg + Ziehen fügt hinzu · Klick auf Mo … So: nur diese Tage · Doppelklick oder ⌘/Strg + Scrollen: zoomen</span>
     <span class="scale">weniger {#each [0, 1, 2, 3, 4] as l (l)}<i class="cell l{l}"></i>{/each} mehr</span>
   </div>
 </div>
@@ -445,6 +491,18 @@
   }
   .ylabel.open {
     color: var(--accent);
+  }
+  .wd button {
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 3px;
+  }
+  .wd button:hover,
+  .wd button.on {
+    color: var(--accent);
+    background: var(--accent-soft);
   }
   .wd .we {
     color: var(--fg-muted);
