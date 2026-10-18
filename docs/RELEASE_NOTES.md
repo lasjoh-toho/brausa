@@ -12,6 +12,11 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 
 ## Was drin ist
 
+**Neu in 0.6: Freie Projekte, zweites Panel, Kalender mit Wochentagen**
+- **Projekte sind unabhängig von Ordnern:** frei benannt (+ bei *Projekte*), Dateien und Ordner von überall darauf ziehen fügt sie hinzu, ohne sie zu verschieben. Ein Klick zeigt alle Dateien des Projekts in jeder Ansicht; Entf nimmt eine Datei nur aus dem Projekt. Bisherige Ordner-Projekte werden mit ihren Maps übernommen.
+- **Zweites Panel** (Symbol neben *Ablage*): ein zweiter Ordner rechts daneben, Dateien in beide Richtungen ziehen, ⌥/Strg kopiert, ⇄ tauscht die Seiten, Grenze verschiebbar.
+- **Kalender:** Klick auf eine Jahreszahl öffnet ein Tagesband über alle Jahre mit allen Wochentagen und Summen je Wochentag, waagerecht scrollbar. Ziehen zeichnet einen **Rahmen** über Wochen und Wochentage (z. B. nur Montage von Juli bis Oktober), ⌘/Strg + Ziehen fügt Rahmen hinzu, Klick auf Mo … So schaltet Wochentage um.
+
 **Neu in 0.5: Vorschau für alles, Filter nach Dateiart**
 - **Leertaste-Vorschau** jetzt auch für **Videos und Audio** (mit Player; was das System nicht abspielen kann, öffnet sich mit einem Klick in der Standard-App), **PDFs**, **Text und Code** (php, js, css, json, py … mit Syntax-Farben, Markdown formatiert) und **Webseiten** mit ihrem CSS und ihren Bildern.
 - **Webseiten mit Skripten:** brausa fragt vorher und warnt. Die Antwort lässt sich für die Datei oder den ganzen Ordner merken und über „Ändern“ zurücknehmen. Die Seite läuft abgeschottet ohne Zugriff auf brausa oder andere Dateien.
