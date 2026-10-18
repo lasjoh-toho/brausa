@@ -2,11 +2,11 @@
  * Pointer-event based drag & drop controller.
  *
  * Drop targets are plain elements with data attributes:
- *   data-drop="folder|crumb|tray|canvas|column|grid-trigger|grid-cell|board"
+ *   data-drop="folder|crumb|tray|canvas|column|grid-trigger|grid-cell|board|project"
  *   data-path="/abs/path"          (folder, crumb)
  *   data-zones="dual"              (folder: left = move/copy, right = assign attributes)
  *   data-expandable                (folder: spring-loads on hover)
- *   data-key="…"                   (column)
+ *   data-key="…"                   (column; project: its id)
  *   data-cell="3"                  (grid-cell)
  * Scroll containers marked with data-autoscroll scroll when dragging near their edges.
  */
@@ -16,7 +16,7 @@ import { UNTAGGED } from '../core/views';
 import { isCopyKey } from '../platform';
 import { app } from './app.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board' | 'project';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
 export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
@@ -75,7 +75,10 @@ class DragController {
         return `${this.copy ? 'Kopieren' : 'Verschieben'} nach „${name}“`;
       case 'tray':
         return 'In die Ablage legen';
+      case 'project':
+        return `Zu „${app.projects.find((p) => p.id === h.key)?.name ?? ''}“ hinzufügen`;
       case 'canvas':
+        if (app.currentProject) return this.source === 'canvas' ? '' : `Zu „${app.currentProject.name}“ hinzufügen`;
         return this.isFolderFunnel() ? 'Ansicht auf diesen Zweig filtern' : this.source === 'canvas' ? '' : 'Hierher verschieben';
       case 'column':
         return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? 'Tag entfernen' : `#${h.key} setzen`) : `Nach „${h.key}“ verschieben`;
@@ -224,7 +227,7 @@ class DragController {
   }
 
   private isFolderFunnel() {
-    return this.items.length === 1 && this.items[0].kind === 'dir';
+    return this.items.length === 1 && this.items[0].kind === 'dir' && this.source !== 'pane';
   }
 }
 
@@ -245,8 +248,14 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
       case 'tray':
         if (source !== 'tray') app.stage(items);
         break;
+      case 'project':
+        await app.addToProject(h.key!, items);
+        break;
       case 'canvas': {
-        if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas') {
+        if (app.project) {
+          // In a project the drop adds to it; nothing moves.
+          if (source !== 'canvas') await app.addToProject(app.project, items);
+        } else if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas' && source !== 'pane') {
           const dir = items[0].path;
           if (isWithin(dir, app.cwd) && dir !== app.cwd) {
             if (!app.recursive) app.setRecursive(true);

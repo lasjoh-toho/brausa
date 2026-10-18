@@ -24,10 +24,19 @@
           ...(files.length ? [{ label: 'Taggen', icon: 'tag', key: 'T', run: onTag }] : []),
           ...(files.length ? [{ label: 'In die Ablage', icon: 'tray', key: 'S', run: () => app.stage(files) }] : []),
           null,
+          // Projects collect files from anywhere; adding never moves a file.
+          ...app.projects
+            .filter((p) => p.id !== app.project)
+            .slice(0, 6)
+            .map((p) => ({ label: `Zu „${p.name}“ hinzufügen`, icon: 'kanban', run: () => app.addToProject(p.id, targets) })),
+          ...(app.currentProject
+            ? [{ label: `Aus „${app.currentProject.name}“ entfernen`, icon: 'x', key: isMac ? '⌘⌫' : 'Entf', run: () => app.removeFromProject(targets) }]
+            : []),
+          null,
           {
             label: 'In den Papierkorb',
             icon: 'trash',
-            key: isMac ? '⌘⌫' : 'Entf',
+            key: app.project ? undefined : isMac ? '⌘⌫' : 'Entf',
             danger: true,
             run: () => app.trash(targets)
           }

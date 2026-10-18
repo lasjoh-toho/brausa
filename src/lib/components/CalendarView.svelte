@@ -12,10 +12,16 @@
     DATE_FIELD_LABEL,
     dayKey,
     formatRange,
+    frameRange,
     level,
+    unionRange,
+    weekdayOf,
+    yearRange,
+    type DateRange,
     monthGrid,
     monthRange,
     yearGrid,
+    bandGrid,
     type CalLevel,
     type DateField
   } from '../core/dates';
@@ -37,6 +43,8 @@
   let zoom = $state<CalLevel | null>(null);
   let year = $state<number | null>(null);
   let month = $state(0);
+  /** Year opened below the overview (click on a year), as a day heatmap with weekdays. */
+  let openYear = $state<number | null>(null);
 
   // Pick a sensible starting zoom once data is there: one year if it all fits, else the overview.
   const lvl = $derived<CalLevel>(zoom ?? (years.length > 1 ? 'years' : 'year'));
@@ -59,7 +67,7 @@
 
   // ------------------------------------------------------------ brushing
 
-  let brush = $state<{ from: number; to: number; a: [number, number] } | null>(null);
+  let brush = $state<DateRange | null>(null);
   const shown = $derived(brush ?? app.dateFilter);
 
   function cellRange(el: Element | null): [number, number] | null {
@@ -67,32 +75,69 @@
     return c ? [Number(c.dataset.from), Number(c.dataset.to)] : null;
   }
 
+  /** A day cell of the year heatmap: its week column and weekday row. */
+  function gridCell(el: Element | null): { date: number; col: number; row: number } | null {
+    const c = el?.closest<HTMLElement>('[data-row]');
+    return c ? { date: Number(c.dataset.from), col: Number(c.dataset.col), row: Number(c.dataset.row) } : null;
+  }
+
+  /**
+   * Drag across cells to choose a date range. In the year heatmap the drag
+   * draws a frame: weeks across, weekdays down, so a frame over the Monday row
+   * picks every Monday in those weeks. ⌘/Strg adds to the current selection.
+   */
   function down(e: PointerEvent) {
     if (e.button !== 0) return;
     const r = cellRange(e.target as Element);
     if (!r) return;
     e.preventDefault();
-    brush = { from: r[0], to: r[1], a: r };
+    const anchor = gridCell(e.target as Element);
+    const add = (e.metaKey || e.ctrlKey) && app.dateFilter ? app.dateFilter : null;
+    const span = (to: Element | null): DateRange | null => {
+      if (anchor) {
+        const g = gridCell(to);
+        return g ? frameRange(app.dateField, anchor, g) : null;
+      }
+      const c = cellRange(to);
+      return c ? { field: app.dateField, from: Math.min(r[0], c[0]), to: Math.max(r[1], c[1]) } : null;
+    };
+    brush = span(e.target as Element);
     const move = (ev: PointerEvent) => {
-      const c = cellRange(document.elementFromPoint(ev.clientX, ev.clientY));
-      if (c && brush) brush = { a: brush.a, from: Math.min(brush.a[0], c[0]), to: Math.max(brush.a[1], c[1]) };
+      const next = span(document.elementFromPoint(ev.clientX, ev.clientY));
+      if (next) brush = next;
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       if (!brush) return;
       const f = app.dateFilter;
+      const same = f && f.from === brush.from && f.to === brush.to && String(f.weekdays) === String(brush.weekdays);
       // Clicking the exact current selection again clears it.
-      if (f && f.from === brush.from && f.to === brush.to) app.setDateFilter(null);
-      else app.setDateFilter({ field: app.dateField, from: brush.from, to: brush.to });
+      if (same && !add) app.setDateFilter(null);
+      else app.setDateFilter(add ? unionRange(add, brush) : brush);
       brush = null;
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }
 
+  /** Click on a weekday label: only that weekday (or add/remove it) in the selected span. */
+  function toggleWeekday(w: number) {
+    const f = app.dateFilter;
+    if (!f) {
+      const [from, to] = yearRange(heatYear ?? y);
+      return app.setDateFilter({ field: app.dateField, from, to, weekdays: [w] });
+    }
+    const cur = f.weekdays ?? [0, 1, 2, 3, 4, 5, 6];
+    const next = cur.includes(w) ? cur.filter((x) => x !== w) : [...cur, w].sort((a, b) => a - b);
+    if (!next.length) return app.setDateFilter({ ...f, weekdays: undefined });
+    app.setDateFilter({ ...f, weekdays: next.length === 7 ? undefined : next });
+  }
+
   function selected(from: number, to: number) {
-    return !!shown && from >= shown.from && to <= shown.to;
+    if (!shown || from < shown.from || to > shown.to) return false;
+    // Day cells also have to be on a chosen weekday; month cells count when inside the span.
+    return !shown.weekdays || to - from > 1.5 * 86400e3 || shown.weekdays.includes(weekdayOf(from));
   }
 
   // ------------------------------------------------------------ zoom
@@ -142,11 +187,39 @@
     app.setDateField(f);
   }
 
-  const yg = $derived(lvl === 'year' ? yearGrid(y) : []);
+  // The day heatmap is shown at the year level, and below the overview for the opened year.
+  // Day heatmap: one year at the year level; below the overview a band across all years.
+  const band = $derived(lvl === 'years' && openYear !== null && years.includes(openYear));
+  const heatYear = $derived(lvl === 'year' ? y : band ? openYear : null);
+  const yg = $derived(lvl === 'year' ? yearGrid(y) : band ? bandGrid(years[years.length - 1], years[0]) : []);
+  /** Files per weekday (Mo … So) in the shown days. */
+  const perWeekday = $derived.by(() => {
+    const sums = Array(7).fill(0);
+    for (const d of yg) sums[d.row] += counts.days.get(d.key) ?? 0;
+    return sums;
+  });
+  const maxWeekday = $derived(Math.max(1, ...perWeekday));
   const ycols = $derived(yg.length ? yg[yg.length - 1].col + 1 : 53);
+  const cols = $derived(band ? `repeat(${ycols}, 13px)` : `repeat(${ycols}, 1fr)`);
   const monthStarts = $derived(
-    yg.filter((d) => d.key.endsWith('-01')).map((d) => ({ col: d.col, label: MONTHS[new Date(d.date).getMonth()], m: new Date(d.date).getMonth() }))
+    yg
+      .filter((d) => d.key.endsWith('-01'))
+      .map((d) => {
+        const dt = new Date(d.date);
+        return { key: d.key, col: d.col, y: dt.getFullYear(), m: dt.getMonth(), label: MONTHS[dt.getMonth()] + (band && dt.getMonth() === 0 ? ` ${dt.getFullYear()}` : '') };
+      })
   );
+
+  /** Scroll the band so the opened year starts at the left edge. */
+  function toYear(node: HTMLElement, yr: number | null) {
+    const go = (v: number | null) => {
+      const first = yg.find((d) => d.key === `${v}-01-01`);
+      if (first) node.scrollLeft = Math.max(0, first.col * 16 - 8);
+    };
+    requestAnimationFrame(() => go(yr));
+    return { update: go };
+  }
+
   const mg = $derived(lvl === 'month' ? monthGrid(y, month) : { lead: 0, days: [] });
 
   $effect(() => {
@@ -154,6 +227,45 @@
     for (const e of cover.values()) app.requestThumb(e);
   });
 </script>
+
+{#snippet heatmap()}
+  <div class="year" class:band>
+    <div class="wd">
+      {#each WEEKDAYS as w, i (w)}
+        <button class:we={i > 4} class:on={!!app.dateFilter?.weekdays?.includes(i)} onclick={() => toggleWeekday(i)} title="Nur {w} (Klick schaltet um)">{w}</button>
+      {/each}
+    </div>
+    <div class="scrollx" use:toYear={band ? openYear : null}>
+      <div class="months" style:grid-template-columns={cols}>
+        {#each monthStarts as ms (ms.key)}
+          <button class="mlabel" class:jan={band && ms.m === 0} style:grid-column="{ms.col + 1} / span 4" onclick={() => ((year = ms.y), (month = ms.m), (zoom = 'month'))}>{ms.label}</button>
+        {/each}
+      </div>
+      <div class="days" style:grid-template-columns={cols}>
+        {#each yg as d (d.key)}
+          {@const n = counts.days.get(d.key) ?? 0}
+          <div
+            class="cell l{level(n, maxDay)}"
+            class:we={d.row > 4}
+            class:sel={selected(d.date, d.date + 86400e3)}
+            style:grid-column={d.col + 1}
+            style:grid-row={d.row + 1}
+            data-row={d.row}
+            data-col={d.col}
+            data-from={d.date}
+            data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
+            title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}: {n} Dateien"
+          ></div>
+        {/each}
+      </div>
+    </div>
+    <div class="wsum" title="Dateien je Wochentag">
+      {#each perWeekday as n, i (i)}
+        <span><i style:width="{(n / maxWeekday) * 100}%"></i><em>{n}</em></span>
+      {/each}
+    </div>
+  </div>
+{/snippet}
 
 <div class="cal" role="application" aria-label="Kalender">
   <div class="head">
@@ -192,12 +304,14 @@
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="body" onpointerdown={down} ondblclick={dbl} onwheel={wheel}>
-    {#if lvl === 'years'}
+    {#if lvl === 'years' && !band}
       <div class="years">
         <span></span>
         {#each MONTHS as m (m)}<span class="mlabel">{m}</span>{/each}
         {#each years as yr (yr)}
-          <button class="ylabel" onclick={() => ((year = yr), (zoom = 'year'))}>{yr}</button>
+          <button class="ylabel" class:open={openYear === yr} title="Tage und Wochentage von {yr} zeigen" onclick={() => (openYear = openYear === yr ? null : yr)}>
+            {yr} <Icon name={openYear === yr ? 'chevronDown' : 'chevron'} size={10} />
+          </button>
           {#each MONTHS as _, m (m)}
             {@const [from, to] = monthRange(yr, m)}
             {@const n = counts.months.get(`${yr}-${String(m + 1).padStart(2, '0')}`) ?? 0}
@@ -213,31 +327,16 @@
           {/each}
         {/each}
       </div>
-    {:else if lvl === 'year'}
-      <div class="year" style:--cols={ycols}>
-        <div class="months" style:grid-template-columns="repeat({ycols}, 1fr)">
-          {#each monthStarts as ms (ms.m)}
-            <button class="mlabel" style:grid-column="{ms.col + 1} / span 4" onclick={() => ((month = ms.m), (zoom = 'month'))}>{ms.label}</button>
-          {/each}
-        </div>
-        <div class="wd">
-          {#each WEEKDAYS as w, i (w)}<span>{i % 2 === 0 ? w : ''}</span>{/each}
-        </div>
-        <div class="days" style:grid-template-columns="repeat({ycols}, 1fr)">
-          {#each yg as d (d.key)}
-            {@const n = counts.days.get(d.key) ?? 0}
-            <div
-              class="cell l{level(n, maxDay)}"
-              class:sel={selected(d.date, d.date + 86400e3)}
-              style:grid-column={d.col + 1}
-              style:grid-row={d.row + 1}
-              data-from={d.date}
-              data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
-              title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}: {n} Dateien"
-            ></div>
-          {/each}
-        </div>
+    {:else if band}
+      <div class="otitle">
+        <b>Tage</b>
+        <span class="hint">waagerecht scrollen für frühere Jahre; Rahmen gehen über den Jahreswechsel</span>
+        <span class="grow"></span>
+        <button class="btn icon" onclick={() => (openYear = null)} title="Zurück zu allen Jahren" aria-label="Schließen"><Icon name="x" size={12} /></button>
       </div>
+      {@render heatmap()}
+    {:else if lvl === 'year'}
+      {@render heatmap()}
     {:else}
       <div class="month">
         {#each WEEKDAYS as w (w)}<span class="wdh">{w}</span>{/each}
@@ -262,7 +361,7 @@
   </div>
 
   <div class="legend">
-    <span>Ziehen: Zeitraum wählen · Doppelklick oder ⌘/Strg + Scrollen: zoomen</span>
+    <span>Ziehen: Zeitraum wählen, in der Jahres-Heatmap als Rahmen über Wochen und Wochentage · ⌘/Strg + Ziehen fügt hinzu · Klick auf Mo … So: nur diese Tage · Doppelklick oder ⌘/Strg + Scrollen: zoomen</span>
     <span class="scale">weniger {#each [0, 1, 2, 3, 4] as l (l)}<i class="cell l{l}"></i>{/each} mehr</span>
   </div>
 </div>
@@ -393,23 +492,105 @@
     mix-blend-mode: normal;
   }
 
+  .otitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .ylabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .ylabel.open {
+    color: var(--accent);
+  }
+  .wd button {
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 3px;
+  }
+  .wd button:hover,
+  .wd button.on {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .wd .we {
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .days .cell.we:not(.l1):not(.l2):not(.l3):not(.l4) {
+    background: color-mix(in srgb, var(--bg-sunken) 60%, var(--line));
+  }
+  .wsum {
+    display: grid;
+    grid-template-rows: repeat(7, 1fr);
+    gap: 3px;
+    width: 64px;
+    font-size: 9px;
+    color: var(--fg-faint);
+  }
+  .wsum span {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .wsum i {
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .wsum em {
+    position: relative;
+    font-style: normal;
+    padding-left: 3px;
+  }
   .year {
     display: grid;
-    grid-template-columns: 22px 1fr;
-    grid-template-rows: auto auto;
-    column-gap: 4px;
-    row-gap: 4px;
+    grid-template-columns: 22px minmax(0, 1fr) 64px;
+    column-gap: 6px;
+  }
+  .scrollx {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .band .scrollx {
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .wd,
+  .wsum {
+    padding-top: 18px;
+  }
+  .mlabel.jan {
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .grow {
+    flex: 1;
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--fg-faint);
   }
   .months {
-    grid-column: 2;
     display: grid;
+    height: 14px;
     gap: 3px;
   }
   .months .mlabel:hover {
     color: var(--accent);
   }
   .wd {
-    grid-column: 1;
     display: grid;
     grid-template-rows: repeat(7, 1fr);
     gap: 3px;
@@ -418,7 +599,6 @@
     align-items: center;
   }
   .days {
-    grid-column: 2;
     display: grid;
     grid-template-rows: repeat(7, auto);
     gap: 3px;

@@ -9,8 +9,9 @@
   const loadReader = () => import('./Reader.svelte');
   import Icon from './Icon.svelte';
 
-  /** Maps belong to the project the current folder is in. */
-  const project = $derived(app.libraryOf(app.cwd));
+  /** Maps belong to a project: the open one, one holding this folder, or the last one used. */
+  const project = $derived(app.boardProject);
+  let naming = $state('');
 
   $effect(() => {
     void board.open(project?.root ?? null);
@@ -30,8 +31,16 @@
   {#if !project}
     <div class="empty">
       <Icon name="nodes" size={28} />
-      <p>Maps gehören zu einem Projekt.</p>
-      <button class="btn primary" onclick={() => app.addProject(app.cwd)}>„{app.cwd.split(/[\\/]/).pop()}“ als Projekt einbeziehen</button>
+      <p>Maps gehören zu einem Projekt. Projekte sammeln Dateien und Ordner von überall.</p>
+      {#if app.projects.length}
+        <div class="pick">
+          {#each app.projects as p (p.id)}<button class="btn" onclick={() => app.openProject(p.id)}><Icon name="kanban" size={13} />{p.name}</button>{/each}
+        </div>
+      {/if}
+      <form class="pick" onsubmit={(e) => (e.preventDefault(), naming.trim() && void app.createProject(naming).then(() => (naming = '')))}>
+        <input bind:value={naming} placeholder="Neues Projekt …" />
+        <button class="btn primary" disabled={!naming.trim()}>Anlegen</button>
+      </form>
     </div>
   {:else if board.mode === 'kanban'}
     {#if board.reader}{#await loadReader() then R}<R.default />{/await}{/if}
@@ -40,8 +49,8 @@
     {#if board.reader}{#await loadReader() then R}<R.default />{/await}{/if}
     <ProjectMap />
   {/if}
-  {#if project?.root && board.panelOpen}
-    <FilePanel root={project.root} />
+  {#if project && board.panelOpen}
+    <FilePanel {project} />
   {/if}
 </div>
 
@@ -59,5 +68,18 @@
     justify-items: center;
     gap: 10px;
     color: var(--fg-muted);
+  }
+  .pick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+  .pick input {
+    padding: 5px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--fg);
   }
 </style>

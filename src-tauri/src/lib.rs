@@ -4,6 +4,7 @@ mod maps;
 mod tw;
 mod media;
 mod meta;
+mod projects;
 
 use fsops::{Entry, Mode, TransferResult};
 use library::{LibraryInfo, Registry, Report};
@@ -23,6 +24,9 @@ struct Watcher(Mutex<Option<Debouncer<notify_debouncer_mini::notify::Recommended
 
 /// Central metadata index (all projects + global store).
 struct Index(Mutex<Registry>);
+
+/// Projects: named collections of files and folders from anywhere.
+struct Projs(Mutex<projects::Projects>);
 
 /// TiddlyWiki bags and recipes (serialised: one sync at a time).
 struct Wikis(Mutex<tw::Store>);
@@ -106,7 +110,7 @@ async fn walk(state: State<'_, Index>, root: String, max_depth: usize, include_h
 }
 
 #[tauri::command]
-async fn transfer(state: State<'_, Index>, paths: Vec<String>, target_dir: String, mode: String) -> CmdResult<TransferResult> {
+async fn transfer(state: State<'_, Index>, projs: State<'_, Projs>, paths: Vec<String>, target_dir: String, mode: String) -> CmdResult<TransferResult> {
     let mode = match mode.as_str() {
         "move" => Mode::Move,
         "copy" => Mode::Copy,
@@ -119,6 +123,9 @@ async fn transfer(state: State<'_, Index>, paths: Vec<String>, target_dir: Strin
         let (from, to) = (Path::new(from), Path::new(to));
         let r = if mode == Mode::Move { reg.moved(from, to) } else { reg.copied(from, to) };
         r.map_err(err)?;
+        if mode == Mode::Move {
+            projs.0.lock().map_err(err)?.moved(from, to).map_err(err)?;
+        }
     }
     Ok(res)
 }
@@ -164,9 +171,10 @@ async fn remove_library(state: State<'_, Index>, root: String) -> CmdResult<()> 
 }
 
 /// Maps may only be stored inside a registered project.
-fn project_root(state: &State<'_, Index>, root: &str) -> CmdResult<PathBuf> {
-    let reg = state.0.lock().map_err(err)?;
-    if reg.infos().iter().any(|i| i.root.as_deref() == Some(root)) {
+fn project_root(state: &State<'_, Index>, projs: &State<'_, Projs>, root: &str) -> CmdResult<PathBuf> {
+    let known = state.0.lock().map_err(err)?.infos().iter().any(|i| i.root.as_deref() == Some(root))
+        || projs.0.lock().map_err(err)?.is_root(Path::new(root));
+    if known {
         Ok(PathBuf::from(root))
     } else {
         Err(format!("„{root}“ ist kein Projekt"))
@@ -174,33 +182,42 @@ fn project_root(state: &State<'_, Index>, root: &str) -> CmdResult<PathBuf> {
 }
 
 #[tauri::command]
-async fn list_maps(state: State<'_, Index>, root: String) -> CmdResult<Vec<maps::MapInfo>> {
-    Ok(maps::list(&project_root(&state, &root)?))
+async fn list_maps(state: State<'_, Index>, projs: State<'_, Projs>, root: String) -> CmdResult<Vec<maps::MapInfo>> {
+    Ok(maps::list(&project_root(&state, &projs, &root)?))
 }
 
 #[tauri::command]
-async fn load_map(state: State<'_, Index>, root: String, id: String) -> CmdResult<serde_json::Value> {
-    maps::load(&project_root(&state, &root)?, &id).map_err(err)
+async fn load_map(state: State<'_, Index>, projs: State<'_, Projs>, root: String, id: String) -> CmdResult<serde_json::Value> {
+    maps::load(&project_root(&state, &projs, &root)?, &id).map_err(err)
 }
 
-/// Keep index records alive exactly as long as some map card points at them.
-fn sync_refs(state: &State<'_, Index>) -> CmdResult<()> {
+/// Keep index records alive exactly as long as some map card or project points at them.
+fn sync_refs(state: &State<'_, Index>, projs: &State<'_, Projs>) -> CmdResult<()> {
     let mut reg = state.0.lock().map_err(err)?;
-    let roots: Vec<PathBuf> = reg.infos().into_iter().filter_map(|i| i.root.map(PathBuf::from)).collect();
-    let counts = maps::ref_counts(roots.iter().map(PathBuf::as_path));
+    let ps = projs.0.lock().map_err(err)?;
+    let mut roots: Vec<PathBuf> = reg.infos().into_iter().filter_map(|i| i.root.map(PathBuf::from)).collect();
+    for r in ps.roots() {
+        if !roots.contains(&r) {
+            roots.push(r);
+        }
+    }
+    let mut counts = maps::ref_counts(roots.iter().map(PathBuf::as_path));
+    for id in ps.member_ids() {
+        *counts.entry(id.clone()).or_insert(0) += 1;
+    }
     reg.set_refs(&counts).map_err(err)
 }
 
 #[tauri::command]
-async fn save_map(state: State<'_, Index>, root: String, map: serde_json::Value) -> CmdResult<()> {
-    maps::save(&project_root(&state, &root)?, &map).map_err(err)?;
-    sync_refs(&state)
+async fn save_map(state: State<'_, Index>, projs: State<'_, Projs>, root: String, map: serde_json::Value) -> CmdResult<()> {
+    maps::save(&project_root(&state, &projs, &root)?, &map).map_err(err)?;
+    sync_refs(&state, &projs)
 }
 
 #[tauri::command]
-async fn delete_map(state: State<'_, Index>, root: String, id: String) -> CmdResult<()> {
-    maps::delete(&project_root(&state, &root)?, &id).map_err(err)?;
-    sync_refs(&state)
+async fn delete_map(state: State<'_, Index>, projs: State<'_, Projs>, root: String, id: String) -> CmdResult<()> {
+    maps::delete(&project_root(&state, &projs, &root)?, &id).map_err(err)?;
+    sync_refs(&state, &projs)
 }
 
 #[derive(Serialize)]
@@ -224,6 +241,79 @@ async fn locate_files(state: State<'_, Index>, ids: Vec<String>) -> CmdResult<st
         let p = reg.locate(&id).map(|p| p.to_string_lossy().to_string());
         (id, p)
     }).collect())
+}
+
+#[tauri::command]
+async fn projects(projs: State<'_, Projs>) -> CmdResult<Vec<projects::ProjectInfo>> {
+    Ok(projs.0.lock().map_err(err)?.infos())
+}
+
+#[tauri::command]
+async fn create_project(projs: State<'_, Projs>, name: String) -> CmdResult<projects::Project> {
+    projs.0.lock().map_err(err)?.create(&name).map_err(err)
+}
+
+#[tauri::command]
+async fn update_project(projs: State<'_, Projs>, id: String, name: Option<String>, color: Option<Option<String>>) -> CmdResult<()> {
+    projs.0.lock().map_err(err)?.update(&id, name.as_deref(), color).map_err(err)
+}
+
+#[tauri::command]
+async fn delete_project(state: State<'_, Index>, projs: State<'_, Projs>, id: String) -> CmdResult<()> {
+    projs.0.lock().map_err(err)?.delete(&id).map_err(err)?;
+    sync_refs(&state, &projs)
+}
+
+/// Adds files (by stable index id, so they follow moves) and folders (live) to a project.
+#[tauri::command]
+async fn project_add(state: State<'_, Index>, projs: State<'_, Projs>, id: String, paths: Vec<String>) -> CmdResult<usize> {
+    let (mut files, mut folders) = (vec![], vec![]);
+    {
+        let mut reg = state.0.lock().map_err(err)?;
+        for p in &paths {
+            if Path::new(p).is_dir() {
+                folders.push(p.clone());
+            } else {
+                files.push(reg.link(Path::new(p)).map_err(err)?);
+            }
+        }
+    }
+    let n = projs.0.lock().map_err(err)?.add(&id, files, folders).map_err(err)?;
+    sync_refs(&state, &projs)?;
+    Ok(n)
+}
+
+/// Takes files and folders out of a project (the files themselves stay where they are).
+#[tauri::command]
+async fn project_remove(state: State<'_, Index>, projs: State<'_, Projs>, id: String, paths: Vec<String>) -> CmdResult<usize> {
+    let file_ids: Vec<String> = {
+        let reg = state.0.lock().map_err(err)?;
+        paths.iter().filter_map(|p| reg.get(Path::new(p)).map(|r| r.id.clone())).collect()
+    };
+    let n = projs.0.lock().map_err(err)?.remove(&id, &file_ids, &paths).map_err(err)?;
+    sync_refs(&state, &projs)?;
+    Ok(n)
+}
+
+/// Everything in a project: its single files (where they are now) and the content of its folders.
+#[tauri::command]
+async fn project_entries(state: State<'_, Index>, projs: State<'_, Projs>, id: String) -> CmdResult<Vec<Entry>> {
+    let p = projs.0.lock().map_err(err)?.get(&id).map_err(err)?.clone();
+    let mut out: Vec<Entry> = vec![];
+    {
+        let reg = state.0.lock().map_err(err)?;
+        for f in &p.files {
+            if let Some(e) = reg.locate(f).and_then(|path| fsops::make_entry(&path).ok()) {
+                out.push(e);
+            }
+        }
+    }
+    for d in &p.folders {
+        out.extend(fsops::walk(Path::new(d), 12, false, 20_000));
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|e| seen.insert(e.path.clone()));
+    decorated(&state, out)
 }
 
 #[tauri::command]
@@ -274,10 +364,10 @@ fn tw_plugins() -> Vec<(String, String)> {
 
 /// Two-way sync of one wiki; maps changed from the wiki are refreshed in the index too.
 #[tauri::command]
-async fn tw_sync(state: State<'_, Index>, w: State<'_, Wikis>, name: String) -> CmdResult<tw::SyncReport> {
+async fn tw_sync(state: State<'_, Index>, projs: State<'_, Projs>, w: State<'_, Wikis>, name: String) -> CmdResult<tw::SyncReport> {
     let rep = w.0.lock().map_err(err)?.sync(&name).map_err(err)?;
     if !rep.maps.is_empty() {
-        sync_refs(&state)?;
+        sync_refs(&state, &projs)?;
     }
     Ok(rep)
 }
@@ -320,9 +410,10 @@ async fn media_info(paths: Vec<String>) -> CmdResult<Vec<MediaInfo>> {
 }
 
 #[tauri::command]
-async fn rename(state: State<'_, Index>, path: String, new_name: String) -> CmdResult<Entry> {
+async fn rename(state: State<'_, Index>, projs: State<'_, Projs>, path: String, new_name: String) -> CmdResult<Entry> {
     let dest = fsops::rename(Path::new(&path), &new_name)?;
     state.0.lock().map_err(err)?.moved(Path::new(&path), &dest).map_err(err)?;
+    projs.0.lock().map_err(err)?.moved(Path::new(&path), &dest).map_err(err)?;
     let e = fsops::make_entry(&dest).map_err(err)?;
     Ok(decorated(&state, vec![e])?.remove(0))
 }
@@ -387,7 +478,11 @@ pub fn run() {
         .manage(Watcher::default())
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            app.manage(Index(Mutex::new(Registry::open(&dir)?)));
+            let reg = Registry::open(&dir)?;
+            // Folders that were projects before projects became free collections.
+            let legacy = || reg.infos().into_iter().filter_map(|i| Some((i.name, i.root?))).collect();
+            app.manage(Projs(Mutex::new(projects::Projects::open(&dir, legacy)?)));
+            app.manage(Index(Mutex::new(reg)));
             app.manage(Wikis(Mutex::new(tw::Store::open(&dir)?)));
             // Repair on start, then every 10 minutes (catches changes outside the watched folder).
             let handle = app.handle().clone();
@@ -423,6 +518,13 @@ pub fn run() {
             delete_map,
             link_files,
             locate_files,
+            projects,
+            create_project,
+            update_project,
+            delete_project,
+            project_add,
+            project_remove,
+            project_entries,
             tw_bags,
             tw_put_bag,
             tw_delete_bag,

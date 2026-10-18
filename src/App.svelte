@@ -5,6 +5,7 @@
   import { isMac, isToggleKey } from './lib/platform';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Toolbar from './lib/components/Toolbar.svelte';
+  import SidePane from './lib/components/SidePane.svelte';
   import Canvas from './lib/components/Canvas.svelte';
   import Tray from './lib/components/Tray.svelte';
   import DropBar from './lib/components/DropBar.svelte';
@@ -62,7 +63,9 @@
       if (sel.length === 1) app.renaming = sel[0].path;
       e.preventDefault();
     } else if ((isMac && mod && e.key === 'Backspace') || (!isMac && e.key === 'Delete')) {
-      app.trash(sel);
+      // In a project, Entf takes files out of the project; they stay on disk.
+      if (app.project) app.removeFromProject(sel);
+      else app.trash(sel);
       e.preventDefault();
     } else if (mod && e.key.toLowerCase() === 'a') {
       app.selectAll();
@@ -95,7 +98,10 @@
   <Sidebar />
   <main>
     <Toolbar bind:this={toolbar} {accent} />
-    {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
+    <div class="work">
+      {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
+      {#if app.pane}<SidePane />{/if}
+    </div>
     <Tray onTag={() => (tagSource = 'staging')} />
   </main>
 
@@ -123,5 +129,14 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+  }
+  .work {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .work > :global(:first-child) {
+    flex: 1;
+    min-width: 0;
   }
 </style>

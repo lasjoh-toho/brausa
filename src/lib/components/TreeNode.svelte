@@ -13,7 +13,7 @@
   const open = $derived(app.expanded.has(entry.path));
   const kids = $derived(app.children.get(entry.path));
   const isHit = $derived(drag.active && drag.hit?.kind === 'folder' && drag.hit.path === entry.path);
-  const current = $derived(app.cwd === entry.path);
+  const current = $derived(!app.project && app.cwd === entry.path);
   const leafKnown = $derived(kids !== undefined && kids.length === 0);
 </script>
 

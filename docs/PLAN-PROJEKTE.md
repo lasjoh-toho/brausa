@@ -348,7 +348,21 @@ Reihenfolge-Empfehlung: **A vor B.** Maps verweisen auf Dateien, und das ist
 nur mit stabilen Index-IDs robust. E kann nach B parallel beginnen, weil das
 Format früh feststeht.
 
-## 5. Entscheidungen (17.10.2026)
+## 5. Entscheidungen
+
+### Projekte sind unabhängig von Ordnern (18.10.2026)
+
+Ein Projekt ist eine frei benannte Sammlung, kein Ordner. Es enthält einzelne
+Dateien (über ihre Index-ID, damit sie Verschieben und Umbenennen überleben)
+und ganze Ordner (live: alles darin gehört dazu). Dateien aus mehreren
+Ordnern kommen so in einem Projekt zusammen, ohne verschoben zu werden.
+Gespeichert in `<Programmdaten>/projects.json`, die Maps eines Projekts in
+`<Programmdaten>/projects/<id>/.brausa/maps/`. Ordner, die vorher Projekte
+waren, werden beim ersten Start zu Projekten mit diesem Ordner; ihre Maps
+bleiben, wo sie sind. Der Index pro Ordner (`.brausa/meta.jsonl`) bleibt als
+Speicher für Tags und Farben bestehen, ist aber kein Projekt mehr.
+
+### Ältere Entscheidungen (17.10.2026)
 
 1. **Bibliotheken:** Jedes Projekt ist eine eigene Bibliothek (eigener Ordner
    mit `.brausa/`). Zusätzlich gibt es einen **globalen Überblick** über alle

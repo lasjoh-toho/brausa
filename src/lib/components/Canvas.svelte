@@ -102,7 +102,7 @@
     {/each}
     {#if !app.visible.length && !app.loading}
       <p class="empty">
-        {app.search ? 'Nichts gefunden.' : 'Dieser Ordner ist leer.'}
+        {app.search ? 'Nichts gefunden.' : app.project ? 'Das Projekt ist noch leer. Dateien und Ordner von überall hierher oder auf das Projekt in der Seitenleiste ziehen; sie bleiben, wo sie sind.' : 'Dieser Ordner ist leer.'}
         {#if !app.recursive}<button class="btn" onclick={() => app.setRecursive(true)}>Unterordner als Stream zeigen</button>{/if}
       </p>
     {/if}

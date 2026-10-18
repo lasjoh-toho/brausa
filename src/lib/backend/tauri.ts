@@ -6,6 +6,7 @@ import type {
   Backend,
   IndexReport,
   LibraryInfo,
+  ProjectInfo,
   MapInfo,
   MediaInfo,
   TransferResult,
@@ -132,6 +133,35 @@ export class TauriBackend implements Backend {
 
   removeLibrary(root: string) {
     return invoke<void>('remove_library', { root });
+  }
+
+  projects() {
+    return invoke<ProjectInfo[]>('projects');
+  }
+
+  async createProject(name: string) {
+    const p = await invoke<{ id: string }>('create_project', { name });
+    return (await this.projects()).find((x) => x.id === p.id)!;
+  }
+
+  updateProject(id: string, patch: { name?: string; color?: string | null }) {
+    return invoke<void>('update_project', { id, name: patch.name ?? null, color: 'color' in patch ? patch.color : undefined });
+  }
+
+  deleteProject(id: string) {
+    return invoke<void>('delete_project', { id });
+  }
+
+  addToProject(id: string, paths: string[]) {
+    return invoke<number>('project_add', { id, paths });
+  }
+
+  removeFromProject(id: string, paths: string[]) {
+    return invoke<number>('project_remove', { id, paths });
+  }
+
+  projectEntries(id: string) {
+    return invoke<Entry[]>('project_entries', { id });
   }
 
   onIndexReport(cb: (r: IndexReport) => void) {

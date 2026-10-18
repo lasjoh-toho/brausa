@@ -24,11 +24,9 @@ class WikiState {
     try {
       [this.recipes, this.bags] = await Promise.all([app.backend.wikiRecipes(), app.backend.wikiBags()]);
       const perProject = await Promise.all(
-        app.libraries
-          .filter((l) => l.root)
-          .map(async (l) =>
-            (await app.backend.listMaps(l.root!).catch(() => [])).map((m) => ({ bag: `@map:${l.root}|${m.id}`, title: m.title, project: l.name }))
-          )
+        app.projects.map(async (p) =>
+          (await app.backend.listMaps(p.root).catch(() => [])).map((m) => ({ bag: `@map:${p.root}|${m.id}`, title: m.title, project: p.name }))
+        )
       );
       this.maps = perProject.flat();
       this.overlays = await app.backend.wikiOverlays();

@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Entry } from '../core/types';
+  import type { ProjectInfo } from '../backend/types';
+  import { basename } from '../core/paths';
   import { app } from '../state/app.svelte';
   import { drag } from '../state/drag.svelte';
   import { board, READABLE } from '../state/board.svelte';
@@ -11,7 +13,7 @@
    * "Bausteine": the project's files and folders, to drag onto the map
    * (or to drop a card on, which links the card to that file).
    */
-  let { root }: { root: string } = $props();
+  let { project }: { project: ProjectInfo } = $props();
 
   let files = $state<Entry[]>([]);
   let dirs = $state<Entry[]>([]);
@@ -19,16 +21,21 @@
   let loading = $state(false);
 
   $effect(() => {
-    const r = root;
+    const id = project.id;
+    void app.fsVersion;
     loading = true;
-    Promise.all([app.backend.walk(r, { limit: 5000 }), app.backend.listDir(r)])
-      .then(([f, d]) => {
-        if (r !== root) return;
-        files = f;
-        dirs = d.filter((e) => e.kind === 'dir');
+    app.backend
+      .projectEntries(id)
+      .then((f) => {
+        if (id !== project.id) return;
+        files = f.filter((e) => e.kind === 'file');
       })
       .catch((e) => app.toast(String(e), true))
       .finally(() => (loading = false));
+  });
+  // The project's folders, to drag onto the map as a whole.
+  $effect(() => {
+    dirs = project.folders.map((path) => ({ path, name: basename(path), ext: '', kind: 'dir', size: 0, mtime: 0, ctime: 0, tags: [] }));
   });
 
   const shown = $derived(filterEntries(files, { search: q, sort: 'mtime', desc: true }).slice(0, 300));
