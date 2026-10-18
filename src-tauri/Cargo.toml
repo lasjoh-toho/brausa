@@ -1,6 +1,6 @@
 [package]
 name = "brausa"
-version = "0.6.0"
+version = "0.7.0"
 description = "Plattformunabhängiger visueller Datei-Browser"
 edition = "2021"
 license = "MIT"
@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset"] }
+tauri = { version = "2", features = ["protocol-asset", "unstable"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 walkdir = "2"
@@ -26,6 +26,11 @@ tauri-plugin-opener = "2"
 file-id = "0.2"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 notify-debouncer-mini = "0.7"
+tiny_http = "0.12"
+mime_guess = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
 
 # Image decoding is painfully slow unoptimised; keep dependencies fast in dev builds.
 [profile.dev.package."*"]
@@ -33,3 +38,7 @@ opt-level = 2
 
 [dev-dependencies]
 tempfile = "3"
+
+# Linux: the web panel's webview is laid over brausa in a GtkOverlay (see web.rs).
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"

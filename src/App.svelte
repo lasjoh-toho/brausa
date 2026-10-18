@@ -6,6 +6,8 @@
   import Sidebar from './lib/components/Sidebar.svelte';
   import Toolbar from './lib/components/Toolbar.svelte';
   import SidePane from './lib/components/SidePane.svelte';
+  import WebPane from './lib/components/WebPane.svelte';
+  import { web } from './lib/state/web.svelte';
   import Canvas from './lib/components/Canvas.svelte';
   import Tray from './lib/components/Tray.svelte';
   import DropBar from './lib/components/DropBar.svelte';
@@ -101,6 +103,7 @@
     <div class="work">
       {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
       {#if app.pane}<SidePane />{/if}
+      {#if web.open}<WebPane />{/if}
     </div>
     <Tray onTag={() => (tagSource = 'staging')} />
   </main>

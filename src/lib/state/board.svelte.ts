@@ -178,6 +178,8 @@ class BoardState {
   }
 
   async openRef(r: CardRef) {
+    // Web pages open in the web panel (loaded lazily to keep this module free of it).
+    if (r.kind === 'url' && r.href) return (await import('./web.svelte')).web.go(r.href);
     if (!r.path || r.missing) return app.toast(`„${r.name ?? 'Datei'}“ wurde nicht gefunden`, true);
     if (!r.dir && READABLE.has(r.ext ?? '')) return this.openReader(r);
     if (r.dir) {

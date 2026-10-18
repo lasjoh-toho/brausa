@@ -291,6 +291,10 @@ export class DemoBackend implements Backend {
     return null;
   }
 
+  async localUrl() {
+    return null;
+  }
+
   async fileData(path: string) {
     if (!this.find(path)) throw new Error('Nicht gefunden');
     if (extOf(path) !== 'pdf') throw new Error('Demo-Modus: nur PDFs haben Inhalt');
@@ -531,6 +535,30 @@ export class DemoBackend implements Backend {
         return [id, p && this.find(p) ? p : null];
       })
     );
+  }
+
+  // The web panel is a native webview: only in the desktop app.
+  private noWeb(): never {
+    throw new Error('Das Web-Fenster gibt es nur in der Desktop-App.');
+  }
+  async webOpen() {
+    this.noWeb();
+  }
+  async webPlace() {}
+  async webClose() {}
+  async webGo() {}
+  async webSelection(): Promise<{ text: string; url: string; title: string }> {
+    this.noWeb();
+  }
+  async webSavePage(): Promise<string> {
+    this.noWeb();
+  }
+  async webTarget() {}
+  async webServe(): Promise<string> {
+    this.noWeb();
+  }
+  async onWeb() {
+    return () => {};
   }
 
   // TiddlyWiki: bags and recipes in memory; syncing needs the real app (files on disk).

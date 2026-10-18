@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { web } from '../state/web.svelte';
   import { app } from '../state/app.svelte';
   import { isMac, modLabel } from '../platform';
   import Icon from './Icon.svelte';
@@ -18,6 +19,7 @@
       ? [
           { label: 'Öffnen', icon: 'open', key: `${modLabel}O`, run: () => targets.forEach((t) => app.open(t)) },
           ...(one?.kind === 'file' ? [{ label: 'Vorschau', icon: 'eye', key: 'Leertaste', run: onPreview }] : []),
+          ...(one && (one.ext === 'html' || one.ext === 'htm') ? [{ label: 'Im Web-Fenster öffnen', icon: 'globe', run: () => web.openLocal(one.path) }] : []),
           ...(one ? [{ label: isMac ? 'Im Finder zeigen' : 'Im Dateimanager zeigen', icon: 'folder', run: () => app.reveal(one) }] : []),
           null,
           ...(one ? [{ label: 'Umbenennen', icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.renaming = one.path) }] : []),

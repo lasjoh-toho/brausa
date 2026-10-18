@@ -1,12 +1,15 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
+import { inArchive } from '../core/archive';
 import type { ProjectMap } from '../core/map';
 import type {
   Backend,
   IndexReport,
   LibraryInfo,
   ProjectInfo,
+  WebBounds,
+  WebEvent,
   MapInfo,
   MediaInfo,
   TransferResult,
@@ -77,7 +80,12 @@ export class TauriBackend implements Backend {
   }
 
   fileUrl(entry: Entry) {
-    return WEB_IMAGE.has(entry.ext) ? convertFileSrc(entry.path) : null;
+    // Inside an archive the preview uses a large thumbnail (unpacked by the core).
+    return WEB_IMAGE.has(entry.ext) && !inArchive(entry.path) ? convertFileSrc(entry.path) : null;
+  }
+
+  async localUrl(path: string) {
+    return convertFileSrc(inArchive(path) ? await invoke<string>('archive_extract', { path }) : path);
   }
 
   assetUrl(path: string) {
@@ -86,7 +94,7 @@ export class TauriBackend implements Backend {
 
   // Files are read through the asset protocol (scope: all files), like thumbnails.
   async fileData(path: string) {
-    const r = await fetch(convertFileSrc(path));
+    const r = await fetch(await this.localUrl(path));
     if (!r.ok) throw new Error(`„${path}“ ließ sich nicht lesen (${r.status})`);
     return r.arrayBuffer();
   }
@@ -162,6 +170,47 @@ export class TauriBackend implements Backend {
 
   projectEntries(id: string) {
     return invoke<Entry[]>('project_entries', { id });
+  }
+
+  webOpen(url: string, bounds: WebBounds) {
+    return invoke<void>('web_open', { url, bounds });
+  }
+
+  webPlace(bounds: WebBounds, visible: boolean) {
+    return invoke<void>('web_place', { bounds, visible });
+  }
+
+  webClose() {
+    return invoke<void>('web_close');
+  }
+
+  webGo(how: 'back' | 'forward' | 'reload') {
+    return invoke<void>('web_go', { how });
+  }
+
+  webSelection() {
+    return invoke<{ text: string; url: string; title: string }>('web_selection');
+  }
+
+  webSavePage(dir: string) {
+    return invoke<string>('web_save_page', { dir });
+  }
+
+  webTarget(dir: string | null) {
+    return invoke<void>('web_target', { dir });
+  }
+
+  webServe(root: string, scripts: boolean) {
+    return invoke<string>('web_serve', { root, scripts });
+  }
+
+  async onWeb(cb: (e: WebEvent) => void) {
+    const offs = await Promise.all([
+      listen<{ url: string; loading: boolean }>('web-nav', (ev) => cb({ kind: 'nav', ...ev.payload })),
+      listen<string>('web-title', (ev) => cb({ kind: 'title', title: ev.payload })),
+      listen<{ url: string; path: string | null; success: boolean }>('web-download', (ev) => cb({ kind: 'download', ...ev.payload }))
+    ]);
+    return () => offs.forEach((off) => off());
   }
 
   onIndexReport(cb: (r: IndexReport) => void) {

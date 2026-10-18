@@ -14,6 +14,7 @@ import type { Entry } from '../core/types';
 import { isWithin, basename } from '../core/paths';
 import { UNTAGGED } from '../core/views';
 import { isCopyKey } from '../platform';
+import { inArchive } from '../core/archive';
 import { app } from './app.svelte';
 
 export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board' | 'project';
@@ -70,9 +71,9 @@ class DragController {
     const name = h.path ? basename(h.path) : '';
     switch (h.kind) {
       case 'folder':
-        return h.zone === 'attr' ? `Attribute von „${name}“ zuweisen` : `${this.copy ? 'Kopieren' : 'Verschieben'} nach „${name}“`;
+        return h.zone === 'attr' ? `Attribute von „${name}“ zuweisen` : `${this.verb()} nach „${name}“`;
       case 'crumb':
-        return `${this.copy ? 'Kopieren' : 'Verschieben'} nach „${name}“`;
+        return `${this.verb()} nach „${name}“`;
       case 'tray':
         return 'In die Ablage legen';
       case 'project':
@@ -224,6 +225,11 @@ class DragController {
     const edge = 36;
     if (y < r.top + edge) sc.scrollTop -= 14;
     else if (y > r.bottom - edge) sc.scrollTop += 14;
+  }
+
+  /** Out of an archive is unpacking; otherwise ⌥/Ctrl decides between copy and move. */
+  private verb() {
+    return this.items.some((i) => inArchive(i.path)) ? 'Auspacken' : this.copy ? 'Kopieren' : 'Verschieben';
   }
 
   private isFolderFunnel() {

@@ -28,7 +28,13 @@
   const src = $derived(app.backend.fileUrl(e) ?? big ?? app.thumbOf(e));
   const cat = $derived(category(e.ext));
   // Media plays straight from the file; when the system cannot play it, offer the default app.
-  const media = $derived(cat === 'video' || cat === 'audio' ? app.backend.assetUrl(e.path) : null);
+  let media = $state<string | null>(null);
+  $effect(() => {
+    const entry = e;
+    media = null;
+    if (category(entry.ext) === 'video' || category(entry.ext) === 'audio')
+      app.backend.localUrl(entry.path).then((u) => entry === e && (media = u)).catch(() => (mediaFailed = true));
+  });
   let mediaFailed = $state(false);
   $effect(() => {
     void e;

@@ -25,6 +25,18 @@ export interface LibraryInfo {
   orphans: number;
 }
 
+export interface WebBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export type WebEvent =
+  | { kind: 'nav'; url: string; loading: boolean }
+  | { kind: 'title'; title: string }
+  | { kind: 'download'; url: string; path: string | null; success: boolean };
+
 /** A project: a named collection of files and folders from anywhere (not a folder). */
 export interface ProjectInfo {
   id: string;
@@ -130,6 +142,8 @@ export interface Backend {
   thumbnail(entry: Entry, size: number): Promise<string | null>;
   /** URL for showing the original file in the webview (preview), or null. */
   fileUrl(entry: Entry): string | null;
+  /** URL for a file to show in the webview; files inside archives are unpacked first. Null in the demo. */
+  localUrl(path: string): Promise<string | null>;
   /** URL for any local file (images inside HTML documents), or null. */
   assetUrl(path: string): string | null;
   /** Raw bytes (PDF reader) and text (HTML/Markdown reader) of a file. */
@@ -174,6 +188,24 @@ export interface Backend {
   linkFiles(paths: string[]): Promise<{ path: string; id: string }[]>;
   /** Current path per id, null when the file is missing. */
   locateFiles(ids: string[]): Promise<Record<string, string | null>>;
+
+  /**
+   * Web panel: a separate webview over the area `b` (CSS px of the window),
+   * with its own cookies and no access to brausa. Desktop app only.
+   */
+  webOpen(url: string, b: WebBounds): Promise<void>;
+  webPlace(b: WebBounds, visible: boolean): Promise<void>;
+  webClose(): Promise<void>;
+  webGo(how: 'back' | 'forward' | 'reload'): Promise<void>;
+  /** Marked text of the page, with its address and title. */
+  webSelection(): Promise<{ text: string; url: string; title: string }>;
+  /** Saves the page as shown into `dir`; returns the file. */
+  webSavePage(dir: string): Promise<string>;
+  /** Folder for downloads (null: the system's Downloads folder). */
+  webTarget(dir: string | null): Promise<void>;
+  /** Serves a local folder as a website on this computer only; returns its address. */
+  webServe(root: string, scripts: boolean): Promise<string>;
+  onWeb(cb: (e: WebEvent) => void): Promise<() => void>;
 
   /** TiddlyWiki: bags, recipes and two-way sync (see docs/PLAN-PROJEKTE.md §3). */
   wikiBags(): Promise<WikiBag[]>;
