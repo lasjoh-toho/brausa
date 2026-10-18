@@ -65,6 +65,9 @@ jobs:
           name: brausa ${{ steps.tag.outputs.tag }}
           prerelease: ${{ startsWith(steps.tag.outputs.tag, 'v0.') }}
           body_path: docs/RELEASE_NOTES.md
+          files: |
+            packaging/LIESMICH-macOS.txt
+            packaging/LIESMICH-Windows.txt
 
   # Installer for all three platforms (also on PRs, so macOS/Windows breakage shows up before merge).
   bundle:
@@ -99,6 +102,28 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf
       - run: npm ci
       - run: npm run tauri build -- ${{ matrix.args }}
+      # Tauri's DMG has no room for extra files, so rebuild it with the app, the
+      # Applications link and the read-me (how to allow the unsigned app, disclaimer).
+      - if: matrix.os == 'macos-latest'
+        name: DMG mit LIESMICH
+        run: |
+          b=src-tauri/target/universal-apple-darwin/release/bundle
+          dmg=$(ls "$b"/dmg/*.dmg)
+          stage=$(mktemp -d)/brausa
+          mkdir -p "$stage"
+          ditto "$b/macos/brausa.app" "$stage/brausa.app"
+          ln -s /Applications "$stage/Applications"
+          cp packaging/LIESMICH-macOS.txt "$stage/LIES MICH.txt"
+          rm "$dmg"
+          for i in 1 2 3; do
+            hdiutil create -volname brausa -srcfolder "$stage" -ov -format UDZO "$dmg" && break
+            sleep 5
+          done
+          test -f "$dmg"
+          hdiutil attach -nobrowse -readonly "$dmg" -mountpoint /tmp/brausa-dmg
+          ls -la /tmp/brausa-dmg
+          codesign -dv /tmp/brausa-dmg/brausa.app
+          hdiutil detach /tmp/brausa-dmg
       - uses: actions/upload-artifact@v4
         with:
           name: brausa-${{ matrix.os }}

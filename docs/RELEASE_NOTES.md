@@ -1,11 +1,13 @@
-**Vorab-Version (Preview).** brausa ist noch früh in der Entwicklung. Bitte erst mit Testordnern ausprobieren.
+> **Experimentelle Software.** brausa ist eine frühe Vorab-Version und wurde nach bestem Wissen und Gewissen erstellt. Trotzdem kann sie Fehler enthalten und arbeitet direkt mit Ihren Dateien. Die Nutzung erfolgt auf eigene Gefahr; soweit gesetzlich zulässig, wird keine Verantwortung oder Haftung übernommen. Bitte vorher eine Datensicherung anlegen und zuerst mit Testordnern ausprobieren.
 
 ## Installation
 
-| System | Datei | Hinweis |
+brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die Schritte stehen ausführlich in **LIESMICH-macOS.txt** und **LIESMICH-Windows.txt** (unten bei den Dateien, außerdem im DMG bzw. im Windows-Installer).
+
+| System | Datei | Freigeben |
 |---|---|---|
-| macOS (Apple Silicon und Intel) | `brausa_*_universal.dmg` | Unsigniert: beim ersten Start Rechtsklick → **Öffnen**, oder Systemeinstellungen → Datenschutz & Sicherheit → **Trotzdem öffnen** |
-| Windows | `brausa_*_x64-setup.exe` oder `.msi` | Unsigniert: SmartScreen → **Weitere Informationen** → **Trotzdem ausführen** |
+| macOS (Apple Silicon und Intel) | `brausa_*_universal.dmg` | macOS 15+: Starten, „Fertig“, dann Systemeinstellungen → Datenschutz & Sicherheit → **Dennoch öffnen**. macOS 14 und älter: ctrl-Klick → **Öffnen** |
+| Windows | `brausa_*_x64-setup.exe` oder `.msi` | SmartScreen → **Weitere Informationen** → **Trotzdem ausführen** |
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ## Was drin ist

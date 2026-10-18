@@ -1,0 +1,6 @@
+{
+  "bundle": {
+    "licenseFile": "../packaging/HINWEIS-Windows.rtf",
+    "resources": { "../packaging/LIESMICH-Windows.txt": "LIESMICH.txt" }
+  }
+}
