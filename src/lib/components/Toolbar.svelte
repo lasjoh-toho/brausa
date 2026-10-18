@@ -7,6 +7,7 @@
   import { modLabel } from '../platform';
   import Icon from './Icon.svelte';
   import { CATEGORIES } from '../core/format';
+  import { web } from '../state/web.svelte';
 
   let { accent = null }: { accent?: { color: string; light: boolean } | null } = $props();
 
@@ -139,6 +140,9 @@
     />
   {/if}
 
+  <button class="btn icon" class:on={web.open} onclick={() => web.toggle()} title="Web-Fenster: Seiten aus dem Internet und lokale Webseiten, abgeschottet" aria-label="Web-Fenster">
+    <Icon name="globe" size={15} />
+  </button>
   <button class="btn icon" class:on={!!app.pane} onclick={() => app.setPane(app.pane ? null : app.cwd)} title="Zweites Panel: zwei Ordner nebeneinander, Dateien hin und her ziehen" aria-label="Zweites Panel">
     <Icon name="split" size={15} />
   </button>

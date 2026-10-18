@@ -7,6 +7,8 @@ import type {
   IndexReport,
   LibraryInfo,
   ProjectInfo,
+  WebBounds,
+  WebEvent,
   MapInfo,
   MediaInfo,
   TransferResult,
@@ -162,6 +164,47 @@ export class TauriBackend implements Backend {
 
   projectEntries(id: string) {
     return invoke<Entry[]>('project_entries', { id });
+  }
+
+  webOpen(url: string, bounds: WebBounds) {
+    return invoke<void>('web_open', { url, bounds });
+  }
+
+  webPlace(bounds: WebBounds, visible: boolean) {
+    return invoke<void>('web_place', { bounds, visible });
+  }
+
+  webClose() {
+    return invoke<void>('web_close');
+  }
+
+  webGo(how: 'back' | 'forward' | 'reload') {
+    return invoke<void>('web_go', { how });
+  }
+
+  webSelection() {
+    return invoke<{ text: string; url: string; title: string }>('web_selection');
+  }
+
+  webSavePage(dir: string) {
+    return invoke<string>('web_save_page', { dir });
+  }
+
+  webTarget(dir: string | null) {
+    return invoke<void>('web_target', { dir });
+  }
+
+  webServe(root: string, scripts: boolean) {
+    return invoke<string>('web_serve', { root, scripts });
+  }
+
+  async onWeb(cb: (e: WebEvent) => void) {
+    const offs = await Promise.all([
+      listen<{ url: string; loading: boolean }>('web-nav', (ev) => cb({ kind: 'nav', ...ev.payload })),
+      listen<string>('web-title', (ev) => cb({ kind: 'title', title: ev.payload })),
+      listen<{ url: string; path: string | null; success: boolean }>('web-download', (ev) => cb({ kind: 'download', ...ev.payload }))
+    ]);
+    return () => offs.forEach((off) => off());
   }
 
   onIndexReport(cb: (r: IndexReport) => void) {

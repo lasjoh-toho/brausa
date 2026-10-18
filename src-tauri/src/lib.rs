@@ -5,6 +5,7 @@ mod tw;
 mod media;
 mod meta;
 mod projects;
+mod web;
 
 use fsops::{Entry, Mode, TransferResult};
 use library::{LibraryInfo, Registry, Report};
@@ -317,6 +318,59 @@ async fn project_entries(state: State<'_, Index>, projs: State<'_, Projs>, id: S
 }
 
 #[tauri::command]
+async fn web_open(app: AppHandle, web: State<'_, web::Web>, url: String, bounds: web::Bounds) -> CmdResult<()> {
+    web.open(&app, &url, bounds)
+}
+
+#[tauri::command]
+async fn web_place(app: AppHandle, web: State<'_, web::Web>, bounds: web::Bounds, visible: bool) -> CmdResult<()> {
+    web.place(&app, bounds, visible)
+}
+
+#[tauri::command]
+async fn web_close(app: AppHandle, web: State<'_, web::Web>) -> CmdResult<()> {
+    web.close(&app)
+}
+
+/// Back, forward, reload: run in the page itself.
+#[tauri::command]
+async fn web_go(app: AppHandle, web: State<'_, web::Web>, how: String) -> CmdResult<()> {
+    let js = match how.as_str() {
+        "back" => "history.back()",
+        "forward" => "history.forward()",
+        "reload" => "location.reload()",
+        _ => return Err(format!("Unbekannt: {how}")),
+    };
+    web.eval(&app, js).map(|_| ())
+}
+
+/// Text marked in the page, with its address and title (for snippets on the map).
+#[tauri::command]
+async fn web_selection(app: AppHandle, web: State<'_, web::Web>) -> CmdResult<serde_json::Value> {
+    let raw = web.eval(&app, "JSON.stringify({text: String(getSelection()), url: location.href, title: document.title})")?;
+    let inner: String = serde_json::from_str(&raw).map_err(err)?;
+    serde_json::from_str(&inner).map_err(err)
+}
+
+#[tauri::command]
+async fn web_save_page(app: AppHandle, web: State<'_, web::Web>, dir: String) -> CmdResult<String> {
+    web.save_page(&app, Path::new(&dir)).map(|p| p.to_string_lossy().to_string())
+}
+
+/// Where downloads from the web panel go (null: the system's Downloads folder).
+#[tauri::command]
+async fn web_target(web: State<'_, web::Web>, dir: Option<String>) -> CmdResult<()> {
+    *web.target.lock().map_err(err)? = dir.map(PathBuf::from);
+    Ok(())
+}
+
+/// Serves a local folder as a website (only on this computer); returns its address.
+#[tauri::command]
+async fn web_serve(web: State<'_, web::Web>, root: String, scripts: bool) -> CmdResult<String> {
+    web.serve(Path::new(&root), scripts)
+}
+
+#[tauri::command]
 async fn tw_bags(w: State<'_, Wikis>) -> CmdResult<Vec<tw::BagInfo>> {
     Ok(w.0.lock().map_err(err)?.bags())
 }
@@ -476,7 +530,25 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Watcher::default())
+        .manage(web::Web::default())
         .setup(|app| {
+            // The main window holds two webviews (brausa and the web panel), so it is
+            // built here: a plain window plus brausa's webview filling it.
+            let window = tauri::window::WindowBuilder::new(app, "main")
+                .title("brausa")
+                .inner_size(1360.0, 860.0)
+                .min_inner_size(800.0, 500.0);
+            #[cfg(target_os = "macos")]
+            let window = window.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
+            let window = window.build()?;
+            let size = window.inner_size()?.to_logical::<f64>(window.scale_factor()?);
+            window.add_child(
+                tauri::webview::WebviewBuilder::new("main", tauri::WebviewUrl::App("index.html".into())).auto_resize(),
+                tauri::LogicalPosition::new(0.0, 0.0),
+                size,
+            )?;
+            #[cfg(target_os = "linux")]
+            web::prepare_window(&window)?;
             let dir = app.path().app_data_dir()?;
             let reg = Registry::open(&dir)?;
             // Folders that were projects before projects became free collections.
@@ -525,6 +597,14 @@ pub fn run() {
             project_add,
             project_remove,
             project_entries,
+            web_open,
+            web_place,
+            web_close,
+            web_go,
+            web_selection,
+            web_save_page,
+            web_target,
+            web_serve,
             tw_bags,
             tw_put_bag,
             tw_delete_bag,

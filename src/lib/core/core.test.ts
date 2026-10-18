@@ -255,3 +255,12 @@ describe('calendar frames', () => {
     expect(unionRange(a, b)).toEqual({ field: 'mtime', from: 10, to: 30, weekdays: [0, 6] });
   });
 });
+
+describe('web panel addresses', () => {
+  it('adds https:// to addresses and searches for words', async () => {
+    const { toUrl } = await import('./web');
+    expect(toUrl('example.org/a')).toBe('https://example.org/a');
+    expect(toUrl('http://x.de')).toBe('http://x.de');
+    expect(toUrl('tiddlywiki pinboard')).toBe('https://duckduckgo.com/?q=tiddlywiki%20pinboard');
+  });
+});

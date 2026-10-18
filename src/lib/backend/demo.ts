@@ -533,6 +533,30 @@ export class DemoBackend implements Backend {
     );
   }
 
+  // The web panel is a native webview: only in the desktop app.
+  private noWeb(): never {
+    throw new Error('Das Web-Fenster gibt es nur in der Desktop-App.');
+  }
+  async webOpen() {
+    this.noWeb();
+  }
+  async webPlace() {}
+  async webClose() {}
+  async webGo() {}
+  async webSelection(): Promise<{ text: string; url: string; title: string }> {
+    this.noWeb();
+  }
+  async webSavePage(): Promise<string> {
+    this.noWeb();
+  }
+  async webTarget() {}
+  async webServe(): Promise<string> {
+    this.noWeb();
+  }
+  async onWeb() {
+    return () => {};
+  }
+
   // TiddlyWiki: bags and recipes in memory; syncing needs the real app (files on disk).
   private bags: WikiBag[] = [
     { name: 'glossar', description: 'Begriffe für alle Wikis', readonly: false, tiddlers: 12 },
