@@ -224,7 +224,7 @@ class DragController {
   }
 
   private isFolderFunnel() {
-    return this.items.length === 1 && this.items[0].kind === 'dir';
+    return this.items.length === 1 && this.items[0].kind === 'dir' && this.source !== 'pane';
   }
 }
 
@@ -246,7 +246,7 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         if (source !== 'tray') app.stage(items);
         break;
       case 'canvas': {
-        if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas') {
+        if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas' && source !== 'pane') {
           const dir = items[0].path;
           if (isWithin(dir, app.cwd) && dir !== app.cwd) {
             if (!app.recursive) app.setRecursive(true);

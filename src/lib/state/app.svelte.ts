@@ -81,6 +81,10 @@ class AppState {
   children = new SvelteMap<string, Entry[]>();
 
   preview = $state<{ entry: Entry; from: DOMRect | null } | null>(null);
+  /** Folder shown in the second panel (null: closed). */
+  pane = $state<string | null>(store.get('pane', null));
+  /** Bumped after brausa changed files, so other views (second panel) reload. */
+  fsVersion = $state(0);
   tagBarOpen = $state(false);
   gridConfig = $state<DropGridConfig>(store.get('dropGrid', { cols: 3, rows: 2, cells: [] }));
   gridEditorOpen = $state(false);
@@ -595,7 +599,13 @@ class AppState {
     }
   }
 
+  setPane(path: string | null) {
+    this.pane = path;
+    store.set('pane', path);
+  }
+
   private async afterFsChange() {
+    this.fsVersion++;
     await this.refresh();
     // Reload every open tree branch (cheap; trees are shallow by nature).
     await Promise.all([...this.children.keys()].map((p) => this.loadChildren(p)));

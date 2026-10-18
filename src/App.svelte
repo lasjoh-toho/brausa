@@ -5,6 +5,7 @@
   import { isMac, isToggleKey } from './lib/platform';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Toolbar from './lib/components/Toolbar.svelte';
+  import SidePane from './lib/components/SidePane.svelte';
   import Canvas from './lib/components/Canvas.svelte';
   import Tray from './lib/components/Tray.svelte';
   import DropBar from './lib/components/DropBar.svelte';
@@ -95,7 +96,10 @@
   <Sidebar />
   <main>
     <Toolbar bind:this={toolbar} {accent} />
-    {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
+    <div class="work">
+      {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
+      {#if app.pane}<SidePane />{/if}
+    </div>
     <Tray onTag={() => (tagSource = 'staging')} />
   </main>
 
@@ -123,5 +127,14 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+  }
+  .work {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .work > :global(:first-child) {
+    flex: 1;
+    min-width: 0;
   }
 </style>

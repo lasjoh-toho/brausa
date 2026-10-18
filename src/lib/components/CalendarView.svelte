@@ -37,6 +37,8 @@
   let zoom = $state<CalLevel | null>(null);
   let year = $state<number | null>(null);
   let month = $state(0);
+  /** Year opened below the overview (click on a year), as a day heatmap with weekdays. */
+  let openYear = $state<number | null>(null);
 
   // Pick a sensible starting zoom once data is there: one year if it all fits, else the overview.
   const lvl = $derived<CalLevel>(zoom ?? (years.length > 1 ? 'years' : 'year'));
@@ -142,7 +144,16 @@
     app.setDateField(f);
   }
 
-  const yg = $derived(lvl === 'year' ? yearGrid(y) : []);
+  // The day heatmap is shown at the year level, and below the overview for the opened year.
+  const heatYear = $derived(lvl === 'year' ? y : lvl === 'years' && openYear !== null && years.includes(openYear) ? openYear : null);
+  const yg = $derived(heatYear !== null ? yearGrid(heatYear) : []);
+  /** Files per weekday (Mo … So) in the shown year. */
+  const perWeekday = $derived.by(() => {
+    const sums = Array(7).fill(0);
+    for (const d of yg) sums[d.row] += counts.days.get(d.key) ?? 0;
+    return sums;
+  });
+  const maxWeekday = $derived(Math.max(1, ...perWeekday));
   const ycols = $derived(yg.length ? yg[yg.length - 1].col + 1 : 53);
   const monthStarts = $derived(
     yg.filter((d) => d.key.endsWith('-01')).map((d) => ({ col: d.col, label: MONTHS[new Date(d.date).getMonth()], m: new Date(d.date).getMonth() }))
@@ -154,6 +165,39 @@
     for (const e of cover.values()) app.requestThumb(e);
   });
 </script>
+
+{#snippet heatmap()}
+  <div class="year" style:--cols={ycols}>
+    <div class="months" style:grid-template-columns="repeat({ycols}, 1fr)">
+      {#each monthStarts as ms (ms.m)}
+        <button class="mlabel" style:grid-column="{ms.col + 1} / span 4" onclick={() => ((year = heatYear), (month = ms.m), (zoom = 'month'))}>{ms.label}</button>
+      {/each}
+    </div>
+    <div class="wd">
+      {#each WEEKDAYS as w, i (w)}<span class:we={i > 4}>{w}</span>{/each}
+    </div>
+    <div class="days" style:grid-template-columns="repeat({ycols}, 1fr)">
+      {#each yg as d (d.key)}
+        {@const n = counts.days.get(d.key) ?? 0}
+        <div
+          class="cell l{level(n, maxDay)}"
+          class:we={d.row > 4}
+          class:sel={selected(d.date, d.date + 86400e3)}
+          style:grid-column={d.col + 1}
+          style:grid-row={d.row + 1}
+          data-from={d.date}
+          data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
+          title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}: {n} Dateien"
+        ></div>
+      {/each}
+    </div>
+    <div class="wsum" title="Dateien je Wochentag in {heatYear}">
+      {#each perWeekday as n, i (i)}
+        <span><i style:width="{(n / maxWeekday) * 100}%"></i><em>{n}</em></span>
+      {/each}
+    </div>
+  </div>
+{/snippet}
 
 <div class="cal" role="application" aria-label="Kalender">
   <div class="head">
@@ -197,7 +241,9 @@
         <span></span>
         {#each MONTHS as m (m)}<span class="mlabel">{m}</span>{/each}
         {#each years as yr (yr)}
-          <button class="ylabel" onclick={() => ((year = yr), (zoom = 'year'))}>{yr}</button>
+          <button class="ylabel" class:open={openYear === yr} title="Tage und Wochentage von {yr} zeigen" onclick={() => (openYear = openYear === yr ? null : yr)}>
+            {yr} <Icon name={openYear === yr ? 'chevronDown' : 'chevron'} size={10} />
+          </button>
           {#each MONTHS as _, m (m)}
             {@const [from, to] = monthRange(yr, m)}
             {@const n = counts.months.get(`${yr}-${String(m + 1).padStart(2, '0')}`) ?? 0}
@@ -213,31 +259,18 @@
           {/each}
         {/each}
       </div>
+      {#if heatYear !== null}
+        <div class="opened">
+          <div class="otitle">
+            <b>{heatYear}</b>
+            <button class="btn" onclick={() => ((year = heatYear), (zoom = 'year'))}>Ganz öffnen</button>
+            <button class="btn icon" onclick={() => (openYear = null)} aria-label="Schließen"><Icon name="x" size={12} /></button>
+          </div>
+          {@render heatmap()}
+        </div>
+      {/if}
     {:else if lvl === 'year'}
-      <div class="year" style:--cols={ycols}>
-        <div class="months" style:grid-template-columns="repeat({ycols}, 1fr)">
-          {#each monthStarts as ms (ms.m)}
-            <button class="mlabel" style:grid-column="{ms.col + 1} / span 4" onclick={() => ((month = ms.m), (zoom = 'month'))}>{ms.label}</button>
-          {/each}
-        </div>
-        <div class="wd">
-          {#each WEEKDAYS as w, i (w)}<span>{i % 2 === 0 ? w : ''}</span>{/each}
-        </div>
-        <div class="days" style:grid-template-columns="repeat({ycols}, 1fr)">
-          {#each yg as d (d.key)}
-            {@const n = counts.days.get(d.key) ?? 0}
-            <div
-              class="cell l{level(n, maxDay)}"
-              class:sel={selected(d.date, d.date + 86400e3)}
-              style:grid-column={d.col + 1}
-              style:grid-row={d.row + 1}
-              data-from={d.date}
-              data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
-              title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}: {n} Dateien"
-            ></div>
-          {/each}
-        </div>
-      </div>
+      {@render heatmap()}
     {:else}
       <div class="month">
         {#each WEEKDAYS as w (w)}<span class="wdh">{w}</span>{/each}
@@ -393,9 +426,64 @@
     mix-blend-mode: normal;
   }
 
+  .opened {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+  .otitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .ylabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .ylabel.open {
+    color: var(--accent);
+  }
+  .wd .we {
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .days .cell.we:not(.l1):not(.l2):not(.l3):not(.l4) {
+    background: color-mix(in srgb, var(--bg-sunken) 60%, var(--line));
+  }
+  .wsum {
+    grid-column: 3;
+    grid-row: 2;
+    display: grid;
+    grid-template-rows: repeat(7, 1fr);
+    gap: 3px;
+    width: 64px;
+    font-size: 9px;
+    color: var(--fg-faint);
+  }
+  .wsum span {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .wsum i {
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .wsum em {
+    position: relative;
+    font-style: normal;
+    padding-left: 3px;
+  }
   .year {
     display: grid;
-    grid-template-columns: 22px 1fr;
+    grid-template-columns: 22px 1fr 64px;
     grid-template-rows: auto auto;
     column-gap: 4px;
     row-gap: 4px;

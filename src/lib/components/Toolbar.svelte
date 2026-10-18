@@ -133,6 +133,9 @@
     />
   {/if}
 
+  <button class="btn icon" class:on={!!app.pane} onclick={() => app.setPane(app.pane ? null : app.cwd)} title="Zweites Panel: zwei Ordner nebeneinander, Dateien hin und her ziehen" aria-label="Zweites Panel">
+    <Icon name="split" size={15} />
+  </button>
   <button
     class="btn drop-trigger"
     class:hot={drag.active}
