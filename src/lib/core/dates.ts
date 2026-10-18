@@ -134,6 +134,20 @@ export function yearGrid(y: number): { key: string; date: number; col: number; r
   return out;
 }
 
+/**
+ * Like yearGrid, but one continuous band of weeks from Jan 1 of `y1` to Dec 31
+ * of `y2`, so weeks, frames and scrolling run across the turn of the year.
+ */
+export function bandGrid(y1: number, y2: number): { key: string; date: number; col: number; row: number }[] {
+  const out: { key: string; date: number; col: number; row: number }[] = [];
+  const offset = (new Date(y1, 0, 1).getDay() + 6) % 7; // Monday = 0
+  for (let i = 0, d = new Date(y1, 0, 1); d.getFullYear() <= y2; i++, d = new Date(y1, 0, 1 + i)) {
+    const idx = i + offset;
+    out.push({ key: dayKey(d.getTime()), date: d.getTime(), col: Math.floor(idx / 7), row: idx % 7 });
+  }
+  return out;
+}
+
 /** Month calendar: leading blanks (Monday first) and the days of the month. */
 export function monthGrid(y: number, m: number): { lead: number; days: { key: string; date: number; day: number }[] } {
   const first = new Date(y, m, 1);

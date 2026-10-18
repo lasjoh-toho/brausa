@@ -21,6 +21,7 @@
     monthGrid,
     monthRange,
     yearGrid,
+    bandGrid,
     type CalLevel,
     type DateField
   } from '../core/dates';
@@ -187,9 +188,11 @@
   }
 
   // The day heatmap is shown at the year level, and below the overview for the opened year.
-  const heatYear = $derived(lvl === 'year' ? y : lvl === 'years' && openYear !== null && years.includes(openYear) ? openYear : null);
-  const yg = $derived(heatYear !== null ? yearGrid(heatYear) : []);
-  /** Files per weekday (Mo … So) in the shown year. */
+  // Day heatmap: one year at the year level; below the overview a band across all years.
+  const band = $derived(lvl === 'years' && openYear !== null && years.includes(openYear));
+  const heatYear = $derived(lvl === 'year' ? y : band ? openYear : null);
+  const yg = $derived(lvl === 'year' ? yearGrid(y) : band ? bandGrid(years[years.length - 1], years[0]) : []);
+  /** Files per weekday (Mo … So) in the shown days. */
   const perWeekday = $derived.by(() => {
     const sums = Array(7).fill(0);
     for (const d of yg) sums[d.row] += counts.days.get(d.key) ?? 0;
@@ -197,9 +200,26 @@
   });
   const maxWeekday = $derived(Math.max(1, ...perWeekday));
   const ycols = $derived(yg.length ? yg[yg.length - 1].col + 1 : 53);
+  const cols = $derived(band ? `repeat(${ycols}, 13px)` : `repeat(${ycols}, 1fr)`);
   const monthStarts = $derived(
-    yg.filter((d) => d.key.endsWith('-01')).map((d) => ({ col: d.col, label: MONTHS[new Date(d.date).getMonth()], m: new Date(d.date).getMonth() }))
+    yg
+      .filter((d) => d.key.endsWith('-01'))
+      .map((d) => {
+        const dt = new Date(d.date);
+        return { key: d.key, col: d.col, y: dt.getFullYear(), m: dt.getMonth(), label: MONTHS[dt.getMonth()] + (band && dt.getMonth() === 0 ? ` ${dt.getFullYear()}` : '') };
+      })
   );
+
+  /** Scroll the band so the opened year starts at the left edge. */
+  function toYear(node: HTMLElement, yr: number | null) {
+    const go = (v: number | null) => {
+      const first = yg.find((d) => d.key === `${v}-01-01`);
+      if (first) node.scrollLeft = Math.max(0, first.col * 16 - 8);
+    };
+    requestAnimationFrame(() => go(yr));
+    return { update: go };
+  }
+
   const mg = $derived(lvl === 'month' ? monthGrid(y, month) : { lead: 0, days: [] });
 
   $effect(() => {
@@ -209,35 +229,37 @@
 </script>
 
 {#snippet heatmap()}
-  <div class="year" style:--cols={ycols}>
-    <div class="months" style:grid-template-columns="repeat({ycols}, 1fr)">
-      {#each monthStarts as ms (ms.m)}
-        <button class="mlabel" style:grid-column="{ms.col + 1} / span 4" onclick={() => ((year = heatYear), (month = ms.m), (zoom = 'month'))}>{ms.label}</button>
-      {/each}
-    </div>
+  <div class="year" class:band>
     <div class="wd">
       {#each WEEKDAYS as w, i (w)}
         <button class:we={i > 4} class:on={!!app.dateFilter?.weekdays?.includes(i)} onclick={() => toggleWeekday(i)} title="Nur {w} (Klick schaltet um)">{w}</button>
       {/each}
     </div>
-    <div class="days" style:grid-template-columns="repeat({ycols}, 1fr)">
-      {#each yg as d (d.key)}
-        {@const n = counts.days.get(d.key) ?? 0}
-        <div
-          class="cell l{level(n, maxDay)}"
-          class:we={d.row > 4}
-          class:sel={selected(d.date, d.date + 86400e3)}
-          style:grid-column={d.col + 1}
-          style:grid-row={d.row + 1}
-          data-row={d.row}
-          data-col={d.col}
-          data-from={d.date}
-          data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
-          title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}: {n} Dateien"
-        ></div>
-      {/each}
+    <div class="scrollx" use:toYear={band ? openYear : null}>
+      <div class="months" style:grid-template-columns={cols}>
+        {#each monthStarts as ms (ms.key)}
+          <button class="mlabel" class:jan={band && ms.m === 0} style:grid-column="{ms.col + 1} / span 4" onclick={() => ((year = ms.y), (month = ms.m), (zoom = 'month'))}>{ms.label}</button>
+        {/each}
+      </div>
+      <div class="days" style:grid-template-columns={cols}>
+        {#each yg as d (d.key)}
+          {@const n = counts.days.get(d.key) ?? 0}
+          <div
+            class="cell l{level(n, maxDay)}"
+            class:we={d.row > 4}
+            class:sel={selected(d.date, d.date + 86400e3)}
+            style:grid-column={d.col + 1}
+            style:grid-row={d.row + 1}
+            data-row={d.row}
+            data-col={d.col}
+            data-from={d.date}
+            data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
+            title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}: {n} Dateien"
+          ></div>
+        {/each}
+      </div>
     </div>
-    <div class="wsum" title="Dateien je Wochentag in {heatYear}">
+    <div class="wsum" title="Dateien je Wochentag">
       {#each perWeekday as n, i (i)}
         <span><i style:width="{(n / maxWeekday) * 100}%"></i><em>{n}</em></span>
       {/each}
@@ -282,7 +304,7 @@
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="body" onpointerdown={down} ondblclick={dbl} onwheel={wheel}>
-    {#if lvl === 'years'}
+    {#if lvl === 'years' && !band}
       <div class="years">
         <span></span>
         {#each MONTHS as m (m)}<span class="mlabel">{m}</span>{/each}
@@ -305,16 +327,14 @@
           {/each}
         {/each}
       </div>
-      {#if heatYear !== null}
-        <div class="opened">
-          <div class="otitle">
-            <b>{heatYear}</b>
-            <button class="btn" onclick={() => ((year = heatYear), (zoom = 'year'))}>Ganz öffnen</button>
-            <button class="btn icon" onclick={() => (openYear = null)} aria-label="Schließen"><Icon name="x" size={12} /></button>
-          </div>
-          {@render heatmap()}
-        </div>
-      {/if}
+    {:else if band}
+      <div class="otitle">
+        <b>Tage</b>
+        <span class="hint">waagerecht scrollen für frühere Jahre; Rahmen gehen über den Jahreswechsel</span>
+        <span class="grow"></span>
+        <button class="btn icon" onclick={() => (openYear = null)} title="Zurück zu allen Jahren" aria-label="Schließen"><Icon name="x" size={12} /></button>
+      </div>
+      {@render heatmap()}
     {:else if lvl === 'year'}
       {@render heatmap()}
     {:else}
@@ -472,11 +492,6 @@
     mix-blend-mode: normal;
   }
 
-  .opened {
-    margin-top: 14px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line);
-  }
   .otitle {
     display: flex;
     align-items: center;
@@ -512,8 +527,6 @@
     background: color-mix(in srgb, var(--bg-sunken) 60%, var(--line));
   }
   .wsum {
-    grid-column: 3;
-    grid-row: 2;
     display: grid;
     grid-template-rows: repeat(7, 1fr);
     gap: 3px;
@@ -541,21 +554,43 @@
   }
   .year {
     display: grid;
-    grid-template-columns: 22px 1fr 64px;
-    grid-template-rows: auto auto;
-    column-gap: 4px;
-    row-gap: 4px;
+    grid-template-columns: 22px minmax(0, 1fr) 64px;
+    column-gap: 6px;
+  }
+  .scrollx {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .band .scrollx {
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .wd,
+  .wsum {
+    padding-top: 18px;
+  }
+  .mlabel.jan {
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .grow {
+    flex: 1;
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--fg-faint);
   }
   .months {
-    grid-column: 2;
     display: grid;
+    height: 14px;
     gap: 3px;
   }
   .months .mlabel:hover {
     color: var(--accent);
   }
   .wd {
-    grid-column: 1;
     display: grid;
     grid-template-rows: repeat(7, 1fr);
     gap: 3px;
@@ -564,7 +599,6 @@
     align-items: center;
   }
   .days {
-    grid-column: 2;
     display: grid;
     grid-template-rows: repeat(7, auto);
     gap: 3px;
