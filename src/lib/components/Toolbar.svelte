@@ -63,7 +63,7 @@
         class:hit={drag.active && drag.hit?.kind === 'crumb' && drag.hit.path === c.path}
         data-drop="crumb"
         data-path={c.path}
-        onclick={() => app.navigate(c.path)}>{c.name}</button
+        onclick={() => app.navigate(c.path)}>{c.name.replace(/!$/, '')}</button
       >
     {/each}
     {#if app.funnel}

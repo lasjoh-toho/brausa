@@ -264,3 +264,17 @@ describe('web panel addresses', () => {
     expect(toUrl('tiddlywiki pinboard')).toBe('https://duckduckgo.com/?q=tiddlywiki%20pinboard');
   });
 });
+
+describe('archives', () => {
+  it('knows archives and paths inside them', async () => {
+    const { isArchive, inArchive, archiveRoot } = await import('./archive');
+    expect(isArchive('/a/Fotos.ZIP')).toBe(true);
+    expect(isArchive('/a/x.tar.gz')).toBe(true);
+    expect(isArchive('/a/x.gz')).toBe(false);
+    expect(inArchive('/a/b.zip!/c/d.txt')).toBe(true);
+    expect(inArchive('/a/b.zip!')).toBe(true);
+    expect(inArchive('C:\\a\\b.zip!\\c')).toBe(true);
+    expect(inArchive('/a/b.zip')).toBe(false);
+    expect(archiveRoot('/a/b.zip')).toBe('/a/b.zip!');
+  });
+});

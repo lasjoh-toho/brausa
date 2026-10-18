@@ -12,8 +12,9 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 
 ## Was drin ist
 
-**Neu in 0.7: Web-Fenster**
+**Neu in 0.7: Web-Fenster und Archive**
 - **Web-Fenster** (Weltkugel in der Toolbar): Seiten aus dem Internet neben den Dateien, abgeschottet mit eigenen Cookies und ohne Zugriff auf brausa oder deine Dateien. Downloads und gespeicherte Seiten landen im Projekt bzw. im aktuellen Ordner; **Auf die Map** legt markierten Text als Snippet mit Link zurück auf die Projektmap.
+- **In Archive hineinschauen:** ZIP, tar und tar.gz öffnen sich per Doppelklick wie Ordner (nur lesend), mit Vorschau; herausziehen packt aus.
 - **Lokale Websites** (Rechtsklick auf eine HTML-Datei → *Im Web-Fenster öffnen*): der Ordner wird nur auf diesem Rechner bereitgestellt, Links zwischen Seiten funktionieren, Skripte nur, wenn erlaubt.
 
 **Neu in 0.6: Freie Projekte, zweites Panel, Kalender mit Wochentagen**

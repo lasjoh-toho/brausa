@@ -142,6 +142,8 @@ export interface Backend {
   thumbnail(entry: Entry, size: number): Promise<string | null>;
   /** URL for showing the original file in the webview (preview), or null. */
   fileUrl(entry: Entry): string | null;
+  /** URL for a file to show in the webview; files inside archives are unpacked first. Null in the demo. */
+  localUrl(path: string): Promise<string | null>;
   /** URL for any local file (images inside HTML documents), or null. */
   assetUrl(path: string): string | null;
   /** Raw bytes (PDF reader) and text (HTML/Markdown reader) of a file. */

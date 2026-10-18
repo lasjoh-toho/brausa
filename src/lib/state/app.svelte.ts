@@ -8,6 +8,7 @@ import type { Backend } from '../backend';
 import type { IndexReport, LibraryInfo } from '../backend/types';
 import { createBackend } from '../backend';
 import { parseCategories } from '../core/pattern';
+import { archiveRoot, inArchive, isArchive } from '../core/archive';
 import type { ProjectInfo } from '../backend/types';
 import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
 import { basename, dirname, isWithin } from '../core/paths';
@@ -554,6 +555,8 @@ class AppState {
   // ---------------------------------------------------------------- operations
 
   async transfer(entries: Entry[], targetDir: string, mode: TransferMode) {
+    // Out of an archive is always a copy: the archive stays as it is.
+    if (entries.some((e) => inArchive(e.path))) mode = 'copy';
     const paths = entries.map((e) => e.path).filter((p) => !(mode === 'move' && dirname(p) === targetDir));
     if (!paths.length) return;
     const res = await this.backend.transfer(paths, targetDir, mode);
@@ -671,6 +674,8 @@ class AppState {
 
   async open(e: Entry) {
     if (e.kind === 'dir') return this.navigate(e.path);
+    // Archives open like folders (read only).
+    if (isArchive(e.path) && !inArchive(e.path)) return this.navigate(archiveRoot(e.path));
     try {
       await this.backend.openDefault(e.path);
     } catch (err) {

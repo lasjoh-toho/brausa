@@ -291,6 +291,10 @@ export class DemoBackend implements Backend {
     return null;
   }
 
+  async localUrl() {
+    return null;
+  }
+
   async fileData(path: string) {
     if (!this.find(path)) throw new Error('Nicht gefunden');
     if (extOf(path) !== 'pdf') throw new Error('Demo-Modus: nur PDFs haben Inhalt');

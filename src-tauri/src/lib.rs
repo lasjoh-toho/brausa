@@ -1,3 +1,4 @@
+mod archive;
 mod fsops;
 mod library;
 mod maps;
@@ -92,6 +93,9 @@ fn places() -> Vec<Place> {
 
 #[tauri::command]
 async fn list_dir(state: State<'_, Index>, path: String, include_hidden: bool) -> CmdResult<Vec<Entry>> {
+    if let Some((archive, inner)) = archive::split(&path) {
+        return archive::list(&archive, &inner).map_err(err);
+    }
     // Folders tagged with brausa ≤ 0.2 still carry per-folder sidecars: fold them into the index.
     state.0.lock().map_err(err)?.migrate_dir(Path::new(&path)).map_err(err)?;
     decorated(&state, fsops::list_dir(Path::new(&path), include_hidden).map_err(err)?)
@@ -99,6 +103,9 @@ async fn list_dir(state: State<'_, Index>, path: String, include_hidden: bool) -
 
 #[tauri::command]
 async fn walk(state: State<'_, Index>, root: String, max_depth: usize, include_hidden: bool, limit: usize) -> CmdResult<Vec<Entry>> {
+    if let Some((archive, inner)) = archive::split(&root) {
+        return archive::walk(&archive, &inner, limit).map_err(err);
+    }
     let entries = fsops::walk(Path::new(&root), max_depth, include_hidden, limit);
     {
         let mut reg = state.0.lock().map_err(err)?;
@@ -117,7 +124,18 @@ async fn transfer(state: State<'_, Index>, projs: State<'_, Projs>, paths: Vec<S
         "copy" => Mode::Copy,
         m => return Err(format!("Unbekannter Modus: {m}")),
     };
-    let res = fsops::transfer(&paths, Path::new(&target_dir), mode);
+    read_only(&target_dir)?;
+    // Out of an archive means unpacking: the archive itself stays unchanged.
+    let (inside, paths): (Vec<String>, Vec<String>) = paths.into_iter().partition(|p| archive::split(p).is_some());
+    let mut res = fsops::transfer(&paths, Path::new(&target_dir), mode);
+    for p in inside {
+        match archive::extract_to(&p, Path::new(&target_dir)) {
+            Ok(to) => {
+                res.moved.insert(p, to.to_string_lossy().to_string());
+            }
+            Err(e) => res.errors.push(fsops::TransferError { path: p, message: e.to_string() }),
+        }
+    }
     // Metadata follows the files inside the index (also across projects).
     let mut reg = state.0.lock().map_err(err)?;
     for (from, to) in &res.moved {
@@ -133,6 +151,7 @@ async fn transfer(state: State<'_, Index>, projs: State<'_, Projs>, paths: Vec<S
 
 #[tauri::command]
 async fn update_meta(state: State<'_, Index>, paths: Vec<String>, patch: MetaPatch) -> CmdResult<Vec<Entry>> {
+    paths.iter().try_for_each(|p| read_only(p))?;
     let mut out = Vec::with_capacity(paths.len());
     {
         let mut reg = state.0.lock().map_err(err)?;
@@ -441,6 +460,34 @@ async fn mkdir(parent: String, name: String) -> CmdResult<String> {
     Ok(p.to_string_lossy().to_string())
 }
 
+/// Files inside archives are unpacked here when they need to be real files.
+fn archive_cache(app: &AppHandle) -> CmdResult<PathBuf> {
+    Ok(app.path().app_cache_dir().map_err(err)?.join("archives"))
+}
+
+/// The real file for a path: itself, or for a file inside an archive its unpacked copy.
+fn real_path(app: &AppHandle, path: &str) -> CmdResult<PathBuf> {
+    if archive::split(path).is_some() {
+        archive::materialize(path, &archive_cache(app)?).map_err(err)
+    } else {
+        Ok(PathBuf::from(path))
+    }
+}
+
+fn read_only(path: &str) -> CmdResult<()> {
+    if archive::split(path).is_some() {
+        Err("Archive kann brausa nur lesen. Zum Ändern die Dateien herausziehen.".into())
+    } else {
+        Ok(())
+    }
+}
+
+/// Unpacks a file from an archive (cached) and returns the real path, for the preview and reader.
+#[tauri::command]
+async fn archive_extract(app: AppHandle, path: String) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || real_path(&app, &path)).await.map_err(err)?.map(|p| p.to_string_lossy().to_string())
+}
+
 fn thumb_cache(app: &AppHandle) -> CmdResult<PathBuf> {
     Ok(app.path().app_cache_dir().map_err(err)?.join("thumbs"))
 }
@@ -450,7 +497,7 @@ fn thumb_cache(app: &AppHandle) -> CmdResult<PathBuf> {
 async fn thumbnail(app: AppHandle, path: String, size: u32) -> CmdResult<String> {
     let cache = thumb_cache(&app)?;
     // Decoding is CPU-bound: keep it off the async workers.
-    tauri::async_runtime::spawn_blocking(move || media::thumbnail(Path::new(&path), size.clamp(64, 2048), &cache))
+    tauri::async_runtime::spawn_blocking(move || media::thumbnail(&real_path(&app, &path)?, size.clamp(64, 2048), &cache))
         .await
         .map_err(err)?
         .map(|p| p.to_string_lossy().to_string())
@@ -465,6 +512,7 @@ async fn media_info(paths: Vec<String>) -> CmdResult<Vec<MediaInfo>> {
 
 #[tauri::command]
 async fn rename(state: State<'_, Index>, projs: State<'_, Projs>, path: String, new_name: String) -> CmdResult<Entry> {
+    read_only(&path)?;
     let dest = fsops::rename(Path::new(&path), &new_name)?;
     state.0.lock().map_err(err)?.moved(Path::new(&path), &dest).map_err(err)?;
     projs.0.lock().map_err(err)?.moved(Path::new(&path), &dest).map_err(err)?;
@@ -474,6 +522,7 @@ async fn rename(state: State<'_, Index>, projs: State<'_, Projs>, path: String, 
 
 #[tauri::command]
 async fn trash(state: State<'_, Index>, paths: Vec<String>) -> CmdResult<TransferResult> {
+    paths.iter().try_for_each(|p| read_only(p))?;
     let res = fsops::trash(&paths);
     let mut reg = state.0.lock().map_err(err)?;
     for p in res.moved.keys() {
@@ -485,7 +534,8 @@ async fn trash(state: State<'_, Index>, paths: Vec<String>) -> CmdResult<Transfe
 /// Open with the operating system's default application.
 #[tauri::command]
 fn open_default(app: AppHandle, path: String) -> CmdResult<()> {
-    app.opener().open_path(path, None::<&str>).map_err(err)
+    let real = real_path(&app, &path)?;
+    app.opener().open_path(real.to_string_lossy(), None::<&str>).map_err(err)
 }
 
 /// Show the item in Finder / Explorer / the desktop file manager.
@@ -597,6 +647,7 @@ pub fn run() {
             project_add,
             project_remove,
             project_entries,
+            archive_extract,
             web_open,
             web_place,
             web_close,

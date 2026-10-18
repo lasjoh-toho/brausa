@@ -1,6 +1,7 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
+import { inArchive } from '../core/archive';
 import type { ProjectMap } from '../core/map';
 import type {
   Backend,
@@ -79,7 +80,12 @@ export class TauriBackend implements Backend {
   }
 
   fileUrl(entry: Entry) {
-    return WEB_IMAGE.has(entry.ext) ? convertFileSrc(entry.path) : null;
+    // Inside an archive the preview uses a large thumbnail (unpacked by the core).
+    return WEB_IMAGE.has(entry.ext) && !inArchive(entry.path) ? convertFileSrc(entry.path) : null;
+  }
+
+  async localUrl(path: string) {
+    return convertFileSrc(inArchive(path) ? await invoke<string>('archive_extract', { path }) : path);
   }
 
   assetUrl(path: string) {
@@ -88,7 +94,7 @@ export class TauriBackend implements Backend {
 
   // Files are read through the asset protocol (scope: all files), like thumbnails.
   async fileData(path: string) {
-    const r = await fetch(convertFileSrc(path));
+    const r = await fetch(await this.localUrl(path));
     if (!r.ok) throw new Error(`„${path}“ ließ sich nicht lesen (${r.status})`);
     return r.arrayBuffer();
   }
