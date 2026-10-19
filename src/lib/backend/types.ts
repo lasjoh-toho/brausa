@@ -1,3 +1,4 @@
+import type { SmartFolder } from '../core/smart';
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
 import type { ProjectMap } from '../core/map';
 
@@ -162,6 +163,9 @@ export interface Backend {
   rename(path: string, newName: string): Promise<Entry>;
   /** Packs files and folders into a new ZIP next to the first one; returns its path. */
   compress(paths: string[]): Promise<string>;
+  /** Saved smart folders; null before the first save. */
+  smartFolders(): Promise<SmartFolder[] | null>;
+  saveSmartFolders(list: SmartFolder[]): Promise<void>;
   /** Groups of files with identical content among `paths`, largest waste first. */
   findDuplicates(paths: string[]): Promise<string[][]>;
   /** Names in an archive folder that dropping `names` there would replace. */

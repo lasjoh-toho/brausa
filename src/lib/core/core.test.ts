@@ -328,6 +328,23 @@ describe('smart folders', () => {
     expect(followMoves(fs, { '/h/Anderes': '/h/X' })).toBeNull();
     expect(followMoves([{ id: 'w', name: 'w', ...base, scope: { folder: 'C:\\a\\b\\c' } }], { 'C:\\a\\b': 'D:\\z' })![0].scope).toEqual({ folder: 'D:\\z\\c' });
   });
+
+  it('belong to projects or are linked to them', async () => {
+    const { ofProject, globalOnes, toggleLink, dropProject } = await import('./smart');
+    const fs = [
+      { id: 'a', name: 'a', ...base },
+      { id: 'b', name: 'b', ...base, scope: { project: 'p' } },
+      { id: 'c', name: 'c', ...base, projects: ['p', 'q'] }
+    ];
+    expect(ofProject(fs, 'p').map((k) => [k.folder.id, k.linked])).toEqual([['b', false], ['c', true]]);
+    expect(ofProject(fs, 'q').map((k) => k.folder.id)).toEqual(['c']);
+    expect(globalOnes(fs).map((f) => f.id)).toEqual(['a', 'c']);
+    expect(toggleLink(fs[0], 'p').projects).toEqual(['p']);
+    expect(toggleLink(fs[2], 'p').projects).toEqual(['q']);
+    const left = dropProject(fs, 'p');
+    expect(left.map((f) => [f.id, f.projects ?? []])).toEqual([['a', []], ['c', ['q']]]);
+    expect(left[0]).toBe(fs[0]);
+  });
 });
 
 describe('duplicates', () => {

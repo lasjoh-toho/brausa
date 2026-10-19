@@ -1,3 +1,4 @@
+import type { SmartFolder } from '../core/smart';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
@@ -115,6 +116,14 @@ export class TauriBackend implements Backend {
 
   compress(paths: string[]) {
     return invoke<string>('compress', { paths });
+  }
+
+  smartFolders() {
+    return invoke<SmartFolder[] | null>('smart_folders');
+  }
+
+  saveSmartFolders(list: SmartFolder[]) {
+    return invoke<void>('save_smart_folders', { list });
   }
 
   findDuplicates(paths: string[]) {

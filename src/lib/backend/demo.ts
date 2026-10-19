@@ -1,3 +1,4 @@
+import type { SmartFolder } from '../core/smart';
 /**
  * In-memory backend so the UI runs in any browser (dev, tests, screenshots).
  * Generates a believable folder structure with procedural "photos".
@@ -332,6 +333,16 @@ export class DemoBackend implements Backend {
 
   async compress(): Promise<string> {
     throw new Error(t('demo.compressAppOnly'));
+  }
+
+  private smart: SmartFolder[] | null = null;
+
+  async smartFolders() {
+    return this.smart ? structuredClone(this.smart) : null;
+  }
+
+  async saveSmartFolders(list: SmartFolder[]) {
+    this.smart = structuredClone(list);
   }
 
   /** Demo files have no content; equal size stands in for equal content. */

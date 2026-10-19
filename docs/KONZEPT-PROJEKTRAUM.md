@@ -270,7 +270,7 @@ markiert; die Ebenen-Ansicht zeigt, was ein Unterwiki vom Hauptwiki erbt.
 | Schritt | Inhalt |
 |---|---|
 | 0 ✓ | Standard-Plugins auf TiddlyVisuals 1.16.0, Relink 2.5.2 im Bag `@plugins` (erledigt 19.10.) |
-| 1 | Intelligente Ordner in den Kern (`smart.json`); aufklappbare Projekte in der Seitenleiste |
+| 1 ✓ | Intelligente Ordner in den Kern (`smart.json`, Übernahme aus dem alten Speicher); aufklappbare Projekte zeigen eigene und verknüpfte Ordner (erledigt 19.10.) |
 | 2 | Projekt-Bag nach Name, Hauptwiki per Klick, Unterwikis mit `base`, Ebenen erweitert |
 | 3 | Notizen-Seite (Tiddler im Projekt-Bag, Editor, privat → `lokal`) |
 | 4 | Status als Feld für Dateien; gemeinsames Kanban mit Filterleiste |
@@ -289,8 +289,6 @@ markiert; die Ebenen-Ansicht zeigt, was ein Unterwiki vom Hauptwiki erbt.
 7. **Notizen-Seite** gehört zu jedem Projekt.
 8. **Standard-Plugins:** wie beim MultiWikiServer in einem Bag ganz unten (`@plugins`), jetzt mit Relink.
 
-## 10. Noch offen
-
-- Soll der beschreibbare Bag „plugins“ für eigene Plugins kommen (3.7)?
-- Notizen: Titel frei (wie Tiddler) oder automatisch („Notiz 2026-10-19 14:30“) mit Überschrift als Titel?
-- Unterwiki-Ziel: eigene Wiki-Datei pro Unterwiki (Vorschlag) oder alle Unterwikis als Ordner unter dem Hauptwiki?
+9. **Eigene Plugins:** zusätzlicher beschreibbarer Bag **„plugins“** direkt über `@plugins`.
+10. **Notiz-Titel:** die erste Überschrift wird als Titel vorgeschlagen (änderbar).
+11. **Unterwikis:** je Unterwiki ein **eigenes Recipe und eine eigene Wiki-Datei**.
