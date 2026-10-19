@@ -367,6 +367,8 @@ Wikis im Web veröffentlicht werden, soll nicht alles in eine Wiki-Datei:
 
 ## 4. Roadmap
 
+> Projekte, Maps, Kanban, Wikis und intelligente Ordner als ein Arbeitsraum: siehe [KONZEPT-PROJEKTRAUM.md](KONZEPT-PROJEKTRAUM.md) (Entwurf, 19.10.2026).
+
 | Phase | Inhalt | Ergebnis |
 |---|---|---|
 | **A – Index** | `meta.jsonl` und SQLite-Cache, Datei-Identität, Abgleich und Reparatur, Migration der Sidecars, Statusanzeige | Ein `.brausa/` pro Bibliothek; Tags überleben Verschieben im Finder |
