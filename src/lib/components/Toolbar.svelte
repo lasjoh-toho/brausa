@@ -200,6 +200,11 @@
       step="4"
       value={app.tileSize}
       oninput={(e) => app.setTileSize(Number(e.currentTarget.value))}
+      onwheel={(e) => {
+        e.preventDefault();
+        app.zoomTiles(e.deltaY);
+      }}
+      title={t('toolbar.zoomHint')}
       aria-label={t('toolbar.tileSize')}
     />
     {/if}
@@ -212,14 +217,18 @@
     <Icon name="split" size={15} />
   </button>
   <button
-    class="btn drop-trigger"
+    class="btn icon drop-trigger"
     class:hot={drag.active}
     class:hit={drag.hit?.kind === 'grid-trigger'}
     data-drop="grid-trigger"
     onclick={() => (app.gridEditorOpen = true)}
     title={t('toolbar.dropHint')}
+    aria-label={t('toolbar.drop')}
   >
-    <Icon name="target" size={15} /> {t('toolbar.drop')}
+    <Icon name="dropIn" size={16} />
+  </button>
+  <button class="btn icon" class:on={!!app.tagSource} onclick={() => app.openTags()} title={t('toolbar.tagHint')} aria-label={t('toolbar.tags')}>
+    <Icon name="tag" size={15} />
   </button>
 </header>
 

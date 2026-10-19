@@ -5,7 +5,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
 import { t } from '../i18n/index.svelte';
 import type { ProjectMap } from '../core/map';
-import { WALK_LIMIT } from './types';
+import { WALK_LIMIT, type OsDrag } from './types';
 import type {
   Backend,
   IndexReport,
@@ -126,6 +126,27 @@ export class TauriBackend implements Backend {
 
   saveSmartFolders(list: SmartFolder[]) {
     return invoke<void>('save_smart_folders', { list });
+  }
+
+  entries(paths: string[]) {
+    return invoke<Entry[]>('entries', { paths }).then((r) => r.map(withThumb));
+  }
+
+  async onOsDrag(handler: (e: OsDrag) => void) {
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+    await getCurrentWebview().onDragDropEvent((ev) => {
+      const p = ev.payload;
+      const r = window.devicePixelRatio || 1;
+      const pos = 'position' in p ? p.position : null;
+      handler({ type: p.type, paths: 'paths' in p ? p.paths : [], x: pos ? pos.x / r : 0, y: pos ? pos.y / r : 0 });
+    });
+  }
+
+  private dragIcon: string | null = null;
+  async dragOut(paths: string[]) {
+    const { startDrag } = await import('@crabnebula/tauri-plugin-drag');
+    this.dragIcon ??= await invoke<string>('drag_icon');
+    await startDrag({ item: paths, icon: this.dragIcon, mode: 'copy' }).catch(() => {});
   }
 
   alive(view: string) {

@@ -106,6 +106,8 @@ class DragController {
     const sy = e.clientY;
 
     const move = (ev: PointerEvent) => {
+      // Out of the window: hand the files to the system, so they can go to Finder/Explorer or another app.
+      if (this.active && !opts.data && outside(ev)) return dragOut();
       if (!this.active) {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < THRESHOLD) return;
         const items = getItems();
@@ -139,7 +141,18 @@ class DragController {
       else if (this.active) this.copy = isCopyKey(ev);
     };
 
+    const outside = (ev: MouseEvent) => ev.clientX <= 0 || ev.clientY <= 0 || ev.clientX >= window.innerWidth - 1 || ev.clientY >= window.innerHeight - 1;
+    const dragOut = () => {
+      const paths = this.items.filter((i) => !inArchive(i.path)).map((i) => i.path);
+      end();
+      if (paths.length) void app.backend.dragOut(paths);
+    };
+    const leave = (ev: MouseEvent) => {
+      if (this.active && !opts.data && !ev.relatedTarget) dragOut();
+    };
+
     const end = () => {
+      document.documentElement.removeEventListener('mouseleave', leave);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('keydown', key);
@@ -149,10 +162,44 @@ class DragController {
 
     this.cleanup?.();
     this.cleanup = end;
+    document.documentElement.addEventListener('mouseleave', leave);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('keydown', key);
     window.addEventListener('keyup', key);
+  }
+
+  // ------------------------------------------------ files from other apps
+
+  /** Files dragged in from Finder/Explorer: the same targets as a drag inside brausa (no ⌥ for copy there). */
+  externalEnter(items: Entry[]) {
+    this.cleanup?.();
+    this.items = items;
+    this.source = 'external';
+    this.copy = false;
+    this.active = items.length > 0;
+    if (this.active) document.body.classList.add('dragging');
+  }
+
+  externalOver(x: number, y: number) {
+    if (this.source !== 'external' || !this.active) return;
+    this.x = x;
+    this.y = y;
+    this.hitTest(x, y);
+  }
+
+  async externalDrop(items: Entry[], x: number, y: number) {
+    if (!items.length) return this.reset();
+    this.items = items;
+    this.hitTest(x, y);
+    const hit = this.hit;
+    this.reset();
+    if (hit?.kind === 'board') await this.onBoardDrop?.(items, x, y);
+    else if (hit) await performDrop(hit, items, 'external', false);
+  }
+
+  externalLeave() {
+    if (this.source === 'external') this.reset();
   }
 
   private reset() {
@@ -167,6 +214,7 @@ class DragController {
     this.data = undefined;
     this.accepts = null;
     this.title = '';
+    this.source = '';
     this.hit = null;
     this.trail = null;
     this.gridOpen = false;
@@ -263,7 +311,7 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         if (app.project) {
           // In a project the drop adds to it; nothing moves.
           if (source !== 'canvas') await app.addToProject(app.project, items);
-        } else if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas' && source !== 'pane') {
+        } else if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas' && source !== 'pane' && source !== 'external') {
           const dir = items[0].path;
           if (isWithin(dir, app.cwd) && dir !== app.cwd) {
             if (!app.recursive) app.setRecursive(true);

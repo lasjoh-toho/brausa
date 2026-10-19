@@ -347,6 +347,17 @@ export class DemoBackend implements Backend {
     this.smart = structuredClone(list);
   }
 
+  async entries(paths: string[]) {
+    return paths.flatMap((p) => {
+      const n = this.find(p);
+      return n ? [this.decorate(n.entry)] : [];
+    });
+  }
+
+  async onOsDrag() {}
+
+  async dragOut() {}
+
   async alive() {}
 
   async stuckView() {

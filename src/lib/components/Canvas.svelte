@@ -29,6 +29,13 @@
   const drawn = $derived(within(app.groups, shown.limit));
   let lasso = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
+  /** ⌘/Ctrl + scroll (or pinch) sizes the tiles; beyond the largest size the selected file opens full screen. */
+  function wheel(e: WheelEvent) {
+    if (!(e.ctrlKey || e.metaKey) || app.view === 'panes' || app.view === 'table' || app.view === 'map') return;
+    e.preventDefault();
+    app.zoomTiles(e.deltaY);
+  }
+
   /** Rubber-band selection on empty canvas space. */
   function down(e: PointerEvent) {
     if (e.button !== 0 || (e.target as HTMLElement).closest('.tile, button, input, .cal, .leaflet-container, .pv')) return;
@@ -78,6 +85,7 @@
   data-autoscroll
   style:--tile="{app.tileSize}px"
   onpointerdown={down}
+  onwheel={wheel}
   oncontextmenu={(e) => {
     if ((e.target as HTMLElement).closest('.tile, .cal, .leaflet-container, .pv')) return;
     e.preventDefault();

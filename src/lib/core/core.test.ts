@@ -95,6 +95,11 @@ describe('pattern', () => {
     expect(selectByPattern(entries, '*.png > 5MB', NOW).paths).toEqual(['/root/big.png', '/root/old.png']);
   });
 
+  it('selects pictures by size', () => {
+    expect(selectByPattern(entries, 'is:image > 6.5MB', NOW).paths).toEqual(['/root/photo.jpg', '/root/old.png']);
+    expect(selectByPattern(entries, 'is:image < 1MB', NOW).paths).toEqual(['/root/small.png', '/root/logo.svg']);
+  });
+
   it('selects by tag incl. hierarchy and negation', () => {
     expect(selectByPattern(entries, '#ToReview', NOW).paths).toEqual(['/root/photo.jpg']);
     expect(selectByPattern(entries, '#Work', NOW).paths).toEqual(['/root/logo.svg']);

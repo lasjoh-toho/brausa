@@ -107,13 +107,15 @@
       app.select(entry.path, e.shiftKey ? 'range' : 'toggle');
       return;
     }
-    if (!app.selection.has(entry.path)) app.select(entry.path, 'replace');
+    // A second click on a selected row (without moving it) deselects it.
+    const was = app.selection.has(entry.path);
+    if (!was) app.select(entry.path, 'replace');
     else app.cursor = entry.path;
     drag.begin(
       e,
       () => (app.selection.has(entry.path) ? app.selectedEntries : [entry]),
       'canvas',
-      () => app.select(entry.path, 'replace')
+      () => (was ? app.select(entry.path, 'toggle') : app.select(entry.path, 'replace'))
     );
   }
 

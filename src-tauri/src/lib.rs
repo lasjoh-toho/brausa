@@ -546,6 +546,23 @@ fn save_smart_folders(s: State<'_, Smart>, list: serde_json::Value) -> CmdResult
 }
 
 /// Language of the core's messages ("de" or "en").
+/// Entries for paths dropped onto brausa from another app.
+#[tauri::command]
+async fn entries(state: State<'_, Index>, paths: Vec<String>) -> CmdResult<Vec<Entry>> {
+    decorated(&state, paths.iter().filter_map(|p| fsops::make_entry(Path::new(p)).ok()).collect())
+}
+
+/// Picture shown under the pointer while files are dragged out of brausa.
+#[tauri::command]
+fn drag_icon(app: AppHandle) -> CmdResult<String> {
+    let p = app.path().app_cache_dir().map_err(err)?.join("drag.png");
+    if !p.exists() {
+        std::fs::create_dir_all(p.parent().unwrap()).map_err(err)?;
+        std::fs::write(&p, include_bytes!("../icons/64x64.png")).map_err(err)?;
+    }
+    Ok(p.to_string_lossy().to_string())
+}
+
 /// Heartbeat of the interface, with the view it shows.
 #[tauri::command]
 fn alive(dog: State<'_, watchdog::Watchdog>, view: String) {
@@ -711,6 +728,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_drag::init())
         .manage(Watcher::default())
         .manage(web::Web::default())
         .setup(|app| {
@@ -788,6 +806,8 @@ pub fn run() {
             set_lang,
             alive,
             stuck_view,
+            entries,
+            drag_icon,
             smart_folders,
             save_smart_folders,
             compress,

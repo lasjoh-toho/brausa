@@ -5,7 +5,7 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
-import { WALK_LIMIT, type IndexReport, type LibraryInfo, type MediaInfo } from '../backend/types';
+import { WALK_LIMIT, type IndexReport, type LibraryInfo, type MediaInfo, type OsDrag } from '../backend/types';
 import { createBackend } from '../backend';
 
 /** What the interface showed when it last reported to the watchdog. */
@@ -26,6 +26,9 @@ import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
 import { extsOf, family, formatSize } from '../core/format';
+
+export const TILE_MIN = 96;
+export const TILE_MAX = 360;
 
 /** Files that can carry EXIF date and location. */
 const MEDIA_EXT = ['jpg', 'jpeg', 'tif', 'tiff', 'heic', 'png', 'webp'];
@@ -117,11 +120,29 @@ class AppState {
   children = new SvelteMap<string, Entry[]>();
 
   preview = $state<{ entry: Entry; from: DOMRect | null } | null>(null);
+
+  /** Large view of the first selected file, growing out of its tile. */
+  openPreview() {
+    const first = this.selectedEntries.find((x) => x.kind === 'file');
+    if (!first) return false;
+    const thumb = document.querySelector<HTMLElement>(`.tile[data-path="${CSS.escape(first.path)}"] .thumb`);
+    this.preview = { entry: first, from: thumb?.getBoundingClientRect() ?? null };
+    return true;
+  }
   /** Folder shown in the second panel (null: closed). */
   pane = $state<string | null>(store.get('pane', null));
   /** Bumped after brausa changed files, so other views (second panel) reload. */
   fsVersion = $state(0);
   tagBarOpen = $state(false);
+  /** Tag bar open for the selection or for the tray (null: closed). */
+  tagSource = $state<'selection' | 'staging' | null>(null);
+
+  /** Tag the selection, else what lies in the tray. */
+  openTags() {
+    if (this.selection.size) this.tagSource = 'selection';
+    else if (this.staging.length) this.tagSource = 'staging';
+    else this.toast(t('app.tagsSelect'));
+  }
   gridConfig = $state<DropGridConfig>(store.get('dropGrid', { cols: 3, rows: 2, cells: [] }));
   gridEditorOpen = $state(false);
   recentTags = $state<string[]>(store.get('recentTags', []));
@@ -239,6 +260,26 @@ class AppState {
     await this.loadSmartFolders();
     if (this.project) await this.refresh();
     await this.backend.onIndexReport((r) => this.onIndexReport(r));
+    await this.backend.onOsDrag((e) => void this.onOsDrag(e));
+  }
+
+  /** Files from Finder/Explorer dragged over brausa: they go where an internal drag would. */
+  private osItems: Entry[] = [];
+  private async onOsDrag(e: OsDrag) {
+    const { drag } = await import('./drag.svelte');
+    if (e.type === 'enter') {
+      this.osItems = await this.backend.entries(e.paths);
+      drag.externalEnter(this.osItems);
+      drag.externalOver(e.x, e.y);
+    } else if (e.type === 'over') drag.externalOver(e.x, e.y);
+    else if (e.type === 'drop') {
+      const items = this.osItems.length ? this.osItems : await this.backend.entries(e.paths);
+      this.osItems = [];
+      await drag.externalDrop(items, e.x, e.y);
+    } else {
+      this.osItems = [];
+      drag.externalLeave();
+    }
   }
 
   /** Tell the core's watchdog that the interface responds, and what it shows. */
@@ -814,6 +855,22 @@ class AppState {
     this.kanbanBy = v;
     store.set('kanbanBy', v);
     this.refresh();
+  }
+
+  private zoomPush = 0;
+  /** Scroll on the size slider or ⌘/Ctrl + scroll: tiles grow; past the largest size the selected file opens full screen. */
+  zoomTiles(deltaY: number) {
+    const next = Math.round(Math.min(TILE_MAX, Math.max(TILE_MIN, this.tileSize - deltaY * 0.6)));
+    if (deltaY < 0 && this.tileSize === TILE_MAX) {
+      this.zoomPush -= deltaY;
+      if (this.zoomPush > 240) {
+        this.zoomPush = 0;
+        if (!this.openPreview()) this.toast(t('app.zoomSelect'));
+      }
+      return;
+    }
+    this.zoomPush = 0;
+    if (next !== this.tileSize) this.setTileSize(next);
   }
 
   setTileSize(v: number) {

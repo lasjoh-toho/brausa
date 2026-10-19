@@ -2,6 +2,13 @@ import type { SmartFolder } from '../core/smart';
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
 import type { ProjectMap } from '../core/map';
 
+export interface OsDrag {
+  type: 'enter' | 'over' | 'drop' | 'leave';
+  paths: string[];
+  x: number;
+  y: number;
+}
+
 /** Stream reads at most this many files. */
 export const WALK_LIMIT = 20000;
 
@@ -171,6 +178,12 @@ export interface Backend {
   /** Saved smart folders; null before the first save. */
   smartFolders(): Promise<SmartFolder[] | null>;
   saveSmartFolders(list: SmartFolder[]): Promise<void>;
+  /** Entries for paths (files dropped in from another app). */
+  entries(paths: string[]): Promise<Entry[]>;
+  /** Files dragged from another app over brausa (positions in CSS pixels). */
+  onOsDrag(handler: (e: OsDrag) => void): Promise<void>;
+  /** Hand files to the system's drag & drop (out of the window, to Finder/Explorer or another app). */
+  dragOut(paths: string[]): Promise<void>;
   /** Heartbeat for the core's watchdog: the interface responds and shows `view`. */
   alive(view: string): Promise<void>;
   /** The view that hung last time (then start in a plain view), reported once. */
