@@ -322,8 +322,20 @@ pub struct BagInfo {
     pub description: String,
     #[serde(default)]
     pub readonly: bool,
+    /// Not offered when a new wiki is put together.
+    #[serde(default)]
+    pub hidden: bool,
     #[serde(default, skip_deserializing)]
     pub tiddlers: usize,
+}
+
+/// A tiddler found by the search across bags.
+#[derive(Debug, Clone, Serialize)]
+pub struct Hit {
+    pub bag: String,
+    pub title: String,
+    /// Text around the first match (empty when only the title matched).
+    pub snippet: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -462,6 +474,41 @@ impl Store {
             })
             .collect();
         out.sort_by_key(|b| b.name.to_lowercase());
+        out
+    }
+
+    /// Tiddlers whose title, text or tags contain every word of `query` (case-insensitive), in all bags
+    /// except the bundled plugins; at most `limit`.
+    pub fn search(&self, query: &str, limit: usize) -> Vec<Hit> {
+        let words: Vec<String> = query.to_lowercase().split_whitespace().map(String::from).collect();
+        if words.is_empty() {
+            return vec![];
+        }
+        let mut out = vec![];
+        for b in self.bags().into_iter().filter(|b| !b.name.starts_with('@')) {
+            for (title, (f, _)) in self.bag_tiddlers(&b.name).unwrap_or_default() {
+                let text = f.get("text").map(String::as_str).unwrap_or("");
+                let (lt, lx) = (title.to_lowercase(), text.to_lowercase());
+                let tags = f.get("tags").map(|t| t.to_lowercase()).unwrap_or_default();
+                if !words.iter().all(|w| lt.contains(w) || lx.contains(w) || tags.contains(w)) {
+                    continue;
+                }
+                let snippet = lx
+                    .find(&words[0])
+                    .map(|i| {
+                        let chars: Vec<char> = text.chars().collect();
+                        let at = lx[..i].chars().count();
+                        let from = at.saturating_sub(40);
+                        let to = (at + 80).min(chars.len());
+                        chars[from..to].iter().collect::<String>().replace('\n', " ")
+                    })
+                    .unwrap_or_default();
+                out.push(Hit { bag: b.name.clone(), title, snippet });
+                if out.len() >= limit {
+                    return out;
+                }
+            }
+        }
         out
     }
 
@@ -1167,6 +1214,21 @@ mod tests {
         store.put_bag(&BagInfo { name: "glossar".into(), ..Default::default() }).unwrap();
         store.put_tiddler("glossar", &f(&[("title", "ZUI"), ("text", "Zoomable UI")])).unwrap();
         (t, store, proj)
+    }
+
+    #[test]
+    fn searches_titles_and_texts_in_all_bags() {
+        let (_t, store, _) = setup();
+        store.put_tiddler("glossar", &f(&[("title", "Kanban"), ("text", "Spalten für den Status einer Karte")])).unwrap();
+        let hits = store.search("zoomable", 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!((hits[0].bag.as_str(), hits[0].title.as_str()), ("glossar", "ZUI"));
+        assert!(hits[0].snippet.contains("Zoomable"));
+        assert_eq!(store.search("status karte", 10).len(), 1, "every word must match");
+        assert_eq!(store.search("kanban", 10)[0].snippet, "", "a title match has no text snippet");
+        assert!(store.search("  ", 10).is_empty());
+        store.put_tiddler("glossar", &f(&[("title", "Pinboard"), ("tags", "Glossar"), ("text", "")])).unwrap();
+        assert_eq!(store.search("glossar", 10)[0].title, "Pinboard", "tags count too");
     }
 
     fn recipe(store: &Store, name: &str, proj: &Path, target: Target) -> Recipe {

@@ -118,7 +118,7 @@
     </div>
   {/each}
 
-  <div class="section with-action">
+  <div class="section with-action" title={t('sidebar.projectsEmpty')}>
     {t('sidebar.projects')}
     <button class="add" title={t('sidebar.newProject')} onclick={() => ((naming = ''), (renaming = null))}>
       <Icon name="plus" size={13} />
@@ -168,9 +168,9 @@
           : t('sidebar.projectInfo', { name: p.name, files: tn('common.files', p.files.length) })) +
           '\n' +
           t('sidebar.projectDropHint')}
-        onclick={() => app.openProject(p.id)}
+        onclick={() => app.openProject(p.id, true)}
         ondblclick={() => (renaming = p.id)}
-        onkeydown={(e) => e.key === 'Enter' && app.openProject(p.id)}
+        onkeydown={(e) => e.key === 'Enter' && app.openProject(p.id, true)}
       >
         {#if kids.length}
           <button
@@ -203,11 +203,9 @@
         <SmartRow folder={k.folder} linked={k.linked} under={p.id} current={smartOpen === k.folder.id} {filtered} />
       {/each}
     {/if}
-  {:else}
-    {#if naming === null}<p class="hint">{t('sidebar.projectsEmpty')}</p>{/if}
   {/each}
 
-  <div class="section with-action">
+  <div class="section with-action" title={t('sidebar.smartEmpty')}>
     {t('sidebar.smartFolders')}
     <button class="add" title={t('sidebar.newSmart')} onclick={newSmart}>
       <Icon name="plus" size={13} />
@@ -238,11 +236,9 @@
     <button class="place save" title={app.smartSummary(app.currentView)} onclick={newSmart}>
       <Icon name="plus" size={13} />{t('sidebar.saveView')}
     </button>
-  {:else if !app.smartFolders.length && smartNaming === null}
-    <p class="hint">{t('sidebar.smartEmpty')}</p>
   {/if}
 
-  <div class="section with-action">
+  <div class="section with-action" title={t('sidebar.wikisEmpty')}>
     {t('sidebar.wikis')}
     <span class="grow"></span>
     {#if wikis.overlays.length}
@@ -250,9 +246,7 @@
         <Icon name="layers" size={12} />{wikis.pending || ''}
       </button>
     {/if}
-    {#if wikis.recipes.length}
-      <button class="ov" title={t('sidebar.overview')} onclick={() => wikis.openOverview()}><Icon name="grid" size={12} /></button>
-    {/if}
+    <button class="ov" title={t('sidebar.wikiSettings')} aria-label={t('sidebar.wikiSettings')} onclick={() => (wikis.settingsOpen = true)}><Icon name="gear" size={12} /></button>
     <button class="add" title={t('sidebar.newWiki')} onclick={() => wikis.open('')}>
       <Icon name="plus" size={13} />
     </button>
@@ -278,8 +272,6 @@
         onclick={(e) => (e.stopPropagation(), wikis.sync(w.name))}><Icon name="sync" size={12} /></button
       >
     </div>
-  {:else}
-    <p class="hint">{t('sidebar.wikisEmpty')}</p>
   {/each}
 
   <div class="section">{t('sidebar.folderTree')}</div>
@@ -497,11 +489,6 @@
     to {
       transform: rotate(360deg);
     }
-  }
-  .hint {
-    margin: 0 8px;
-    font-size: 11px;
-    color: var(--fg-faint);
   }
   .tags {
     display: flex;

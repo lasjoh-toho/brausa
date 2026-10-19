@@ -364,7 +364,12 @@ class AppState {
   }
 
   /** Show a project: all its files from all places, in every view. */
-  async openProject(id: string) {
+  /** `start`: show the project's start page (from the sidebar). */
+  async openProject(id: string, start = false) {
+    if (start) {
+      this.view = 'start';
+      store.set('view', 'start');
+    }
     // Back (⌘[) returns to the folder shown before.
     if (!this.project && this.cwd) {
       this.history.push(this.cwd);
@@ -628,6 +633,11 @@ class AppState {
     }
     this.cwd = path;
     this.setProject(null);
+    // The start page belongs to projects; folders show their files.
+    if (this.view === 'start') {
+      this.view = 'stream';
+      store.set('view', 'stream');
+    }
     this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;

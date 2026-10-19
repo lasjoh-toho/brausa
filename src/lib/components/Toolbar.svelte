@@ -16,7 +16,8 @@
   const typeLabel = $derived(
     !app.typeFilter ? t('toolbar.allTypes') : app.typeFilter === 'medien' ? t('toolbar.media') : (CATEGORIES.find((c) => c.key === app.typeFilter)?.label ?? app.typeFilter)
   );
-  const views: { id: ViewMode; icon: string }[] = [
+  const allViews: { id: ViewMode; icon: string }[] = [
+    { id: 'start', icon: 'home' },
     { id: 'stream', icon: 'grid' },
     { id: 'panes', icon: 'columns' },
     { id: 'table', icon: 'table' },
@@ -26,6 +27,8 @@
     { id: 'map', icon: 'map' },
     { id: 'board', icon: 'nodes' }
   ];
+  // The start page is a project's.
+  const views = $derived(allViews.filter((v) => v.id !== 'start' || app.project));
 
   // Sort menu: picking the current key again reverses the order.
   let sortMenu = $state<{ x: number; y: number } | null>(null);
@@ -146,7 +149,7 @@
     </div>
   {/if}
 
-  {#if app.view !== 'board'}
+  {#if app.view !== 'board' && app.view !== 'start'}
     <div class="seg mode" role="radiogroup" aria-label={t('toolbar.mode')}>
       <button class="btn" class:on={!app.recursive} role="radio" aria-checked={!app.recursive} onclick={() => app.recursive && app.setRecursive(false)} title={t('toolbar.modeFolderHint')}>
         <Icon name="folder" size={14} />{t('toolbar.modeFolder')}

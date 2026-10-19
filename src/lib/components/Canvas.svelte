@@ -13,6 +13,7 @@
   import MapView from './MapView.svelte';
   import CalendarView from './CalendarView.svelte';
   import FileList from './FileList.svelte';
+  import ProjectStart from './ProjectStart.svelte';
   import NoResults from './NoResults.svelte';
   import PreviewPane from './PreviewPane.svelte';
   import { t, tn, loc } from '../i18n/index.svelte';
@@ -129,7 +130,9 @@
       <button class="btn" onclick={() => app.endDuplicates()}>{t('common.done')}</button>
     </div>
   {/if}
-  {#if app.view === 'panes' && !app.dupes}
+  {#if app.view === 'start' && app.currentProject && !app.dupes}
+    <ProjectStart />
+  {:else if app.view === 'panes' && !app.dupes}
     <FileList />
     <PreviewPane />
   {:else if app.view === 'table' && !app.dupes}

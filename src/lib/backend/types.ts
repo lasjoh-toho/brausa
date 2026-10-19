@@ -74,7 +74,16 @@ export interface WikiBag {
   name: string;
   description: string;
   readonly: boolean;
+  /** Not offered when a new wiki is put together. */
+  hidden?: boolean;
   tiddlers: number;
+}
+
+/** A tiddler found by the search across all bags. */
+export interface WikiHit {
+  bag: string;
+  title: string;
+  snippet: string;
 }
 
 /** A wiki = ordered list of bags (later wins) synced with a wiki folder or single-file wiki. */
@@ -260,6 +269,8 @@ export interface Backend {
   wikiOverlays(): Promise<WikiOverlay[]>;
   /** The layers of a wiki in load order (bottom first, the last one wins): bag and its tiddler titles. */
   wikiLayers(recipe: string): Promise<WikiLayer[]>;
+  /** Tiddlers in all bags whose title or text contains every word. */
+  wikiSearch(query: string): Promise<WikiHit[]>;
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;

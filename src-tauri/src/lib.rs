@@ -448,6 +448,12 @@ async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
     w.0.lock().map_err(err)?.overlays().map_err(err)
 }
 
+/// Search titles and texts in all wiki bags.
+#[tauri::command]
+async fn tw_search(w: State<'_, Wikis>, query: String) -> CmdResult<Vec<tw::Hit>> {
+    Ok(w.0.lock().map_err(err)?.search(&query, 200))
+}
+
 /// A wiki's layers in load order with their tiddler titles.
 #[tauri::command]
 async fn tw_layers(w: State<'_, Wikis>, recipe: String) -> CmdResult<Vec<serde_json::Value>> {
@@ -836,6 +842,7 @@ pub fn run() {
             tw_sync,
             tw_overlays,
             tw_layers,
+            tw_search,
             tw_resolve_overlay,
             tw_plugins
         ])

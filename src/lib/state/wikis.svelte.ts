@@ -3,6 +3,7 @@
  * The logic lives in the Rust core (src-tauri/src/tw.rs).
  */
 import { app } from './app.svelte';
+import { store } from '../platform';
 import { board } from './board.svelte';
 import { t, tn } from '../i18n/index.svelte';
 import type { OverlayResolution, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
@@ -85,6 +86,34 @@ class WikiState {
     await app.backend.deleteWikiRecipe(name);
     await this.load();
     app.toast(t('wikis.removed', { name }));
+  }
+
+  /** Wiki settings (bags, plugins, search), opened with the gear in the sidebar. */
+  settingsOpen = $state(false);
+  /** The search across wikis starts at this many characters. */
+  searchMin = $state(store.get('wikiSearchMin', 5));
+
+  setSearchMin(n: number) {
+    this.searchMin = Math.max(1, Math.min(20, Math.round(n) || 5));
+    store.set('wikiSearchMin', this.searchMin);
+  }
+
+  /** Offer a bag when a new wiki is put together, or not. */
+  async setHidden(name: string, hidden: boolean) {
+    const b = this.bags.find((x) => x.name === name);
+    if (!b) return;
+    await app.backend.putWikiBag({ name: b.name, description: b.description, readonly: b.readonly, hidden });
+    await this.load();
+  }
+
+  async deleteBag(name: string) {
+    try {
+      await app.backend.deleteWikiBag(name);
+      await this.load();
+      app.toast(t('wikis.bagDeleted', { name }));
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    }
   }
 
   async addBag(name: string, readonly: boolean, description = '') {

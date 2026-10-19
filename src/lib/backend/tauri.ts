@@ -19,6 +19,7 @@ import type {
   WalkOptions,
   OverlayResolution,
   WikiBag,
+  WikiHit,
   WikiLayer,
   WikiOverlay,
   WikiRecipe,
@@ -325,6 +326,10 @@ export class TauriBackend implements Backend {
 
   syncWiki(name: string) {
     return invoke<WikiSyncReport>('tw_sync', { name });
+  }
+
+  wikiSearch(query: string) {
+    return invoke<WikiHit[]>('tw_search', { query });
   }
 
   wikiLayers(recipe: string) {
