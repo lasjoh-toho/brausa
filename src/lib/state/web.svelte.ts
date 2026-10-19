@@ -6,7 +6,7 @@
 import { app } from './app.svelte';
 import { board } from './board.svelte';
 import { store } from '../platform';
-import { t } from '../i18n/index.svelte';
+import { t, tn } from '../i18n/index.svelte';
 import { basename, dirname } from '../core/paths';
 import { addCard, bounds } from '../core/map';
 import { decisionFor, remember, type ScriptDecisions } from '../core/htmlpreview';
@@ -29,6 +29,17 @@ class WebState {
   libraries = $state<Record<string, WebLibrary>>(store.get('webLibraries', {}));
   /** Bookmark/history list shown over the page (the native page hides meanwhile). */
   listOpen = $state<'bookmarks' | 'history' | null>(null);
+  /** Speed dial shown instead of the page (at the start, and with the home button). */
+  home = $state(true);
+  /** Recent pages under the address bar while typing there. */
+  suggest = $state(false);
+  /** What the panel shows: web pages, or a document (PDF, text) from which snippets go onto the map. */
+  mode = $state<'web' | 'doc'>('web');
+  /** Simple built-in ad blocker (applies when the panel is created). */
+  adblock = $state(store.get('webAdblock', true));
+  /** Pictures of visited pages are saved into the project's (or current) folder, subfolder "Web-Bilder". */
+  collect = $state(false);
+  private collectTimer: ReturnType<typeof setInterval> | null = null;
   /** Library the visit was recorded in, so a late title lands there too. */
   private visitScope = '';
   /** Area of the panel body; the webview is placed there. */
@@ -125,14 +136,63 @@ class WebState {
     await this.show(url);
   }
 
+  /** Pages for the speed dial: bookmarks first, then recently visited ones. */
+  get dial(): WebPage[] {
+    const l = this.library;
+    const seen = new Set(l.bookmarks.map((p) => p.url));
+    return [...[...l.bookmarks].reverse(), ...l.history.filter((p) => !seen.has(p.url))].slice(0, 16);
+  }
+
+  setAdblock(on: boolean) {
+    this.adblock = on;
+    store.set('webAdblock', on);
+    // The blocker is built into the page view: reload the page with the new setting.
+    if (this.started && !this.home && this.mode === 'web' && this.url) void this.show(this.url);
+  }
+
+  setCollect(on: boolean) {
+    const dir = this.collectDir();
+    if (on && !dir) return app.toast(t('web.noFolder'), true);
+    this.collect = on;
+    if (this.collectTimer) clearInterval(this.collectTimer);
+    this.collectTimer = null;
+    if (!on) return;
+    app.toast(t('web.collectOn', { folder: dir! }));
+    const run = async () => {
+      const d = this.collectDir();
+      if (!d || !this.started || this.home || this.mode !== 'web' || this.local) return;
+      const n = await app.backend.webCollectImages(d).catch(() => 0);
+      if (n) {
+        app.toast(tn('web.collected', n, { folder: basename(d) }));
+        if (dirname(d) === app.cwd || d === app.cwd) await app.refresh(true);
+      }
+    };
+    void run();
+    this.collectTimer = setInterval(run, 5000);
+  }
+
+  private collectDir(): string | null {
+    const dir = this.target();
+    return dir ? dir.replace(/[\/]+$/, '') + '/Web-Bilder' : null;
+  }
+
+  /** Show the speed dial instead of the page. */
+  goHome() {
+    this.home = true;
+    this.mode = 'web';
+  }
+
   private async show(url: string) {
     this.toggle(true);
     await this.listen();
     this.url = url;
+    this.home = false;
+    this.mode = 'web';
+    this.suggest = false;
     try {
       await app.backend.webTarget(this.target());
       if (!this.rect) await new Promise((r) => requestAnimationFrame(r));
-      await app.backend.webOpen(url, this.rect ?? { x: 0, y: 0, w: 1, h: 1 });
+      await app.backend.webOpen(url, this.rect ?? { x: 0, y: 0, w: 1, h: 1 }, this.adblock);
       this.started = true;
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
@@ -168,7 +228,13 @@ class WebState {
 
   async place(r: WebBounds, visible: boolean) {
     this.rect = r;
-    if (this.started) await app.backend.webPlace(r, visible && this.open).catch(() => {});
+    if (this.started) await app.backend.webPlace(r, visible && this.open && !this.home && this.mode === 'web').catch(() => {});
+  }
+
+  /** A document in the panel (instead of the page): snippets can be dragged from it onto the map. */
+  showDoc() {
+    this.toggle(true);
+    this.mode = 'doc';
   }
 
   async nav(how: 'back' | 'forward' | 'reload') {

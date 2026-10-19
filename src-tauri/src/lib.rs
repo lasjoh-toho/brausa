@@ -354,8 +354,15 @@ async fn project_entries(state: State<'_, Index>, projs: State<'_, Projs>, id: S
 }
 
 #[tauri::command]
-async fn web_open(app: AppHandle, web: State<'_, web::Web>, url: String, bounds: web::Bounds) -> CmdResult<()> {
-    web.open(&app, &url, bounds)
+async fn web_open(app: AppHandle, web: State<'_, web::Web>, url: String, bounds: web::Bounds, adblock: bool) -> CmdResult<()> {
+    web.open(&app, &url, bounds, adblock)
+}
+
+/// Saves the pictures of the page shown in the web panel into `dir` (each only once).
+#[tauri::command]
+async fn web_collect_images(app: AppHandle, dir: String) -> CmdResult<usize> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().collect_images(&a, Path::new(&dir))).await.map_err(err)?
 }
 
 #[tauri::command]
@@ -816,6 +823,7 @@ pub fn run() {
             web_close,
             web_go,
             web_selection,
+            web_collect_images,
             web_save_page,
             web_target,
             web_serve,

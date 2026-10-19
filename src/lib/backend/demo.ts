@@ -593,6 +593,9 @@ export class DemoBackend implements Backend {
   async webOpen() {
     this.noWeb();
   }
+  async webCollectImages(): Promise<number> {
+    return 0;
+  }
   async webPlace() {}
   async webClose() {}
   async webGo() {}

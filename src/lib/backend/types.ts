@@ -233,7 +233,9 @@ export interface Backend {
    * Web panel: a separate webview over the area `b` (CSS px of the window),
    * with its own cookies and no access to brausa. Desktop app only.
    */
-  webOpen(url: string, b: WebBounds): Promise<void>;
+  webOpen(url: string, b: WebBounds, adblock: boolean): Promise<void>;
+  /** Save the pictures of the shown page into `dir` (each only once); returns how many. */
+  webCollectImages(dir: string): Promise<number>;
   webPlace(b: WebBounds, visible: boolean): Promise<void>;
   webClose(): Promise<void>;
   webGo(how: 'back' | 'forward' | 'reload'): Promise<void>;

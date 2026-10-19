@@ -1,4 +1,12 @@
 export const de = {
+  home: 'Schnellwahl',
+  tabWeb: 'Web',
+  adblock: 'Werbeblocker',
+  adblockOn: 'Werbeblocker an: Skripte, Frames und Bilder bekannter Werbe- und Tracking-Netze werden blockiert. Klicken schaltet ihn aus.',
+  adblockOff: 'Werbeblocker aus. Klicken schaltet ihn ein.',
+  collect: 'Bilder sammeln',
+  collectOn: 'Bilder der besuchten Seiten werden im Ordner „Web-Bilder“ des Projekts (oder des aktuellen Ordners) gespeichert. Klicken beendet das.',
+  collectOff: 'Bilder der besuchten Seiten automatisch in „Web-Bilder“ speichern',
   resize: 'Breite ändern',
   back: 'Zurück',
   forward: 'Vor',
@@ -37,6 +45,14 @@ export const de = {
 };
 
 export const en: typeof de = {
+  home: 'Speed dial',
+  tabWeb: 'Web',
+  adblock: 'Ad blocker',
+  adblockOn: 'Ad blocker on: scripts, frames and pictures of known ad and tracking networks are blocked. Click to turn it off.',
+  adblockOff: 'Ad blocker off. Click to turn it on.',
+  collect: 'Collect pictures',
+  collectOn: 'Pictures of visited pages are saved to the folder "Web-Bilder" of the project (or the current folder). Click to stop.',
+  collectOff: 'Save the pictures of visited pages to "Web-Bilder" automatically',
   resize: 'Resize',
   back: 'Back',
   forward: 'Forward',

@@ -10,7 +10,7 @@
 
 use serde::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     io::Read,
     path::{Component, Path, PathBuf},
@@ -115,7 +115,17 @@ pub struct Web {
     port: Mutex<Option<u16>>,
     /// Where each running download goes (macOS does not report the path when it finishes).
     pending: Mutex<HashMap<String, PathBuf>>,
+    /// Whether the panel was created with the ad blocker (changing it recreates the panel).
+    adblock: Mutex<Option<bool>>,
+    /// Pictures already saved by the collector (by address).
+    collected: Mutex<HashSet<String>>,
 }
+
+/// Runs before every page when the ad blocker is on.
+const ADBLOCK: &str = include_str!("adblock.js");
+
+/// Pictures of the page worth keeping (no icons or spacers), as a JSON list of addresses.
+const IMAGES: &str = "JSON.stringify([...new Set([...document.images].filter(i => i.naturalWidth >= 160 && i.naturalHeight >= 160).map(i => i.currentSrc || i.src).filter(u => /^https?:/.test(u)))])";
 
 fn token() -> String {
     let t = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
@@ -152,14 +162,22 @@ impl Web {
     }
 
     /// Opens (or navigates) the panel at `url` and puts it at `b` (CSS pixels of the main window).
-    pub fn open(&self, app: &AppHandle, url: &str, b: Bounds) -> Result<(), String> {
+    pub fn open(&self, app: &AppHandle, url: &str, b: Bounds, adblock: bool) -> Result<(), String> {
         let url = Url::parse(url).map_err(|e| crate::tr!(format!("Ungültige Adresse: {e}"), format!("Invalid address: {e}")))?;
         if !allowed(&url) {
             return Err(crate::tr!(format!("„{}“-Adressen öffnet das Web-Fenster nicht", url.scheme()), format!("The web panel does not open “{}” addresses", url.scheme())));
         }
+        let same = self.adblock.lock().map(|a| *a == Some(adblock)).unwrap_or(false);
         if let Some(w) = app.get_webview(LABEL) {
-            w.navigate(url).map_err(|e| e.to_string())?;
-            return self.place(app, b, true);
+            if same {
+                w.navigate(url).map_err(|e| e.to_string())?;
+                return self.place(app, b, true);
+            }
+            // The blocker is set when the page view is created.
+            w.close().map_err(|e| e.to_string())?;
+        }
+        if let Ok(mut a) = self.adblock.lock() {
+            *a = Some(adblock);
         }
         let window = app.get_window("main").ok_or_else(|| crate::tr!("Kein Hauptfenster", "No main window"))?;
         let data = app.path().app_data_dir().map_err(|e| e.to_string())?.join("web");
@@ -203,6 +221,9 @@ impl Web {
                 }
                 true
             });
+        if adblock {
+            builder = builder.initialization_script(ADBLOCK);
+        }
         // macOS keeps website data per identifier instead of per folder.
         #[cfg(target_os = "macos")]
         {
@@ -246,6 +267,50 @@ impl Web {
         })
         .map_err(|e| e.to_string())?;
         rx.recv_timeout(Duration::from_secs(10)).map_err(|_| crate::tr!("Die Seite antwortet nicht", "The page does not respond").to_string())
+    }
+
+    /// Saves the pictures of the shown page into `dir` that were not saved before; returns how many.
+    pub fn collect_images(&self, app: &AppHandle, dir: &Path) -> Result<usize, String> {
+        let raw = self.eval(app, IMAGES)?;
+        let inner: String = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+        let urls: Vec<String> = serde_json::from_str(&inner).map_err(|e| e.to_string())?;
+        let fresh: Vec<String> = {
+            let mut seen = self.collected.lock().map_err(|e| e.to_string())?;
+            urls.into_iter().filter(|u| seen.insert(u.clone())).collect()
+        };
+        if fresh.is_empty() {
+            return Ok(0);
+        }
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(20)).build();
+        let mut n = 0;
+        for u in fresh {
+            let Ok(resp) = agent.get(&u).call() else { continue };
+            let ext = match resp.content_type() {
+                "image/png" => "png",
+                "image/gif" => "gif",
+                "image/webp" => "webp",
+                "image/avif" => "avif",
+                "image/svg+xml" => "svg",
+                t if t.starts_with("image/") => "jpg",
+                _ => continue,
+            };
+            let mut bytes = Vec::new();
+            if resp.into_reader().take(40 << 20).read_to_end(&mut bytes).is_err() {
+                continue;
+            }
+            let parsed = Url::parse(&u).ok();
+            let stem = parsed
+                .as_ref()
+                .and_then(|p| p.path_segments().and_then(|mut s| s.next_back()).map(String::from))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "bild".into());
+            let name = if Path::new(&stem).extension().is_some() { stem } else { format!("{stem}.{ext}") };
+            if fs::write(free_path(dir, &safe_name(&name)), &bytes).is_ok() {
+                n += 1;
+            }
+        }
+        Ok(n)
     }
 
     /// Saves the page as it is shown now (HTML after scripts ran) into `dir`.

@@ -1,5 +1,8 @@
 // Built-in browser state: toasts.
 export const de = {
+  collectOn: 'Bilder der besuchten Seiten werden gespeichert in {folder}',
+  'collected.one': '1 Bild gespeichert in {folder}',
+  'collected.other': '{n} Bilder gespeichert in {folder}',
   noFolder: 'Das Projekt hat keinen Ordner. Erst einen Ordner zum Projekt hinzufügen oder einen Ordner öffnen.',
   pageSaved: 'Seite gespeichert: {name}',
   downloadFailed: 'Download fehlgeschlagen',
@@ -10,6 +13,9 @@ export const de = {
 };
 
 export const en: typeof de = {
+  collectOn: 'Pictures of visited pages are saved to {folder}',
+  'collected.one': '1 picture saved to {folder}',
+  'collected.other': '{n} pictures saved to {folder}',
   noFolder: 'The project has no folder. Add a folder to the project or open a folder first.',
   pageSaved: 'Page saved: {name}',
   downloadFailed: 'Download failed',

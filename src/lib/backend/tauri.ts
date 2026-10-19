@@ -226,8 +226,12 @@ export class TauriBackend implements Backend {
     return invoke<Entry[]>('project_entries', { id });
   }
 
-  webOpen(url: string, bounds: WebBounds) {
-    return invoke<void>('web_open', { url, bounds });
+  webOpen(url: string, bounds: WebBounds, adblock: boolean) {
+    return invoke<void>('web_open', { url, bounds, adblock });
+  }
+
+  webCollectImages(dir: string) {
+    return invoke<number>('web_collect_images', { dir });
   }
 
   webPlace(bounds: WebBounds, visible: boolean) {

@@ -21,9 +21,14 @@
 
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
+  /** Shown inside the web panel (it then fills the panel, which has its own width). */
+  let { docked = false }: { docked?: boolean } = $props();
+
   const doc = $derived(board.reader);
   const ref = $derived(doc?.ref);
-  const kind = $derived(ref?.ext === 'pdf' ? 'pdf' : ref?.ext === 'html' || ref?.ext === 'htm' ? 'html' : ref?.ext === 'txt' ? 'txt' : 'md');
+  const kind = $derived(
+    ref?.ext === 'pdf' ? 'pdf' : ref?.ext === 'html' || ref?.ext === 'htm' ? 'html' : ref?.ext === 'md' || ref?.ext === 'markdown' ? 'md' : 'txt'
+  );
 
   let scroller = $state<HTMLElement>();
   let width = $state(500);
@@ -220,7 +225,7 @@
 </script>
 
 {#if doc && ref}
-  <aside class="reader" style:width="{board.readerWidth}px">
+  <aside class="reader" class:docked style:width={docked ? undefined : `${board.readerWidth}px`}>
     <header>
       <Icon name="doc" size={14} />
       <span class="name" title={ref.path}>{ref.name}</span>
@@ -268,12 +273,19 @@
         </div>
       {/if}
     </div>
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="grip" onpointerdown={resize}></div>
+    {#if !docked}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="grip" onpointerdown={resize}></div>
+    {/if}
   </aside>
 {/if}
 
 <style>
+  .reader.docked {
+    flex: 1;
+    width: 100%;
+    border-right: 0;
+  }
   .reader {
     position: relative;
     flex: none;

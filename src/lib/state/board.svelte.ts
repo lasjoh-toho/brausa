@@ -25,7 +25,7 @@ import { t } from '../i18n/index.svelte';
 type Snapshot = string;
 
 /** Opened in brausa's reader instead of the default app (snippets need it). */
-export const READABLE = new Set(['pdf', 'html', 'htm', 'md', 'markdown', 'txt']);
+export const READABLE = new Set(['pdf', 'html', 'htm', 'md', 'markdown', 'txt', 'csv', 'json', 'xml', 'yml', 'yaml', 'log', 'tex', 'rtf']);
 
 const HISTORY = 100;
 
@@ -156,6 +156,8 @@ class BoardState {
   openReader(r: CardRef) {
     const seq = (this.reader?.seq ?? 0) + 1;
     this.reader = { ref: r, seq };
+    // Documents open in the web panel, next to the files or the map.
+    void import('./web.svelte').then((m) => m.web.showDoc());
     // Opened from the file list: get the index id so this document's snippets are highlighted.
     if (!r.id && r.path)
       void app.backend.linkFiles([r.path]).then(([l]) => {

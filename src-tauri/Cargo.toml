@@ -45,5 +45,6 @@ gtk = "0.18"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-drag = "2"
+ureq = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
