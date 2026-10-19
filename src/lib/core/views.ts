@@ -12,9 +12,9 @@ import { loc, t } from '../i18n/index.svelte';
 
 export type ViewMode = 'stream' | 'panes' | 'table' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
 export type GroupBy = 'none' | 'tag' | 'subfolder' | 'month';
-export type SortKey = 'name' | 'mtime' | 'ctime' | 'taken' | 'size' | 'ext';
+export type SortKey = 'name' | 'folder' | 'mtime' | 'ctime' | 'taken' | 'size' | 'ext';
 
-export const SORT_KEYS: { key: SortKey; label: string }[] = (['name', 'mtime', 'ctime', 'taken', 'size', 'ext'] as SortKey[]).map((key) => ({
+export const SORT_KEYS: { key: SortKey; label: string }[] = (['name', 'folder', 'mtime', 'ctime', 'taken', 'size', 'ext'] as SortKey[]).map((key) => ({
   key,
   get label() {
     return t(`core.views.${key}`);
@@ -74,6 +74,8 @@ export function sortEntries(entries: Entry[], key: SortKey, desc = false): Entry
   const dirFirst = (a: Entry, b: Entry) => (a.kind === b.kind ? 0 : a.kind === 'dir' ? -1 : 1);
   const by: Record<SortKey, (a: Entry, b: Entry) => number> = {
     name: (a, b) => coll.compare(a.name, b.name),
+    // Flat view: folder by folder, then by name.
+    folder: (a, b) => coll.compare(a.relDir ?? '', b.relDir ?? '') || coll.compare(a.name, b.name),
     mtime: (a, b) => a.mtime - b.mtime,
     ctime: (a, b) => (a.ctime || a.mtime) - (b.ctime || b.mtime),
     // Files without EXIF date fall back to their modification date.

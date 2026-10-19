@@ -145,7 +145,8 @@ pub fn walk_dirs(root: &Path, max_depth: usize, limit: usize) -> Vec<PathBuf> {
         .collect()
 }
 
-fn skip_walk(e: &walkdir::DirEntry) -> bool {
+/// System files and program folders: Stream, the index and the watcher leave them out.
+pub fn skip_walk(e: &walkdir::DirEntry) -> bool {
     let n = e.file_name().to_string_lossy();
     is_system(&n, e.metadata().ok().as_ref()) || (e.file_type().is_dir() && is_program_dir(&n))
 }

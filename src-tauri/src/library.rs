@@ -382,7 +382,7 @@ impl Library {
         let Some(root) = self.root.clone() else { return 0 };
         let dirs: Vec<PathBuf> = WalkDir::new(&root)
             .into_iter()
-            .filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.') || e.file_name() == SIDECAR_DIR)
+            .filter_entry(|e| e.depth() == 0 || e.file_name() == SIDECAR_DIR || !crate::fsops::skip_walk(e))
             .flatten()
             .filter(|e| e.file_type().is_dir() && e.file_name() == SIDECAR_DIR)
             .map(|e| e.into_path())
@@ -531,7 +531,7 @@ impl Library {
                 .min_depth(1)
                 .max_depth(depth)
                 .into_iter()
-                .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'))
+                .filter_entry(|e| !crate::fsops::skip_walk(e))
                 .flatten()
             {
                 let p = e.path();

@@ -16,7 +16,7 @@ export const de = {
   nothingFound: 'Nichts gefunden.',
   projectEmpty: 'Das Projekt ist noch leer. Dateien und Ordner von überall hierher oder auf das Projekt in der Seitenleiste ziehen; sie bleiben, wo sie sind.',
   folderEmpty: 'Dieser Ordner ist leer.',
-  showStream: 'Unterordner als Stream zeigen',
+  showStream: 'Unterordner flach zeigen',
   // Tile
   inTray: 'In der Ablage',
   dropCopy: 'Kopieren',
@@ -90,7 +90,7 @@ export const en: typeof de = {
   nothingFound: 'Nothing found.',
   projectEmpty: 'The project is still empty. Drag files and folders from anywhere here or onto the project in the sidebar; they stay where they are.',
   folderEmpty: 'This folder is empty.',
-  showStream: 'Show subfolders as a stream',
+  showStream: 'Show subfolders flat',
   inTray: 'In the tray',
   dropCopy: 'Copy',
   dropMove: 'Move',

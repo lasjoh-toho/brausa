@@ -93,12 +93,16 @@ class AppState {
   view = $state<ViewMode>(store.get('view', 'stream'));
   kanbanBy = $state<Exclude<GroupBy, 'none' | 'month'>>(store.get('kanbanBy', 'tag'));
   tagDepth = $state(store.get('tagDepth', 1));
-  sort = $state<SortKey>(store.get('sort', 'name'));
-  desc = $state(store.get('desc', false));
+  // Folder view and flat view keep their own order; flat goes folder by folder unless chosen otherwise.
+  sort = $state<SortKey>(this.recursive ? store.get('sortFlat', 'folder') : store.get('sort', 'name'));
+  desc = $state(this.recursive ? store.get('descFlat', false) : store.get('desc', false));
+  /** Show system files (only offered inside a chosen folder or with a search of at least five characters). */
+  showSystem = $state(false);
   /** Width of the preview column in the three-panel view. */
   previewWidth = $state(store.get('previewWidth', 420));
   search = $state('');
   searchMode = $state<'filter' | 'select'>('filter');
+  systemAllowed = $derived((!this.project && !!this.cwd && this.cwd !== this.home) || this.search.trim().length >= 5);
   funnel = $state<string | null>(null);
   /** Type filter from the toolbar (Bilder, Videos, …); null shows everything. */
   typeFilter = $state<string | null>(store.get('typeFilter', null));
@@ -621,11 +625,12 @@ class AppState {
       // Stream reads only what the view can show: the photo map only photos, a kind filter only that kind.
       const cats = this.typeFilter ? parseCategories(this.typeFilter) : null;
       const exts = this.view === 'map' ? MEDIA_EXT : cats ? extsOf(cats) : undefined;
+      const includeHidden = this.showSystem && this.systemAllowed;
       const fresh = this.project
         ? await this.backend.projectEntries(this.project)
         : recursive
-          ? await this.backend.walk(this.cwd, { maxDepth: 12, exts })
-          : await this.backend.listDir(this.cwd);
+          ? await this.backend.walk(this.cwd, { maxDepth: 12, exts, includeHidden })
+          : await this.backend.listDir(this.cwd, { includeHidden });
       this.truncated = recursive && !this.project && fresh.length >= WALK_LIMIT;
       // Keep lazily loaded EXIF data across refreshes.
       const prev = new Map(this.raw.map((e) => [e.path, e]));
@@ -655,10 +660,10 @@ class AppState {
 
   /** Sort every view; picking the current key again flips the direction. */
   setSort(key: SortKey, desc?: boolean) {
-    this.desc = desc ?? (key === this.sort ? !this.desc : key !== 'name' && key !== 'ext');
+    this.desc = desc ?? (key === this.sort ? !this.desc : key !== 'name' && key !== 'ext' && key !== 'folder');
     this.sort = key;
-    store.set('sort', key);
-    store.set('desc', this.desc);
+    store.set(this.recursive ? 'sortFlat' : 'sort', key);
+    store.set(this.recursive ? 'descFlat' : 'desc', this.desc);
     if (key === 'taken') void this.loadMediaInfo();
   }
 
@@ -687,6 +692,13 @@ class AppState {
   setRecursive(v: boolean) {
     this.recursive = v;
     store.set('recursive', v);
+    this.sort = v ? store.get('sortFlat', 'folder') : store.get('sort', 'name');
+    this.desc = v ? store.get('descFlat', false) : store.get('desc', false);
+    this.refresh();
+  }
+
+  setShowSystem(v: boolean) {
+    this.showSystem = v;
     this.refresh();
   }
 

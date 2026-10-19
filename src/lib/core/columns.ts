@@ -33,7 +33,7 @@ const DEFS: [ColumnId, string, SortKey | null, number][] = [
   ['kind', 'colKind', null, 80],
   ['ext', 'colExt', 'ext', 70],
   ['tags', 'colTags', null, 160],
-  ['folder', 'colFolder', null, 140],
+  ['folder', 'colFolder', 'folder', 140],
   ['path', 'colPath', null, 260],
   ['geo', 'colGeo', null, 150],
   ['color', 'colColor', null, 60]

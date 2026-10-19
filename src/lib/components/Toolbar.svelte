@@ -27,6 +27,17 @@
     { id: 'board', icon: 'nodes' }
   ];
 
+  // Sort menu: picking the current key again reverses the order.
+  let sortMenu = $state<{ x: number; y: number } | null>(null);
+  function openSort(e: MouseEvent) {
+    if (sortMenu) return void (sortMenu = null);
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    sortMenu = { x: r.left, y: r.bottom + 4 };
+  }
+  function outside(e: PointerEvent) {
+    if (sortMenu && !(e.target as HTMLElement).closest('.sort-menu, .sort-btn')) sortMenu = null;
+  }
+
   let searchEl: HTMLInputElement;
   export function focusSearch() {
     searchEl?.focus();
@@ -43,6 +54,20 @@
     }
   }
 </script>
+
+<svelte:window onpointerdown={outside} onkeydown={(ev) => sortMenu && ev.key === 'Escape' && (sortMenu = null)} />
+
+{#if sortMenu}
+  <div class="sort-menu" style:left="{sortMenu.x}px" style:top="{sortMenu.y}px" role="menu">
+    {#each SORT_KEYS as k (k.key)}
+      <button class:on={app.sort === k.key} role="menuitemradio" aria-checked={app.sort === k.key} onclick={() => app.setSort(k.key)}>
+        <span>{k.label}</span>
+        {#if app.sort === k.key}<Icon name={app.desc ? 'sortDown' : 'sortUp'} size={13} />{/if}
+      </button>
+    {/each}
+    <p>{t('toolbar.sortAgain')}</p>
+  </div>
+{/if}
 
 <header data-tauri-drag-region class="toolbar" class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
   <div class="nav">
@@ -122,27 +147,42 @@
   {/if}
 
   {#if app.view !== 'board'}
-    <button class="btn" class:on={app.recursive} onclick={() => app.setRecursive(!app.recursive)} title={t('toolbar.streamHint')}>
-      <Icon name="stream" size={15} /> Stream
-    </button>
-    <label class="btn types" class:on={!!app.typeFilter} title={t('toolbar.typeHint')}>
-      <span>{typeLabel}</span>
-      <select value={app.typeFilter ?? ''} onchange={(ev) => app.setTypeFilter(ev.currentTarget.value || null)}>
+    <div class="seg mode" role="radiogroup" aria-label={t('toolbar.mode')}>
+      <button class="btn" class:on={!app.recursive} role="radio" aria-checked={!app.recursive} onclick={() => app.recursive && app.setRecursive(false)} title={t('toolbar.modeFolderHint')}>
+        <Icon name="folder" size={14} />{t('toolbar.modeFolder')}
+      </button>
+      <button class="btn" class:on={app.recursive} role="radio" aria-checked={app.recursive} onclick={() => !app.recursive && app.setRecursive(true)} title={t('toolbar.streamHint')}>
+        <Icon name="stream" size={14} />{t('toolbar.modeFlat')}
+      </button>
+    </div>
+    <label class="btn types" class:on={!!app.typeFilter || (app.showSystem && app.systemAllowed)} title={t('toolbar.typeHint')}>
+      <span>{typeLabel}{app.showSystem && app.systemAllowed ? ' + ' + t('toolbar.system') : ''}</span>
+      <select
+        value={app.typeFilter ?? ''}
+        onchange={(ev) => {
+          const v = ev.currentTarget.value;
+          if (v === '__system') {
+            ev.currentTarget.value = app.typeFilter ?? '';
+            app.setShowSystem(!app.showSystem);
+          } else app.setTypeFilter(v || null);
+        }}
+      >
         <option value="">{t('toolbar.allTypes')}</option>
         <option value="medien">{t('toolbar.media')}</option>
         {#each CATEGORIES as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+        {#if app.systemAllowed}
+          <option disabled>──────</option>
+          <option value="__system">{app.showSystem ? '✓ ' : ''}{t('toolbar.showSystem')}</option>
+        {/if}
       </select>
       <Icon name="chevronDown" size={12} />
     </label>
 
     <div class="sortbox">
-      <label class="btn types" title={t('toolbar.sortBy')}>
+      <button class="btn types sort-btn" class:on={!!sortMenu} title={t('toolbar.sortBy')} onclick={openSort}>
         <span>{SORT_KEYS.find((k) => k.key === app.sort)?.label ?? 'Name'}</span>
-        <select value={app.sort} onchange={(ev) => app.setSort(ev.currentTarget.value as typeof app.sort, app.desc)}>
-          {#each SORT_KEYS as k (k.key)}<option value={k.key}>{k.label}</option>{/each}
-        </select>
         <Icon name="chevronDown" size={12} />
-      </label>
+      </button>
       <button
         class="btn icon"
         onclick={() => app.setSort(app.sort, !app.desc)}
@@ -352,5 +392,40 @@
     50% {
       box-shadow: inset 0 0 0 1.5px transparent;
     }
+  }
+  .sort-menu {
+    position: fixed;
+    z-index: 80;
+    min-width: 170px;
+    padding: 5px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--bg-elev);
+    box-shadow: var(--shadow);
+  }
+  .sort-menu button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--fg);
+  }
+  .sort-menu button:hover {
+    background: var(--bg-sunken);
+  }
+  .sort-menu button.on {
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .sort-menu p {
+    margin: 4px 8px 2px;
+    font-size: 11px;
+    color: var(--fg-faint);
+  }
+  .mode .btn {
+    gap: 5px;
   }
 </style>

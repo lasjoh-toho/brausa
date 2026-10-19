@@ -1,4 +1,11 @@
 export const de = {
+  mode: 'Ordner oder flach',
+  modeFolder: 'Ordner',
+  modeFlat: 'Flach',
+  modeFolderHint: 'Nur dieser Ordner, Unterordner als Ordner',
+  system: 'System',
+  showSystem: 'Systemdateien zeigen',
+  sortAgain: 'Nochmals anklicken kehrt die Reihenfolge um.',
   back: 'Zurück',
   forward: 'Vor',
   path: 'Pfad',
@@ -38,6 +45,13 @@ export const de = {
 };
 
 export const en: typeof de = {
+  mode: 'Folders or flat',
+  modeFolder: 'Folders',
+  modeFlat: 'Flat',
+  modeFolderHint: 'Only this folder, subfolders as folders',
+  system: 'system',
+  showSystem: 'Show system files',
+  sortAgain: 'Click again to reverse the order.',
   back: 'Back',
   forward: 'Forward',
   path: 'Path',
