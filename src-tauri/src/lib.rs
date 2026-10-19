@@ -3,6 +3,7 @@ mod dupes;
 mod i18n;
 mod smart;
 mod fsops;
+mod watchdog;
 mod library;
 mod maps;
 mod tw;
@@ -538,6 +539,18 @@ fn save_smart_folders(s: State<'_, Smart>, list: serde_json::Value) -> CmdResult
 }
 
 /// Language of the core's messages ("de" or "en").
+/// Heartbeat of the interface, with the view it shows.
+#[tauri::command]
+fn alive(dog: State<'_, watchdog::Watchdog>, view: String) {
+    dog.alive(view);
+}
+
+/// The view that hung last time (start in a plain view instead), once.
+#[tauri::command]
+fn stuck_view(dog: State<'_, watchdog::Watchdog>) -> Option<String> {
+    dog.take_stuck()
+}
+
 #[tauri::command]
 fn set_lang(lang: String) {
     i18n::set(&lang);
@@ -651,17 +664,19 @@ struct FsChange {
 }
 
 #[tauri::command]
-fn watch(app: AppHandle, state: State<'_, Watcher>, path: String, recursive: bool) -> CmdResult<()> {
+async fn watch(app: AppHandle, state: State<'_, Watcher>, path: String, recursive: bool) -> CmdResult<()> {
     let mut guard = state.0.lock().map_err(err)?;
     *guard = None; // drop the previous watcher first
     let emitter = app.clone();
+    let root = PathBuf::from(&path);
     let mut deb = new_debouncer(Duration::from_millis(300), move |res: Result<Vec<DebouncedEvent>, _>| {
         let Ok(events) = res else { return };
         let paths: Vec<String> = events
             .into_iter()
+            // Our own sidecar writes would otherwise cause refresh loops; caches and
+            // program folders change all the time and are not shown anyway.
+            .filter(|e| !fsops::in_skipped(&root, &e.path))
             .map(|e| e.path.to_string_lossy().to_string())
-            // Our own sidecar writes would otherwise cause refresh loops.
-            .filter(|p| !p.contains(meta::SIDECAR_DIR))
             .collect();
         if !paths.is_empty() {
             // Files moved by other apps: let the index find them again.
@@ -670,8 +685,15 @@ fn watch(app: AppHandle, state: State<'_, Watcher>, path: String, recursive: boo
         }
     })
     .map_err(err)?;
-    let mode = if recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
-    deb.watcher().watch(Path::new(&path), mode).map_err(err)?;
+    if recursive && cfg!(target_os = "linux") {
+        // inotify watches folder by folder: register only those Stream reads, not caches.
+        for d in fsops::walk_dirs(Path::new(&path), 32, 4000) {
+            let _ = deb.watcher().watch(&d, RecursiveMode::NonRecursive);
+        }
+    } else {
+        let mode = if recursive { RecursiveMode::Recursive } else { RecursiveMode::NonRecursive };
+        deb.watcher().watch(Path::new(&path), mode).map_err(err)?;
+    }
     *guard = Some(deb);
     Ok(())
 }
@@ -682,6 +704,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Watcher::default())
         .manage(web::Web::default())
         .setup(|app| {
@@ -710,6 +733,8 @@ pub fn run() {
             app.manage(Index(Mutex::new(reg)));
             app.manage(Wikis(Mutex::new(tw::Store::open(&dir)?)));
             app.manage(Smart(smart::SmartFolders::open(&dir)?));
+            app.manage(watchdog::Watchdog::new(&dir));
+            watchdog::Watchdog::start(app.handle().clone());
             // Repair on start, then every 10 minutes (catches changes outside the watched folder).
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -755,6 +780,8 @@ pub fn run() {
             archive_conflicts,
             find_duplicates,
             set_lang,
+            alive,
+            stuck_view,
             smart_folders,
             save_smart_folders,
             compress,

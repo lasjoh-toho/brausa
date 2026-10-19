@@ -166,6 +166,10 @@ export interface Backend {
   /** Saved smart folders; null before the first save. */
   smartFolders(): Promise<SmartFolder[] | null>;
   saveSmartFolders(list: SmartFolder[]): Promise<void>;
+  /** Heartbeat for the core's watchdog: the interface responds and shows `view`. */
+  alive(view: string): Promise<void>;
+  /** The view that hung last time (then start in a plain view), reported once. */
+  stuckView(): Promise<string | null>;
   /** Groups of files with identical content among `paths`, largest waste first. */
   findDuplicates(paths: string[]): Promise<string[][]>;
   /** Names in an archive folder that dropping `names` there would replace. */

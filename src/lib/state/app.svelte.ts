@@ -5,7 +5,7 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
-import type { IndexReport, LibraryInfo } from '../backend/types';
+import type { IndexReport, LibraryInfo, MediaInfo } from '../backend/types';
 import { createBackend } from '../backend';
 import { parseCategories } from '../core/pattern';
 import { archiveName, archiveRoot, inArchive, isArchive } from '../core/archive';
@@ -201,6 +201,10 @@ class AppState {
 
   async init() {
     this.home = await this.backend.homeDir();
+    // The last session hung in a view: start plain, so it does not hang again.
+    const stuck = await this.backend.stuckView().catch(() => null);
+    if (stuck) this.startPlain(stuck);
+    this.heartbeat();
     this.placesRaw = await this.backend.places();
     if (!this.gridConfig.cells.length) this.gridConfig = defaultGrid(this.places);
     const last = store.get<string>('cwd', '');
@@ -213,6 +217,29 @@ class AppState {
     await this.loadSmartFolders();
     if (this.project) await this.refresh();
     await this.backend.onIndexReport((r) => this.onIndexReport(r));
+  }
+
+  /** Tell the core's watchdog that the interface responds, and what it shows. */
+  private heartbeat() {
+    const beat = () => {
+      const where = this.currentProject?.name ?? basename(this.cwd);
+      void this.backend.alive(`${t('toolbar.view.' + this.view)}${where ? ' · ' + where : ''}`).catch(() => {});
+    };
+    beat();
+    setInterval(beat, 2000);
+  }
+
+  /** Plain tiles of the home folder, without Stream and filters. */
+  private startPlain(stuck: string) {
+    this.view = 'stream';
+    store.set('view', 'stream');
+    this.recursive = false;
+    store.set('recursive', false);
+    this.typeFilter = null;
+    store.set('typeFilter', null);
+    this.setProject(null);
+    store.set('cwd', '');
+    this.toast(t('app.startedPlain', { view: stuck }), true);
   }
 
   // ---------------------------------------------------------------- projects
@@ -661,19 +688,50 @@ class AppState {
   private mediaLoaded = new Set<string>();
 
   /** EXIF (GPS, capture date) for photos in the current listing, batched. */
+  /** Reading photo data (date taken, location) in the background; null: idle or quick. */
+  mediaProgress = $state<{ done: number; total: number } | null>(null);
+  private mediaRun = 0;
+
   async loadMediaInfo() {
+    const run = ++this.mediaRun;
     const todo = this.raw.filter(
       (e) => e.kind === 'file' && ['jpg', 'jpeg', 'tif', 'tiff', 'heic', 'png', 'webp'].includes(e.ext) && !this.mediaLoaded.has(this.thumbKey(e))
     );
-    for (let i = 0; i < todo.length; i += 200) {
-      const batch = todo.slice(i, i + 200);
-      for (const e of batch) this.mediaLoaded.add(this.thumbKey(e));
-      const infos = new Map((await this.backend.mediaInfo(batch.map((e) => e.path))).map((m) => [m.path, m]));
+    if (!todo.length) return;
+    const started = Date.now();
+    let shown = started;
+    const found = new Map<string, MediaInfo>();
+    // Results go into the view about once a second, not per batch: every update re-sorts and redraws everything.
+    const flush = () => {
+      if (!found.size) return;
+      const got = new Map(found);
+      found.clear();
       this.raw = this.raw.map((e) => {
-        const m = infos.get(e.path);
+        const m = got.get(e.path);
         return m ? { ...e, geo: e.geo ?? m.geo, taken: m.taken } : e;
       });
+      shown = Date.now();
+    };
+    try {
+      for (let i = 0; i < todo.length; i += 200) {
+        // Cancelled, or another folder was opened.
+        if (run !== this.mediaRun) break;
+        const batch = todo.slice(i, i + 200);
+        for (const m of await this.backend.mediaInfo(batch.map((e) => e.path))) found.set(m.path, m);
+        for (const e of batch) this.mediaLoaded.add(this.thumbKey(e));
+        if (run === this.mediaRun && Date.now() - started > 800) this.mediaProgress = { done: i + batch.length, total: todo.length };
+        if (Date.now() - shown > 1200) flush();
+      }
+    } finally {
+      flush();
+      if (run === this.mediaRun) this.mediaProgress = null;
     }
+  }
+
+  /** Stop reading photo data; what was read so far stays. */
+  cancelMediaInfo() {
+    this.mediaRun++;
+    this.mediaProgress = null;
   }
 
   setKanbanBy(v: 'tag' | 'subfolder') {

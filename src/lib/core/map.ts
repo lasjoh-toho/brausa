@@ -120,16 +120,29 @@ export function normalizeMap(raw: Partial<ProjectMap> & { id: string }): Project
   m.cards ??= {};
   m.links = (m.links ?? []).filter((l) => m.cards[l.from] && m.cards[l.to]);
   for (const c of Object.values(m.cards)) {
-    c.children = (c.children ?? []).filter((id) => m.cards[id]?.parent === c.id);
     c.text ??= '';
     if (c.parent && !m.cards[c.parent]) c.parent = null;
   }
-  const roots = (m.roots ?? []).filter((id) => m.cards[id] && !m.cards[id].parent);
+  // A card inside itself (A in B, B in A) would make every walk up the parents endless.
   for (const c of Object.values(m.cards)) {
-    if (!c.parent && !roots.includes(c.id)) roots.push(c.id);
-    if (c.parent && !m.cards[c.parent].children.includes(c.id)) m.cards[c.parent].children.push(c.id);
+    const seen = new Set<string>([c.id]);
+    for (let p = c.parent; p; p = m.cards[p].parent) {
+      if (seen.has(p)) {
+        c.parent = null;
+        break;
+      }
+      seen.add(p);
+    }
   }
-  m.roots = roots;
+  for (const c of Object.values(m.cards)) {
+    c.children = [...new Set(c.children ?? [])].filter((id) => m.cards[id]?.parent === c.id);
+  }
+  const roots = new Set((m.roots ?? []).filter((id) => m.cards[id] && !m.cards[id].parent));
+  for (const c of Object.values(m.cards)) {
+    if (!c.parent) roots.add(c.id);
+    else if (!m.cards[c.parent].children.includes(c.id)) m.cards[c.parent].children.push(c.id);
+  }
+  m.roots = [...roots];
   return m;
 }
 

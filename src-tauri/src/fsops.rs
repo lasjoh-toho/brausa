@@ -55,6 +55,101 @@ pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.') || name == SIDECAR_DIR
 }
 
+/// Files and folders of the system, never the user's own: hidden like dot files.
+const SYSTEM_NAMES: &[&str] = &[
+    "$RECYCLE.BIN",
+    "System Volume Information",
+    "$WinREAgent",
+    "AppData",
+    "Application Data",
+    "Local Settings",
+    "pagefile.sys",
+    "hiberfil.sys",
+    "swapfile.sys",
+    "DumpStack.log.tmp",
+    "desktop.ini",
+    "Thumbs.db",
+    "Icon\r",
+];
+
+/// Folders full of program files: shown in a listing, but Stream and the watcher do not go in.
+const PROGRAM_DIRS: &[&str] = &[
+    "node_modules",
+    "__pycache__",
+    "site-packages",
+    "bower_components",
+    "Program Files",
+    "Program Files (x86)",
+    "ProgramData",
+    "Windows",
+    "Recovery",
+    "MSOCache",
+    #[cfg(target_os = "macos")]
+    "Library",
+    #[cfg(target_os = "macos")]
+    "Applications",
+    #[cfg(target_os = "macos")]
+    "System",
+];
+
+/// Packages (apps, photo libraries) look like folders but belong to a program.
+const PACKAGE_EXTS: &[&str] = &[
+    "app", "framework", "bundle", "plugin", "kext", "photoslibrary", "photolibrary", "musiclibrary", "tvlibrary", "lrlibrary",
+    "lrdata", "fcpbundle", "imovielibrary", "xcodeproj", "xcworkspace",
+];
+
+/// Hidden in listings unless hidden files are shown: dot files, system files, and on
+/// Windows everything marked hidden or system.
+pub fn is_system(name: &str, md: Option<&fs::Metadata>) -> bool {
+    if is_hidden(name) || SYSTEM_NAMES.iter().any(|n| n.eq_ignore_ascii_case(name)) || name.to_ascii_lowercase().starts_with("ntuser.") {
+        return true;
+    }
+    #[cfg(windows)]
+    if let Some(md) = md {
+        use std::os::windows::fs::MetadataExt;
+        // FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM
+        if md.file_attributes() & 0x6 != 0 {
+            return true;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = md;
+    false
+}
+
+/// A folder Stream and the watcher leave alone (program files, packages).
+pub fn is_program_dir(name: &str) -> bool {
+    PROGRAM_DIRS.iter().any(|n| n.eq_ignore_ascii_case(name))
+        || Path::new(name).extension().is_some_and(|e| PACKAGE_EXTS.iter().any(|x| e.eq_ignore_ascii_case(x)))
+}
+
+/// Whether anything below `root` on the way to `path` is skipped (for watcher events).
+pub fn in_skipped(root: &Path, path: &Path) -> bool {
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    rel.components().any(|c| {
+        let n = c.as_os_str().to_string_lossy();
+        is_system(&n, None) || is_program_dir(&n)
+    })
+}
+
+/// Folders below `root` that Stream would read, at most `limit` (for watchers without native recursion).
+pub fn walk_dirs(root: &Path, max_depth: usize, limit: usize) -> Vec<PathBuf> {
+    WalkDir::new(root)
+        .max_depth(max_depth)
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !skip_walk(e))
+        .flatten()
+        .filter(|e| e.file_type().is_dir())
+        .take(limit)
+        .map(|e| e.into_path())
+        .collect()
+}
+
+fn skip_walk(e: &walkdir::DirEntry) -> bool {
+    let n = e.file_name().to_string_lossy();
+    is_system(&n, e.metadata().ok().as_ref()) || (e.file_type().is_dir() && is_program_dir(&n))
+}
+
 /// Plain file-system view of a path; index metadata is added by `decorate`.
 pub fn make_entry(path: &Path) -> io::Result<Entry> {
     let md = fs::metadata(path)?;
@@ -94,7 +189,7 @@ pub fn list_dir(dir: &Path, include_hidden: bool) -> io::Result<Vec<Entry>> {
     let mut out = Vec::new();
     for e in fs::read_dir(dir)?.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
-        if name == SIDECAR_DIR || (!include_hidden && is_hidden(&name)) {
+        if name == SIDECAR_DIR || (!include_hidden && is_system(&name, e.metadata().ok().as_ref())) {
             continue;
         }
         // Unreadable entries (broken symlinks, permissions) are skipped, not fatal.
@@ -110,7 +205,7 @@ pub fn walk(root: &Path, max_depth: usize, include_hidden: bool, limit: usize) -
     let mut out = Vec::new();
     let it = WalkDir::new(root).min_depth(1).max_depth(max_depth).into_iter().filter_entry(|e| {
         let n = e.file_name().to_string_lossy();
-        n != SIDECAR_DIR && (include_hidden || !is_hidden(&n))
+        n != SIDECAR_DIR && (include_hidden || !skip_walk(e))
     });
     for e in it.flatten() {
         if !e.file_type().is_file() {
@@ -255,6 +350,31 @@ pub fn places() -> Vec<(String, PathBuf)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skips_system_and_program_folders() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        for d in ["Fotos", "AppData/Local/cache", "proj/node_modules/x", "Bilder.photoslibrary/originals", ".cache/y"] {
+            fs::create_dir_all(root.join(d)).unwrap();
+        }
+        for f in ["Fotos/a.jpg", "AppData/Local/cache/b.bin", "proj/node_modules/x/c.js", "proj/d.txt", "Bilder.photoslibrary/originals/e.jpg", ".cache/y/f", "Thumbs.db"] {
+            fs::write(root.join(f), b"1").unwrap();
+        }
+        let mut names: Vec<String> = walk(root, 10, false, 100).into_iter().map(|e| e.name).collect();
+        names.sort();
+        assert_eq!(names, ["a.jpg", "d.txt"]);
+        // Listings hide system files but show program folders (they just are not walked into).
+        let top: Vec<String> = list_dir(root, false).unwrap().into_iter().map(|e| e.name).collect();
+        assert!(!top.iter().any(|n| n == "AppData" || n == "Thumbs.db" || n == ".cache"));
+        assert!(top.iter().any(|n| n == "Bilder.photoslibrary"));
+        assert!(in_skipped(root, &root.join("proj/node_modules/x/c.js")));
+        assert!(in_skipped(root, &root.join(".cache/y/f")));
+        assert!(!in_skipped(root, &root.join("Fotos/a.jpg")));
+        let dirs = walk_dirs(root, 10, 100);
+        assert!(dirs.iter().all(|d| !d.to_string_lossy().contains("node_modules") && !d.to_string_lossy().contains("AppData")));
+        assert!(dirs.contains(&root.join("Fotos")));
+    }
 
     #[test]
     fn lists_walks_moves_and_renames() {

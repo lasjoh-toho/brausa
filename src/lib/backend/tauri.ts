@@ -126,6 +126,14 @@ export class TauriBackend implements Backend {
     return invoke<void>('save_smart_folders', { list });
   }
 
+  alive(view: string) {
+    return invoke<void>('alive', { view });
+  }
+
+  stuckView() {
+    return invoke<string | null>('stuck_view');
+  }
+
   findDuplicates(paths: string[]) {
     return invoke<string[][]>('find_duplicates', { paths });
   }
