@@ -47,7 +47,7 @@
       <label>{t('grid.cols')} <input type="number" min="1" max="6" bind:value={cfg.cols} /></label>
       <label>{t('grid.rows')} <input type="number" min="1" max="4" bind:value={cfg.rows} /></label>
     </div>
-    <div class="grid" style:grid-template-columns="repeat({cfg.cols}, 1fr)">
+    <div class="grid" style:grid-template-columns="repeat({cfg.cols}, minmax(0, 1fr))">
       {#each Array.from({ length: total }, (_, i) => i) as i (i)}
         {@const c = cell(i)}
         <div class="cell">
@@ -83,6 +83,8 @@
   }
   .panel {
     width: min(720px, calc(100% - 32px));
+    max-height: calc(100% - 32px);
+    overflow: auto;
     padding: 16px;
     border-radius: 16px;
     background: var(--bg-elev);
@@ -121,6 +123,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
     min-height: 92px;
     padding: 10px;
     border-radius: 12px;
@@ -147,6 +150,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .cell :global(.btn) {
+    max-width: 100%;
+    white-space: normal;
   }
   .rm {
     align-self: flex-start;

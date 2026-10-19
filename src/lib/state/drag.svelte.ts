@@ -18,7 +18,7 @@ import { archiveRoot, inArchive } from '../core/archive';
 import { app } from './app.svelte';
 import { t } from '../i18n/index.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board' | 'project';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
 export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
@@ -53,6 +53,17 @@ class DragController {
   /** Last folder hovered in the tree/canvas; drives the breadcrumb drop bar. */
   trail = $state<string | null>(null);
   gridOpen = $state(false);
+  /** Folder the drop grid shows (up, "drop here", its subfolders); pausing over a subfolder goes into it. */
+  gridDir = $state<string | null>(null);
+  gridDirs = $state<Entry[]>([]);
+  private diveTimer: ReturnType<typeof setTimeout> | null = null;
+  private divePath: string | null = null;
+  /** Where the pointer was when the grid changed: whatever lands under it only counts after a move. */
+  private jumpAt: { x: number; y: number } | null = null;
+  /** Recent horizontal turns of the pointer: shaking the files opens the grid. */
+  private turns: number[] = [];
+  private lastX = 0;
+  private lastDir = 0;
   /** Set by the project map while hovering it: what a drop would do. */
   boardHint = $state('');
   onBoardDrop: BoardDrop | null = null;
@@ -86,6 +97,8 @@ class DragController {
         return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? t('drag.removeTag') : t('drag.setTag', { tag: h.key ?? '' })) : t('drag.moveTo', { name: h.key ?? '' });
       case 'grid-trigger':
         return t('drag.openGrid');
+      case 'grid-up':
+        return t('drag.gridUp');
       case 'board':
         return this.boardHint;
       case 'grid-cell': {
@@ -120,6 +133,7 @@ class DragController {
         this.active = true;
         document.body.classList.add('dragging');
       }
+      this.shake(ev.clientX);
       this.x = ev.clientX;
       this.y = ev.clientY;
       this.copy = isCopyKey(ev);
@@ -202,6 +216,65 @@ class DragController {
     if (this.source === 'external') this.reset();
   }
 
+  // ------------------------------------------------ drop grid
+
+  /** Open the grid on a folder (the current one at first). */
+  openGrid(dir = app.funnel ?? app.cwd) {
+    this.gridOpen = true;
+    void this.gridGo(dir);
+  }
+
+  async gridGo(dir: string) {
+    this.jumpAt = { x: this.x, y: this.y };
+    this.gridDir = dir;
+    this.gridDirs = [];
+    try {
+      const list = (await app.backend.listDir(dir)).filter((e) => e.kind === 'dir');
+      if (this.gridDir === dir) this.gridDirs = list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    } catch {
+      // Unreadable folder: only "up" and "drop here".
+    }
+  }
+
+  /** Three quick turns left-right within ¾ s count as shaking. */
+  private shake(x: number) {
+    const dx = x - this.lastX;
+    if (Math.abs(dx) < 18) return;
+    const dir = Math.sign(dx);
+    this.lastX = x;
+    if (dir !== this.lastDir) {
+      const now = performance.now();
+      this.turns = [...this.turns.filter((t) => now - t < 750), now];
+      this.lastDir = dir;
+      if (this.turns.length >= 4 && !this.gridOpen) {
+        this.turns = [];
+        this.openGrid();
+      }
+    }
+  }
+
+  /** Pausing over a grid folder (or "up") goes there. */
+  private dive(path: string | null) {
+    if (path === this.divePath) return;
+    if (this.diveTimer) clearTimeout(this.diveTimer);
+    this.diveTimer = null;
+    this.divePath = path;
+    if (!path) return;
+    if (this.jumpAt) {
+      if (Math.hypot(this.x - this.jumpAt.x, this.y - this.jumpAt.y) < 40) {
+        this.divePath = null;
+        return;
+      }
+      this.jumpAt = null;
+    }
+    this.diveTimer = setTimeout(() => {
+      if (this.active && this.gridOpen && this.divePath === path) {
+        this.divePath = null;
+        void this.gridGo(path);
+      }
+    }, app.springDelay + 250);
+  }
+
   private reset() {
     if (this.springTimer) clearTimeout(this.springTimer);
     this.springTimer = null;
@@ -218,6 +291,10 @@ class DragController {
     this.hit = null;
     this.trail = null;
     this.gridOpen = false;
+    this.gridDir = null;
+    this.gridDirs = [];
+    this.dive(null);
+    this.turns = [];
     this.cleanup = null;
     document.body.classList.remove('dragging');
   }
@@ -229,12 +306,14 @@ class DragController {
     if (!t) {
       this.hit = null;
       this.spring(null);
+      this.dive(null);
       return;
     }
     const kind = t.dataset.drop as DropKind;
     if (this.accepts && !this.accepts.includes(kind)) {
       this.hit = null;
       this.spring(null);
+      this.dive(null);
       return;
     }
     const hit: DropHit = { kind, path: t.dataset.target ?? t.dataset.path, key: t.dataset.key };
@@ -249,7 +328,8 @@ class DragController {
       }
     }
     if (kind === 'folder' || (kind === 'crumb' && !this.trail)) this.trail = hit.path ?? null;
-    if (kind === 'grid-trigger') this.gridOpen = true;
+    if (kind === 'grid-trigger' && !this.gridOpen) this.openGrid();
+    this.dive(t.dataset.dive ?? null);
     this.hit = hit;
     this.spring(kind === 'folder' && t.hasAttribute('data-expandable') ? hit.path! : null);
   }
