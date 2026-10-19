@@ -19,6 +19,7 @@
   const views: { id: ViewMode; icon: string }[] = [
     { id: 'stream', icon: 'grid' },
     { id: 'panes', icon: 'columns' },
+    { id: 'table', icon: 'table' },
     { id: 'kanban', icon: 'kanban' },
     { id: 'timeline', icon: 'timeline' },
     { id: 'calendar', icon: 'calendar' },
@@ -150,7 +151,7 @@
       >
     </div>
 
-    {#if app.view !== 'panes'}
+    {#if app.view !== 'panes' && app.view !== 'table'}
     <input
       class="zoom"
       type="range"

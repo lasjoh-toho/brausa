@@ -256,6 +256,9 @@
         <Icon name="layers" size={12} />{wikis.pending || ''}
       </button>
     {/if}
+    {#if wikis.recipes.length}
+      <button class="ov" title={t('sidebar.overview')} onclick={() => wikis.openOverview()}><Icon name="grid" size={12} /></button>
+    {/if}
     <button class="add" title={t('sidebar.newWiki')} onclick={() => wikis.open('')}>
       <Icon name="plus" size={13} />
     </button>

@@ -61,7 +61,7 @@
 <section
   class="canvas"
   class:hit={canvasHit}
-  class:panes={app.view === 'panes' && !app.dupes}
+  class:panes={(app.view === 'panes' || app.view === 'table') && !app.dupes}
   bind:this={el}
   data-drop="canvas"
   data-autoscroll
@@ -100,6 +100,8 @@
   {#if app.view === 'panes' && !app.dupes}
     <FileList />
     <PreviewPane />
+  {:else if app.view === 'table' && !app.dupes}
+    <FileList table />
   {:else if app.view === 'kanban' && !app.dupes}
     <div class="kanban">
       {#each app.groups as g (g.key)}
@@ -164,7 +166,7 @@
     outline: none;
     transition: box-shadow 0.15s;
   }
-  /* Three-panel view: list and preview scroll on their own. */
+  /* Three-panel and table view: the list (and preview) scroll on their own. */
   .canvas.panes {
     display: flex;
     padding: 0;

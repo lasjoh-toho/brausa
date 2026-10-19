@@ -20,7 +20,8 @@
           description: '',
           bags: wikis.maps.filter((m) => project && m.bag.startsWith(`@map:${project.root}|`)).map((m) => m.bag),
           target: { kind: 'folder', path: project ? `${project.folders[0] ?? app.cwd}/${project.name}-wiki` : '' },
-          plugins: true
+          plugins: true,
+          local: true
         }
   );
   let error = $state('');
@@ -117,6 +118,10 @@
         {plugins.map(([n, v]) => `${n} ${v}`).join(' · ')}
         <span class="muted">– {t('wiki.pluginsNote')}</span>
       </span>
+    </label>
+    <label class="plugins">
+      <input type="checkbox" bind:checked={r.local} />
+      <span><b>{t('wiki.local')}</b></span>
     </label>
 
     <div class="cols">
