@@ -5,8 +5,6 @@
   import ProjectMap from './ProjectMap.svelte';
   import CardKanban from './CardKanban.svelte';
   import FilePanel from './FilePanel.svelte';
-  // pdf.js is large: load the reader only when a document is opened.
-  const loadReader = () => import('./Reader.svelte');
   import Icon from './Icon.svelte';
   import { t } from '../i18n/index.svelte';
 
@@ -44,10 +42,8 @@
       </form>
     </div>
   {:else if board.mode === 'kanban'}
-    {#if board.reader}{#await loadReader() then R}<R.default />{/await}{/if}
     <CardKanban />
   {:else}
-    {#if board.reader}{#await loadReader() then R}<R.default />{/await}{/if}
     <ProjectMap />
   {/if}
   {#if project && board.panelOpen}

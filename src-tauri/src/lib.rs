@@ -107,11 +107,18 @@ async fn list_dir(state: State<'_, Index>, path: String, include_hidden: bool) -
 }
 
 #[tauri::command]
-async fn walk(state: State<'_, Index>, root: String, max_depth: usize, include_hidden: bool, limit: usize) -> CmdResult<Vec<Entry>> {
+async fn walk(
+    state: State<'_, Index>,
+    root: String,
+    max_depth: usize,
+    include_hidden: bool,
+    limit: usize,
+    exts: Option<Vec<String>>,
+) -> CmdResult<Vec<Entry>> {
     if let Some((archive, inner)) = archive::split(&root) {
         return archive::walk(&archive, &inner, limit).map_err(err);
     }
-    let entries = fsops::walk(Path::new(&root), max_depth, include_hidden, limit);
+    let entries = fsops::walk(Path::new(&root), max_depth, include_hidden, limit, exts.as_deref());
     {
         let mut reg = state.0.lock().map_err(err)?;
         let dirs: std::collections::BTreeSet<&Path> = entries.iter().filter_map(|e| Path::new(&e.path).parent()).collect();
@@ -339,7 +346,7 @@ async fn project_entries(state: State<'_, Index>, projs: State<'_, Projs>, id: S
         }
     }
     for d in &p.folders {
-        out.extend(fsops::walk(Path::new(d), 12, false, 20_000));
+        out.extend(fsops::walk(Path::new(d), 12, false, 20_000, None));
     }
     let mut seen = std::collections::HashSet::new();
     out.retain(|e| seen.insert(e.path.clone()));
@@ -347,8 +354,15 @@ async fn project_entries(state: State<'_, Index>, projs: State<'_, Projs>, id: S
 }
 
 #[tauri::command]
-async fn web_open(app: AppHandle, web: State<'_, web::Web>, url: String, bounds: web::Bounds) -> CmdResult<()> {
-    web.open(&app, &url, bounds)
+async fn web_open(app: AppHandle, web: State<'_, web::Web>, url: String, bounds: web::Bounds, adblock: bool) -> CmdResult<()> {
+    web.open(&app, &url, bounds, adblock)
+}
+
+/// Saves the pictures of the page shown in the web panel into `dir` (each only once).
+#[tauri::command]
+async fn web_collect_images(app: AppHandle, dir: String) -> CmdResult<usize> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().collect_images(&a, Path::new(&dir))).await.map_err(err)?
 }
 
 #[tauri::command]
@@ -432,6 +446,12 @@ async fn tw_delete_recipe(w: State<'_, Wikis>, name: String) -> CmdResult<()> {
 #[tauri::command]
 async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
     w.0.lock().map_err(err)?.overlays().map_err(err)
+}
+
+/// Search titles and texts in all wiki bags.
+#[tauri::command]
+async fn tw_search(w: State<'_, Wikis>, query: String) -> CmdResult<Vec<tw::Hit>> {
+    Ok(w.0.lock().map_err(err)?.search(&query, 200))
 }
 
 /// A wiki's layers in load order with their tiddler titles.
@@ -539,6 +559,23 @@ fn save_smart_folders(s: State<'_, Smart>, list: serde_json::Value) -> CmdResult
 }
 
 /// Language of the core's messages ("de" or "en").
+/// Entries for paths dropped onto brausa from another app.
+#[tauri::command]
+async fn entries(state: State<'_, Index>, paths: Vec<String>) -> CmdResult<Vec<Entry>> {
+    decorated(&state, paths.iter().filter_map(|p| fsops::make_entry(Path::new(p)).ok()).collect())
+}
+
+/// Picture shown under the pointer while files are dragged out of brausa.
+#[tauri::command]
+fn drag_icon(app: AppHandle) -> CmdResult<String> {
+    let p = app.path().app_cache_dir().map_err(err)?.join("drag.png");
+    if !p.exists() {
+        std::fs::create_dir_all(p.parent().unwrap()).map_err(err)?;
+        std::fs::write(&p, include_bytes!("../icons/64x64.png")).map_err(err)?;
+    }
+    Ok(p.to_string_lossy().to_string())
+}
+
 /// Heartbeat of the interface, with the view it shows.
 #[tauri::command]
 fn alive(dog: State<'_, watchdog::Watchdog>, view: String) {
@@ -704,7 +741,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_drag::init())
         .manage(Watcher::default())
         .manage(web::Web::default())
         .setup(|app| {
@@ -782,6 +819,8 @@ pub fn run() {
             set_lang,
             alive,
             stuck_view,
+            entries,
+            drag_icon,
             smart_folders,
             save_smart_folders,
             compress,
@@ -790,6 +829,7 @@ pub fn run() {
             web_close,
             web_go,
             web_selection,
+            web_collect_images,
             web_save_page,
             web_target,
             web_serve,
@@ -802,6 +842,7 @@ pub fn run() {
             tw_sync,
             tw_overlays,
             tw_layers,
+            tw_search,
             tw_resolve_overlay,
             tw_plugins
         ])

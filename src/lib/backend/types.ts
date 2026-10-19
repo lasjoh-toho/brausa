@@ -2,11 +2,23 @@ import type { SmartFolder } from '../core/smart';
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
 import type { ProjectMap } from '../core/map';
 
+export interface OsDrag {
+  type: 'enter' | 'over' | 'drop' | 'leave';
+  paths: string[];
+  x: number;
+  y: number;
+}
+
+/** Stream reads at most this many files. */
+export const WALK_LIMIT = 20000;
+
 export interface WalkOptions {
   maxDepth?: number;
   includeHidden?: boolean;
   /** Stop after this many files (protects against walking $HOME by accident). */
   limit?: number;
+  /** Only files with these extensions (lower case). */
+  exts?: string[];
 }
 
 export interface MediaInfo {
@@ -62,7 +74,16 @@ export interface WikiBag {
   name: string;
   description: string;
   readonly: boolean;
+  /** Not offered when a new wiki is put together. */
+  hidden?: boolean;
   tiddlers: number;
+}
+
+/** A tiddler found by the search across all bags. */
+export interface WikiHit {
+  bag: string;
+  title: string;
+  snippet: string;
 }
 
 /** A wiki = ordered list of bags (later wins) synced with a wiki folder or single-file wiki. */
@@ -166,6 +187,12 @@ export interface Backend {
   /** Saved smart folders; null before the first save. */
   smartFolders(): Promise<SmartFolder[] | null>;
   saveSmartFolders(list: SmartFolder[]): Promise<void>;
+  /** Entries for paths (files dropped in from another app). */
+  entries(paths: string[]): Promise<Entry[]>;
+  /** Files dragged from another app over brausa (positions in CSS pixels). */
+  onOsDrag(handler: (e: OsDrag) => void): Promise<void>;
+  /** Hand files to the system's drag & drop (out of the window, to Finder/Explorer or another app). */
+  dragOut(paths: string[]): Promise<void>;
   /** Heartbeat for the core's watchdog: the interface responds and shows `view`. */
   alive(view: string): Promise<void>;
   /** The view that hung last time (then start in a plain view), reported once. */
@@ -215,7 +242,9 @@ export interface Backend {
    * Web panel: a separate webview over the area `b` (CSS px of the window),
    * with its own cookies and no access to brausa. Desktop app only.
    */
-  webOpen(url: string, b: WebBounds): Promise<void>;
+  webOpen(url: string, b: WebBounds, adblock: boolean): Promise<void>;
+  /** Save the pictures of the shown page into `dir` (each only once); returns how many. */
+  webCollectImages(dir: string): Promise<number>;
   webPlace(b: WebBounds, visible: boolean): Promise<void>;
   webClose(): Promise<void>;
   webGo(how: 'back' | 'forward' | 'reload'): Promise<void>;
@@ -240,6 +269,8 @@ export interface Backend {
   wikiOverlays(): Promise<WikiOverlay[]>;
   /** The layers of a wiki in load order (bottom first, the last one wins): bag and its tiddler titles. */
   wikiLayers(recipe: string): Promise<WikiLayer[]>;
+  /** Tiddlers in all bags whose title or text contains every word. */
+  wikiSearch(query: string): Promise<WikiHit[]>;
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;

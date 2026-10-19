@@ -21,6 +21,7 @@ export const de = {
   'format.office': 'Office',
 
   'views.name': 'Name',
+  'views.folder': 'Ordner',
   'views.mtime': 'Geändert',
   'views.ctime': 'Erstellt',
   'views.taken': 'Aufgenommen',
@@ -68,6 +69,7 @@ export const en: typeof de = {
   'format.office': 'Office',
 
   'views.name': 'Name',
+  'views.folder': 'Folder',
   'views.mtime': 'Modified',
   'views.ctime': 'Created',
   'views.taken': 'Taken',

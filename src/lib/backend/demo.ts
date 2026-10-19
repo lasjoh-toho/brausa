@@ -6,7 +6,8 @@ import type { SmartFolder } from '../core/smart';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiLayer, WikiOverlay, WikiRecipe } from './types';
+import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
+import { WALK_LIMIT } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 import { t } from '../i18n/index.svelte';
@@ -193,13 +194,14 @@ export class DemoBackend implements Backend {
   async walk(root: string, opts: WalkOptions = {}): Promise<Entry[]> {
     const out: Entry[] = [];
     const max = opts.maxDepth ?? 32;
-    const limit = opts.limit ?? 20000;
+    const limit = opts.limit ?? WALK_LIMIT;
+    const exts = opts.exts ? new Set(opts.exts) : null;
     const rec = (n: Node, depth: number) => {
       for (const c of n.children?.values() ?? []) {
         if (out.length >= limit) return;
         if (c.children) {
           if (depth < max) rec(c, depth + 1);
-        } else out.push({ ...this.decorate(c.entry), relDir: relativeTo(dirname(c.entry.path), root) });
+        } else if (!exts || exts.has(c.entry.ext)) out.push({ ...this.decorate(c.entry), relDir: relativeTo(dirname(c.entry.path), root) });
       }
     };
     const n = this.find(root);
@@ -344,6 +346,17 @@ export class DemoBackend implements Backend {
   async saveSmartFolders(list: SmartFolder[]) {
     this.smart = structuredClone(list);
   }
+
+  async entries(paths: string[]) {
+    return paths.flatMap((p) => {
+      const n = this.find(p);
+      return n ? [this.decorate(n.entry)] : [];
+    });
+  }
+
+  async onOsDrag() {}
+
+  async dragOut() {}
 
   async alive() {}
 
@@ -580,6 +593,9 @@ export class DemoBackend implements Backend {
   async webOpen() {
     this.noWeb();
   }
+  async webCollectImages(): Promise<number> {
+    return 0;
+  }
   async webPlace() {}
   async webClose() {}
   async webGo() {}
@@ -685,6 +701,16 @@ export class DemoBackend implements Backend {
   }
 
   /** Layers of a wiki, bottom first, with made-up titles where the demo has no tiddlers. */
+  /** Demo bags hold no texts: titles of the generated placeholder tiddlers only. */
+  async wikiSearch(query: string): Promise<WikiHit[]> {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    return this.bags
+      .filter((b) => !b.name.startsWith('@'))
+      .flatMap((b) => Array.from({ length: b.tiddlers }, (_, i) => ({ bag: b.name, title: `${b.name} ${i + 1}`, snippet: '' })))
+      .filter((h) => words.every((w) => h.title.toLowerCase().includes(w)));
+  }
+
   async wikiLayers(recipe: string): Promise<WikiLayer[]> {
     const r = this.recipes.find((x) => x.name === recipe);
     if (!r) throw new Error(recipe);

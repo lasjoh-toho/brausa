@@ -2,7 +2,9 @@
   import { app } from '../state/app.svelte';
   import { drag } from '../state/drag.svelte';
   import { tagColor } from '../core/tags';
-  import { UNTAGGED } from '../core/views';
+  import { UNTAGGED, within } from '../core/views';
+  import { Shown } from './more.svelte';
+  import { WALK_LIMIT } from '../backend/types';
   import { isToggleKey } from '../platform';
   import { extras, waste } from '../core/dupes';
   import { formatSize } from '../core/format';
@@ -11,12 +13,29 @@
   import MapView from './MapView.svelte';
   import CalendarView from './CalendarView.svelte';
   import FileList from './FileList.svelte';
+  import ProjectStart from './ProjectStart.svelte';
   import NoResults from './NoResults.svelte';
   import PreviewPane from './PreviewPane.svelte';
-  import { t, tn } from '../i18n/index.svelte';
+  import { t, tn, loc } from '../i18n/index.svelte';
 
   let el: HTMLElement;
+
+  // Draw tiles page by page; a new folder or filter starts at the first page again.
+  const shown = new Shown();
+  $effect(() => {
+    void app.viewKey;
+    shown.reset();
+  });
+  const total = $derived(app.groups.reduce((n, g) => n + g.entries.length, 0));
+  const drawn = $derived(within(app.groups, shown.limit));
   let lasso = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+
+  /** ⌘/Ctrl + scroll (or pinch) sizes the tiles; beyond the largest size the selected file opens full screen. */
+  function wheel(e: WheelEvent) {
+    if (!(e.ctrlKey || e.metaKey) || app.view === 'panes' || app.view === 'table' || app.view === 'map') return;
+    e.preventDefault();
+    app.zoomTiles(e.deltaY);
+  }
 
   /** Rubber-band selection on empty canvas space. */
   function down(e: PointerEvent) {
@@ -67,6 +86,7 @@
   data-autoscroll
   style:--tile="{app.tileSize}px"
   onpointerdown={down}
+  onwheel={wheel}
   oncontextmenu={(e) => {
     if ((e.target as HTMLElement).closest('.tile, .cal, .leaflet-container, .pv')) return;
     e.preventDefault();
@@ -76,6 +96,19 @@
   aria-multiselectable="true"
   tabindex="-1"
 >
+  {#if app.stuck}
+    {@const s = app.stuck}
+    <div class="dupebar stuckbar">
+      <Icon name="warn" size={15} />
+      <span>{t('files.stuck', { place: app.stuckPlace(s) })}</span>
+      <span class="grow"></span>
+      <button class="btn primary" onclick={() => app.resumeStuck()}>{t('files.stuckResume', { place: app.stuckPlace(s) })}</button>
+      <button class="btn" onclick={() => (app.stuck = null)}>{t('common.close')}</button>
+    </div>
+  {/if}
+  {#if app.truncated && !app.dupes}
+    <p class="truncated"><Icon name="warn" size={13} />{t('files.truncated', { n: WALK_LIMIT.toLocaleString(loc()) })}</p>
+  {/if}
   {#if app.dupes}
     <div class="dupebar">
       <Icon name="copy" size={15} />
@@ -97,7 +130,9 @@
       <button class="btn" onclick={() => app.endDuplicates()}>{t('common.done')}</button>
     </div>
   {/if}
-  {#if app.view === 'panes' && !app.dupes}
+  {#if app.view === 'start' && app.currentProject && !app.dupes}
+    <ProjectStart />
+  {:else if app.view === 'panes' && !app.dupes}
     <FileList />
     <PreviewPane />
   {:else if app.view === 'table' && !app.dupes}
@@ -113,9 +148,10 @@
             <span class="count">{g.entries.length}</span>
           </div>
           <div class="col-body">
-            {#each g.entries as e (e.path)}
+            {#each g.entries.slice(0, shown.limit) as e (e.path)}
               <Tile entry={e} source={'column:' + g.key} compact />
             {/each}
+            {#if g.entries.length > shown.limit}<div class="more" use:shown.sentinel></div>{/if}
           </div>
         </div>
       {:else}
@@ -125,7 +161,7 @@
   {:else}
     {#if app.view === 'calendar' && !app.dupes}<CalendarView />{/if}
     {#if app.view === 'map' && !app.dupes}<MapView />{/if}
-    {#each app.groups as g (g.key)}
+    {#each drawn as g (g.key)}
       {#if app.view === 'timeline' || app.dupes}
         <h3 class="group-head" class:plain={!!app.dupes}><span>{g.label}</span><span class="count">{g.entries.length}</span></h3>
       {/if}
@@ -135,6 +171,9 @@
         {/each}
       </div>
     {/each}
+    {#if total > shown.limit}
+      {#key shown.limit}<div class="more" use:shown.sentinel>{t('files.moreBelow', { n: (total - shown.limit).toLocaleString(loc()) })}</div>{/key}
+    {/if}
     {#if !app.visible.length && !app.loading && app.activeFilters.length}
       <NoResults />
     {:else if !app.visible.length && !app.loading}
@@ -198,6 +237,20 @@
   }
   .grow {
     flex: 1;
+  }
+  .truncated {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: var(--fg-muted);
+  }
+  .more {
+    padding: 18px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--fg-faint);
   }
   .grid {
     display: grid;

@@ -18,6 +18,21 @@
   import Icon from './Icon.svelte';
   import NoResults from './NoResults.svelte';
   import { t, loc } from '../i18n/index.svelte';
+  import { Shown, STEP } from './more.svelte';
+
+  // Rows are drawn page by page; the row under the cursor is always drawn.
+  const paged = new Shown();
+  $effect(() => {
+    void app.viewKey;
+    paged.reset();
+  });
+  $effect(() => {
+    const p = app.cursor;
+    if (!p) return;
+    const i = app.visible.findIndex((e) => e.path === p);
+    if (i >= untrack(() => paged.limit)) paged.limit = i + STEP;
+  });
+  const rows = $derived(app.visible.slice(0, paged.limit));
 
   let { table = false }: { table?: boolean } = $props();
 
@@ -92,13 +107,15 @@
       app.select(entry.path, e.shiftKey ? 'range' : 'toggle');
       return;
     }
-    if (!app.selection.has(entry.path)) app.select(entry.path, 'replace');
+    // A second click on a selected row (without moving it) deselects it.
+    const was = app.selection.has(entry.path);
+    if (!was) app.select(entry.path, 'replace');
     else app.cursor = entry.path;
     drag.begin(
       e,
       () => (app.selection.has(entry.path) ? app.selectedEntries : [entry]),
       'canvas',
-      () => app.select(entry.path, 'replace')
+      () => (was ? app.select(entry.path, 'toggle') : app.select(entry.path, 'replace'))
     );
   }
 
@@ -179,7 +196,7 @@
         {/if}
       </div>
       <div class="rows">
-        {#each app.visible as e (e.path)}
+        {#each rows as e (e.path)}
           {@const fam = family(e.ext, e.kind)}
           {@const packable = e.kind === 'file' && isArchive(e.path) && !inArchive(e.path)}
           {@const dropPath = packable ? archiveRoot(e.path) : e.path}
@@ -260,6 +277,9 @@
         {:else}
           {#if app.loading}{''}{:else if app.activeFilters.length}<NoResults />{:else}<p class="empty">{t('files.noFiles')}</p>{/if}
         {/each}
+        {#if app.visible.length > paged.limit}
+          {#key paged.limit}<div class="more" use:paged.sentinel>{t('files.moreBelow', { n: (app.visible.length - paged.limit).toLocaleString(loc()) })}</div>{/key}
+        {/if}
       </div>
     </div>
   </div>
@@ -549,5 +569,11 @@
     width: 100%;
     margin-top: 6px;
     justify-content: center;
+  }
+  .more {
+    padding: 14px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--fg-faint);
   }
 </style>

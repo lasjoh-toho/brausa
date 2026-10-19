@@ -5,8 +5,18 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
-import type { IndexReport, LibraryInfo, MediaInfo } from '../backend/types';
+import { WALK_LIMIT, type IndexReport, type LibraryInfo, type MediaInfo, type OsDrag } from '../backend/types';
 import { createBackend } from '../backend';
+
+/** What the interface showed when it last reported to the watchdog. */
+export interface Stuck {
+  cwd: string;
+  project: string | null;
+  view: ViewMode;
+  recursive: boolean;
+  search: string;
+  typeFilter: string | null;
+}
 import { parseCategories } from '../core/pattern';
 import { archiveName, archiveRoot, inArchive, isArchive } from '../core/archive';
 import type { ProjectInfo } from '../backend/types';
@@ -15,7 +25,13 @@ import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
-import { family, formatSize } from '../core/format';
+import { extsOf, family, formatSize } from '../core/format';
+
+export const TILE_MIN = 96;
+export const TILE_MAX = 360;
+
+/** Files that can carry EXIF date and location. */
+const MEDIA_EXT = ['jpg', 'jpeg', 'tif', 'tiff', 'heic', 'png', 'webp'];
 import { extras, keeper } from '../core/dupes';
 import { renameOrder, type RenameStep } from '../core/rename';
 import { store } from '../platform';
@@ -80,12 +96,16 @@ class AppState {
   view = $state<ViewMode>(store.get('view', 'stream'));
   kanbanBy = $state<Exclude<GroupBy, 'none' | 'month'>>(store.get('kanbanBy', 'tag'));
   tagDepth = $state(store.get('tagDepth', 1));
-  sort = $state<SortKey>(store.get('sort', 'name'));
-  desc = $state(store.get('desc', false));
+  // Folder view and flat view keep their own order; flat goes folder by folder unless chosen otherwise.
+  sort = $state<SortKey>(this.recursive ? store.get('sortFlat', 'folder') : store.get('sort', 'name'));
+  desc = $state(this.recursive ? store.get('descFlat', false) : store.get('desc', false));
+  /** Show system files (only offered inside a chosen folder or with a search of at least five characters). */
+  showSystem = $state(false);
   /** Width of the preview column in the three-panel view. */
   previewWidth = $state(store.get('previewWidth', 420));
   search = $state('');
   searchMode = $state<'filter' | 'select'>('filter');
+  systemAllowed = $derived((!this.project && !!this.cwd && this.cwd !== this.home) || this.search.trim().length >= 5);
   funnel = $state<string | null>(null);
   /** Type filter from the toolbar (Bilder, Videos, …); null shows everything. */
   typeFilter = $state<string | null>(store.get('typeFilter', null));
@@ -100,11 +120,29 @@ class AppState {
   children = new SvelteMap<string, Entry[]>();
 
   preview = $state<{ entry: Entry; from: DOMRect | null } | null>(null);
+
+  /** Large view of the first selected file, growing out of its tile. */
+  openPreview() {
+    const first = this.selectedEntries.find((x) => x.kind === 'file');
+    if (!first) return false;
+    const thumb = document.querySelector<HTMLElement>(`.tile[data-path="${CSS.escape(first.path)}"] .thumb`);
+    this.preview = { entry: first, from: thumb?.getBoundingClientRect() ?? null };
+    return true;
+  }
   /** Folder shown in the second panel (null: closed). */
   pane = $state<string | null>(store.get('pane', null));
   /** Bumped after brausa changed files, so other views (second panel) reload. */
   fsVersion = $state(0);
   tagBarOpen = $state(false);
+  /** Tag bar open for the selection or for the tray (null: closed). */
+  tagSource = $state<'selection' | 'staging' | null>(null);
+
+  /** Tag the selection, else what lies in the tray. */
+  openTags() {
+    if (this.selection.size) this.tagSource = 'selection';
+    else if (this.staging.length) this.tagSource = 'staging';
+    else this.toast(t('app.tagsSelect'));
+  }
   gridConfig = $state<DropGridConfig>(store.get('dropGrid', { cols: 3, rows: 2, cells: [] }));
   gridEditorOpen = $state(false);
   recentTags = $state<string[]>(store.get('recentTags', []));
@@ -157,6 +195,11 @@ class AppState {
   /** Duplicate search result (groups of paths with equal content); null: not looking for duplicates. */
   dupes = $state<string[][] | null>(null);
   dupeBusy = $state(false);
+
+  /** Changes when another place, view or filter is shown (views then start at the top again). */
+  viewKey = $derived(
+    JSON.stringify([this.cwd, this.project, this.view, this.recursive, this.searchMode === 'filter' ? this.search : '', this.typeFilter, this.dateFilter, this.funnel, this.sort, this.desc, !!this.dupes])
+  );
 
   /** What the canvas shows. */
   visible = $derived.by(() => {
@@ -217,20 +260,56 @@ class AppState {
     await this.loadSmartFolders();
     if (this.project) await this.refresh();
     await this.backend.onIndexReport((r) => this.onIndexReport(r));
+    await this.backend.onOsDrag((e) => void this.onOsDrag(e));
+  }
+
+  /** Files from Finder/Explorer dragged over brausa: they go where an internal drag would. */
+  private osItems: Entry[] = [];
+  private async onOsDrag(e: OsDrag) {
+    const { drag } = await import('./drag.svelte');
+    if (e.type === 'enter') {
+      this.osItems = await this.backend.entries(e.paths);
+      drag.externalEnter(this.osItems);
+      drag.externalOver(e.x, e.y);
+    } else if (e.type === 'over') drag.externalOver(e.x, e.y);
+    else if (e.type === 'drop') {
+      const items = this.osItems.length ? this.osItems : await this.backend.entries(e.paths);
+      this.osItems = [];
+      await drag.externalDrop(items, e.x, e.y);
+    } else {
+      this.osItems = [];
+      drag.externalLeave();
+    }
   }
 
   /** Tell the core's watchdog that the interface responds, and what it shows. */
   private heartbeat() {
     const beat = () => {
-      const where = this.currentProject?.name ?? basename(this.cwd);
-      void this.backend.alive(`${t('toolbar.view.' + this.view)}${where ? ' · ' + where : ''}`).catch(() => {});
+      const s: Stuck = {
+        cwd: this.cwd,
+        project: this.project,
+        view: this.view,
+        recursive: this.recursive,
+        search: this.searchMode === 'filter' ? this.search : '',
+        typeFilter: this.typeFilter
+      };
+      void this.backend.alive(JSON.stringify(s)).catch(() => {});
     };
     beat();
     setInterval(beat, 2000);
   }
 
-  /** Plain tiles of the home folder, without Stream and filters. */
-  private startPlain(stuck: string) {
+  /** Where brausa hung last time; the canvas offers to go on there without subfolders. */
+  stuck = $state<Stuck | null>(null);
+
+  /** After a hang: plain tiles of the home folder, without Stream, filters and project. */
+  private startPlain(raw: string) {
+    try {
+      const s = JSON.parse(raw) as Stuck;
+      if (typeof s.cwd === 'string') this.stuck = s;
+    } catch {
+      // A report from an older version: nothing to go on with.
+    }
     this.view = 'stream';
     store.set('view', 'stream');
     this.recursive = false;
@@ -239,7 +318,28 @@ class AppState {
     store.set('typeFilter', null);
     this.setProject(null);
     store.set('cwd', '');
-    this.toast(t('app.startedPlain', { view: stuck }), true);
+  }
+
+  /** Go on where brausa hung: the same view and filters, but only that folder, without subfolders. */
+  async resumeStuck() {
+    const s = this.stuck;
+    if (!s) return;
+    this.stuck = null;
+    this.view = s.view;
+    store.set('view', s.view);
+    this.typeFilter = s.typeFilter;
+    store.set('typeFilter', s.typeFilter);
+    this.searchMode = 'filter';
+    this.search = s.search;
+    this.recursive = false;
+    store.set('recursive', false);
+    if (s.project && this.projects.some((p) => p.id === s.project)) await this.openProject(s.project);
+    else await this.navigate(s.cwd || this.home);
+  }
+
+  /** Name of the place brausa hung in. */
+  stuckPlace(s: Stuck) {
+    return (s.project && this.projects.find((p) => p.id === s.project)?.name) || basename(s.cwd) || s.cwd;
   }
 
   // ---------------------------------------------------------------- projects
@@ -264,7 +364,12 @@ class AppState {
   }
 
   /** Show a project: all its files from all places, in every view. */
-  async openProject(id: string) {
+  /** `start`: show the project's start page (from the sidebar). */
+  async openProject(id: string, start = false) {
+    if (start) {
+      this.view = 'start';
+      store.set('view', 'start');
+    }
     // Back (⌘[) returns to the folder shown before.
     if (!this.project && this.cwd) {
       this.history.push(this.cwd);
@@ -528,6 +633,11 @@ class AppState {
     }
     this.cwd = path;
     this.setProject(null);
+    // The start page belongs to projects; folders show their files.
+    if (this.view === 'start') {
+      this.view = 'stream';
+      store.set('view', 'stream');
+    }
     this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;
@@ -563,11 +673,16 @@ class AppState {
     try {
       const forceRecursive = this.view === 'kanban' && this.kanbanBy === 'subfolder';
       const recursive = this.recursive || forceRecursive;
+      // Stream reads only what the view can show: the photo map only photos, a kind filter only that kind.
+      const cats = this.typeFilter ? parseCategories(this.typeFilter) : null;
+      const exts = this.view === 'map' ? MEDIA_EXT : cats ? extsOf(cats) : undefined;
+      const includeHidden = this.showSystem && this.systemAllowed;
       const fresh = this.project
         ? await this.backend.projectEntries(this.project)
         : recursive
-          ? await this.backend.walk(this.cwd, { maxDepth: 12 })
-          : await this.backend.listDir(this.cwd);
+          ? await this.backend.walk(this.cwd, { maxDepth: 12, exts, includeHidden })
+          : await this.backend.listDir(this.cwd, { includeHidden });
+      this.truncated = recursive && !this.project && fresh.length >= WALK_LIMIT;
       // Keep lazily loaded EXIF data across refreshes.
       const prev = new Map(this.raw.map((e) => [e.path, e]));
       this.raw = fresh.map((e) => {
@@ -590,14 +705,16 @@ class AppState {
     this.typeFilter = v;
     store.set('typeFilter', v);
     if (v && !this.recursive) this.setRecursive(true);
+    // Stream reads only the chosen kind, so read again.
+    else if (this.recursive && !this.project) void this.refresh();
   }
 
   /** Sort every view; picking the current key again flips the direction. */
   setSort(key: SortKey, desc?: boolean) {
-    this.desc = desc ?? (key === this.sort ? !this.desc : key !== 'name' && key !== 'ext');
+    this.desc = desc ?? (key === this.sort ? !this.desc : key !== 'name' && key !== 'ext' && key !== 'folder');
     this.sort = key;
-    store.set('sort', key);
-    store.set('desc', this.desc);
+    store.set(this.recursive ? 'sortFlat' : 'sort', key);
+    store.set(this.recursive ? 'descFlat' : 'desc', this.desc);
     if (key === 'taken') void this.loadMediaInfo();
   }
 
@@ -626,6 +743,13 @@ class AppState {
   setRecursive(v: boolean) {
     this.recursive = v;
     store.set('recursive', v);
+    this.sort = v ? store.get('sortFlat', 'folder') : store.get('sort', 'name');
+    this.desc = v ? store.get('descFlat', false) : store.get('desc', false);
+    this.refresh();
+  }
+
+  setShowSystem(v: boolean) {
+    this.showSystem = v;
     this.refresh();
   }
 
@@ -692,10 +816,13 @@ class AppState {
   mediaProgress = $state<{ done: number; total: number } | null>(null);
   private mediaRun = 0;
 
+  /** Stream stopped at WALK_LIMIT files: there are more below this folder. */
+  truncated = $state(false);
+
   async loadMediaInfo() {
     const run = ++this.mediaRun;
     const todo = this.raw.filter(
-      (e) => e.kind === 'file' && ['jpg', 'jpeg', 'tif', 'tiff', 'heic', 'png', 'webp'].includes(e.ext) && !this.mediaLoaded.has(this.thumbKey(e))
+      (e) => e.kind === 'file' && MEDIA_EXT.includes(e.ext) && !this.mediaLoaded.has(this.thumbKey(e))
     );
     if (!todo.length) return;
     const started = Date.now();
@@ -738,6 +865,22 @@ class AppState {
     this.kanbanBy = v;
     store.set('kanbanBy', v);
     this.refresh();
+  }
+
+  private zoomPush = 0;
+  /** Scroll on the size slider or ⌘/Ctrl + scroll: tiles grow; past the largest size the selected file opens full screen. */
+  zoomTiles(deltaY: number) {
+    const next = Math.round(Math.min(TILE_MAX, Math.max(TILE_MIN, this.tileSize - deltaY * 0.6)));
+    if (deltaY < 0 && this.tileSize === TILE_MAX) {
+      this.zoomPush -= deltaY;
+      if (this.zoomPush > 240) {
+        this.zoomPush = 0;
+        if (!this.openPreview()) this.toast(t('app.zoomSelect'));
+      }
+      return;
+    }
+    this.zoomPush = 0;
+    if (next !== this.tileSize) this.setTileSize(next);
   }
 
   setTileSize(v: number) {

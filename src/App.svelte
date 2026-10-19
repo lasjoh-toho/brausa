@@ -27,25 +27,20 @@
   import WikiEditor from './lib/components/WikiEditor.svelte';
   import OverlayTool from './lib/components/OverlayTool.svelte';
   import BagOverview from './lib/components/BagOverview.svelte';
+  import WikiSettings from './lib/components/WikiSettings.svelte';
   import { wikis } from './lib/state/wikis.svelte';
   import { t } from './lib/i18n/index.svelte';
 
   let toolbar: Toolbar;
   let accent = $state<{ color: string; light: boolean } | null>(null);
-  let tagSource = $state<'selection' | 'staging' | null>(null);
-  const tagTargets = $derived(tagSource === 'staging' ? app.staging : app.selectedEntries);
+  const tagTargets = $derived(app.tagSource === 'staging' ? app.staging : app.selectedEntries);
 
   onMount(() => {
     app.init();
     updates.startup();
   });
 
-  function openPreview() {
-    const first = app.selectedEntries.find((x) => x.kind === 'file');
-    if (!first) return;
-    const thumb = document.querySelector<HTMLElement>(`.tile[data-path="${CSS.escape(first.path)}"] .thumb`);
-    app.preview = { entry: first, from: thumb?.getBoundingClientRect() ?? null };
-  }
+  const openPreview = () => app.openPreview();
 
   function typing(e: KeyboardEvent) {
     const el = e.target as HTMLElement;
@@ -59,7 +54,7 @@
       e.preventDefault();
       return;
     }
-    if (wikis.editing !== null || wikis.overlaysOpen || app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.dialog || app.renaming || app.batchRenaming) return;
+    if (wikis.editing !== null || wikis.overlaysOpen || app.view === 'board' || typing(e) || drag.active || app.tagSource || app.preview || app.menu || app.dialog || app.renaming || app.batchRenaming) return;
 
     const sel = app.selectedEntries;
     const k = e.key.toLowerCase();
@@ -82,9 +77,7 @@
       app.selectAll();
       e.preventDefault();
     } else if (e.key === 't' || e.key === 'T') {
-      if (app.selection.size) tagSource = 'selection';
-      else if (app.staging.length) tagSource = 'staging';
-      else app.toast(t('files.selectFirst'));
+      app.openTags();
       e.preventDefault();
     } else if (e.key === 's' && !mod) {
       app.stage(app.selectedEntries);
@@ -119,18 +112,19 @@
       {#if app.pane}<SidePane />{/if}
       {#if web.open}<WebPane />{/if}
     </div>
-    <Tray onTag={() => (tagSource = 'staging')} />
+    <Tray onTag={() => (app.tagSource = 'staging')} />
   </main>
 
   <DropBar />
   <DropGrid />
   {#if app.preview}<Preview onaccent={(c) => (accent = c)} />{/if}
-  {#if tagSource && tagTargets.length}<TagBar targets={tagTargets} onclose={() => (tagSource = null)} />{/if}
+  {#if app.tagSource && tagTargets.length}<TagBar targets={tagTargets} onclose={() => (app.tagSource = null)} />{/if}
   {#if wikis.editing !== null}<WikiEditor onclose={() => (wikis.editing = null)} />{/if}
   {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
   {#if wikis.overviewOpen}<BagOverview onclose={() => (wikis.overviewOpen = false)} />{/if}
+  {#if wikis.settingsOpen}<WikiSettings />{/if}
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
-  {#if app.menu}<ContextMenu onTag={() => (tagSource = 'selection')} onPreview={openPreview} />{/if}
+  {#if app.menu}<ContextMenu onTag={() => (app.tagSource = 'selection')} onPreview={openPreview} />{/if}
   {#if app.dialog}<Confirm />{/if}
   {#if app.batchRenaming}<BatchRename />{/if}
   <Toasts />

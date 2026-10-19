@@ -64,12 +64,14 @@
       app.select(entry.path, e.shiftKey ? 'range' : 'toggle');
       return;
     }
+    // A second click on a selected file (without moving it) deselects it.
+    const was = selected;
     if (!selected) app.select(entry.path, 'replace');
     drag.begin(
       e,
       () => (app.selection.has(entry.path) ? app.selectedEntries : [entry]),
       source,
-      () => app.select(entry.path, 'replace')
+      () => (was ? app.select(entry.path, 'toggle') : app.select(entry.path, 'replace'))
     );
   }
 

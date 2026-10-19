@@ -275,7 +275,7 @@ markiert; die Ebenen-Ansicht zeigt, was ein Unterwiki vom Hauptwiki erbt.
 | 3 | Notizen-Seite (Tiddler im Projekt-Bag, Editor, privat → `lokal`) |
 | 4 | Status als Feld für Dateien; gemeinsames Kanban mit Filterleiste |
 | 5 | Map-Zuordnung zu Wikis, Outline-Ansicht, Story-Tiddler in beide Richtungen |
-| 6 | Projekt-Startseite, Ansichtsleiste im Projekt, Wiki im Web-Fenster |
+| 6 (teils ✓) | Projekt-Startseite (erledigt 19.10.: Dateien, Notizen & Snippets, Pinboard, Kanban, Wikis), Wiki im Web-Fenster |
 | 7 | Vorschlag „Hineintauchen“ für Pinboard (TiddlyVisuals), brausa schreibt die Felder schon vorher |
 
 ## 9. Entscheidungen (19.10.2026)

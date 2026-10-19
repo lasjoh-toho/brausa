@@ -18,7 +18,7 @@ import { archiveRoot, inArchive } from '../core/archive';
 import { app } from './app.svelte';
 import { t } from '../i18n/index.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board' | 'project';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
 export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
@@ -53,6 +53,17 @@ class DragController {
   /** Last folder hovered in the tree/canvas; drives the breadcrumb drop bar. */
   trail = $state<string | null>(null);
   gridOpen = $state(false);
+  /** Folder the drop grid shows (up, "drop here", its subfolders); pausing over a subfolder goes into it. */
+  gridDir = $state<string | null>(null);
+  gridDirs = $state<Entry[]>([]);
+  private diveTimer: ReturnType<typeof setTimeout> | null = null;
+  private divePath: string | null = null;
+  /** Where the pointer was when the grid changed: whatever lands under it only counts after a move. */
+  private jumpAt: { x: number; y: number } | null = null;
+  /** Recent horizontal turns of the pointer: shaking the files opens the grid. */
+  private turns: number[] = [];
+  private lastX = 0;
+  private lastDir = 0;
   /** Set by the project map while hovering it: what a drop would do. */
   boardHint = $state('');
   onBoardDrop: BoardDrop | null = null;
@@ -86,6 +97,8 @@ class DragController {
         return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? t('drag.removeTag') : t('drag.setTag', { tag: h.key ?? '' })) : t('drag.moveTo', { name: h.key ?? '' });
       case 'grid-trigger':
         return t('drag.openGrid');
+      case 'grid-up':
+        return t('drag.gridUp');
       case 'board':
         return this.boardHint;
       case 'grid-cell': {
@@ -106,6 +119,8 @@ class DragController {
     const sy = e.clientY;
 
     const move = (ev: PointerEvent) => {
+      // Out of the window: hand the files to the system, so they can go to Finder/Explorer or another app.
+      if (this.active && !opts.data && outside(ev)) return dragOut();
       if (!this.active) {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < THRESHOLD) return;
         const items = getItems();
@@ -118,6 +133,7 @@ class DragController {
         this.active = true;
         document.body.classList.add('dragging');
       }
+      this.shake(ev.clientX);
       this.x = ev.clientX;
       this.y = ev.clientY;
       this.copy = isCopyKey(ev);
@@ -139,7 +155,18 @@ class DragController {
       else if (this.active) this.copy = isCopyKey(ev);
     };
 
+    const outside = (ev: MouseEvent) => ev.clientX <= 0 || ev.clientY <= 0 || ev.clientX >= window.innerWidth - 1 || ev.clientY >= window.innerHeight - 1;
+    const dragOut = () => {
+      const paths = this.items.filter((i) => !inArchive(i.path)).map((i) => i.path);
+      end();
+      if (paths.length) void app.backend.dragOut(paths);
+    };
+    const leave = (ev: MouseEvent) => {
+      if (this.active && !opts.data && !ev.relatedTarget) dragOut();
+    };
+
     const end = () => {
+      document.documentElement.removeEventListener('mouseleave', leave);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('keydown', key);
@@ -149,10 +176,103 @@ class DragController {
 
     this.cleanup?.();
     this.cleanup = end;
+    document.documentElement.addEventListener('mouseleave', leave);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('keydown', key);
     window.addEventListener('keyup', key);
+  }
+
+  // ------------------------------------------------ files from other apps
+
+  /** Files dragged in from Finder/Explorer: the same targets as a drag inside brausa (no ⌥ for copy there). */
+  externalEnter(items: Entry[]) {
+    this.cleanup?.();
+    this.items = items;
+    this.source = 'external';
+    this.copy = false;
+    this.active = items.length > 0;
+    if (this.active) document.body.classList.add('dragging');
+  }
+
+  externalOver(x: number, y: number) {
+    if (this.source !== 'external' || !this.active) return;
+    this.x = x;
+    this.y = y;
+    this.hitTest(x, y);
+  }
+
+  async externalDrop(items: Entry[], x: number, y: number) {
+    if (!items.length) return this.reset();
+    this.items = items;
+    this.hitTest(x, y);
+    const hit = this.hit;
+    this.reset();
+    if (hit?.kind === 'board') await this.onBoardDrop?.(items, x, y);
+    else if (hit) await performDrop(hit, items, 'external', false);
+  }
+
+  externalLeave() {
+    if (this.source === 'external') this.reset();
+  }
+
+  // ------------------------------------------------ drop grid
+
+  /** Open the grid on a folder (the current one at first). */
+  openGrid(dir = app.funnel ?? app.cwd) {
+    this.gridOpen = true;
+    void this.gridGo(dir);
+  }
+
+  async gridGo(dir: string) {
+    this.jumpAt = { x: this.x, y: this.y };
+    this.gridDir = dir;
+    this.gridDirs = [];
+    try {
+      const list = (await app.backend.listDir(dir)).filter((e) => e.kind === 'dir');
+      if (this.gridDir === dir) this.gridDirs = list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    } catch {
+      // Unreadable folder: only "up" and "drop here".
+    }
+  }
+
+  /** Three quick turns left-right within ¾ s count as shaking. */
+  private shake(x: number) {
+    const dx = x - this.lastX;
+    if (Math.abs(dx) < 18) return;
+    const dir = Math.sign(dx);
+    this.lastX = x;
+    if (dir !== this.lastDir) {
+      const now = performance.now();
+      this.turns = [...this.turns.filter((t) => now - t < 750), now];
+      this.lastDir = dir;
+      if (this.turns.length >= 4 && !this.gridOpen) {
+        this.turns = [];
+        this.openGrid();
+      }
+    }
+  }
+
+  /** Pausing over a grid folder (or "up") goes there. */
+  private dive(path: string | null) {
+    if (path === this.divePath) return;
+    if (this.diveTimer) clearTimeout(this.diveTimer);
+    this.diveTimer = null;
+    this.divePath = path;
+    if (!path) return;
+    if (this.jumpAt) {
+      if (Math.hypot(this.x - this.jumpAt.x, this.y - this.jumpAt.y) < 40) {
+        this.divePath = null;
+        return;
+      }
+      this.jumpAt = null;
+    }
+    this.diveTimer = setTimeout(() => {
+      if (this.active && this.gridOpen && this.divePath === path) {
+        this.divePath = null;
+        void this.gridGo(path);
+      }
+    }, app.springDelay + 250);
   }
 
   private reset() {
@@ -167,9 +287,14 @@ class DragController {
     this.data = undefined;
     this.accepts = null;
     this.title = '';
+    this.source = '';
     this.hit = null;
     this.trail = null;
     this.gridOpen = false;
+    this.gridDir = null;
+    this.gridDirs = [];
+    this.dive(null);
+    this.turns = [];
     this.cleanup = null;
     document.body.classList.remove('dragging');
   }
@@ -181,12 +306,14 @@ class DragController {
     if (!t) {
       this.hit = null;
       this.spring(null);
+      this.dive(null);
       return;
     }
     const kind = t.dataset.drop as DropKind;
     if (this.accepts && !this.accepts.includes(kind)) {
       this.hit = null;
       this.spring(null);
+      this.dive(null);
       return;
     }
     const hit: DropHit = { kind, path: t.dataset.target ?? t.dataset.path, key: t.dataset.key };
@@ -201,7 +328,8 @@ class DragController {
       }
     }
     if (kind === 'folder' || (kind === 'crumb' && !this.trail)) this.trail = hit.path ?? null;
-    if (kind === 'grid-trigger') this.gridOpen = true;
+    if (kind === 'grid-trigger' && !this.gridOpen) this.openGrid();
+    this.dive(t.dataset.dive ?? null);
     this.hit = hit;
     this.spring(kind === 'folder' && t.hasAttribute('data-expandable') ? hit.path! : null);
   }
@@ -263,7 +391,7 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         if (app.project) {
           // In a project the drop adds to it; nothing moves.
           if (source !== 'canvas') await app.addToProject(app.project, items);
-        } else if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas' && source !== 'pane') {
+        } else if (items.length === 1 && items[0].kind === 'dir' && source !== 'canvas' && source !== 'pane' && source !== 'external') {
           const dir = items[0].path;
           if (isWithin(dir, app.cwd) && dir !== app.cwd) {
             if (!app.recursive) app.setRecursive(true);

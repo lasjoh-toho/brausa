@@ -145,7 +145,8 @@ pub fn walk_dirs(root: &Path, max_depth: usize, limit: usize) -> Vec<PathBuf> {
         .collect()
 }
 
-fn skip_walk(e: &walkdir::DirEntry) -> bool {
+/// System files and program folders: Stream, the index and the watcher leave them out.
+pub fn skip_walk(e: &walkdir::DirEntry) -> bool {
     let n = e.file_name().to_string_lossy();
     is_system(&n, e.metadata().ok().as_ref()) || (e.file_type().is_dir() && is_program_dir(&n))
 }
@@ -201,7 +202,7 @@ pub fn list_dir(dir: &Path, include_hidden: bool) -> io::Result<Vec<Entry>> {
 }
 
 /// Recursive flat listing of files below `root`, with `rel_dir` set.
-pub fn walk(root: &Path, max_depth: usize, include_hidden: bool, limit: usize) -> Vec<Entry> {
+pub fn walk(root: &Path, max_depth: usize, include_hidden: bool, limit: usize, exts: Option<&[String]>) -> Vec<Entry> {
     let mut out = Vec::new();
     let it = WalkDir::new(root).min_depth(1).max_depth(max_depth).into_iter().filter_entry(|e| {
         let n = e.file_name().to_string_lossy();
@@ -210,6 +211,12 @@ pub fn walk(root: &Path, max_depth: usize, include_hidden: bool, limit: usize) -
     for e in it.flatten() {
         if !e.file_type().is_file() {
             continue;
+        }
+        if let Some(exts) = exts {
+            let ext = e.path().extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if !exts.iter().any(|x| *x == ext) {
+                continue;
+            }
         }
         let parent = e.path().parent().unwrap_or(root).to_path_buf();
         if let Ok(mut entry) = make_entry(e.path()) {
@@ -361,7 +368,7 @@ mod tests {
         for f in ["Fotos/a.jpg", "AppData/Local/cache/b.bin", "proj/node_modules/x/c.js", "proj/d.txt", "Bilder.photoslibrary/originals/e.jpg", ".cache/y/f", "Thumbs.db"] {
             fs::write(root.join(f), b"1").unwrap();
         }
-        let mut names: Vec<String> = walk(root, 10, false, 100).into_iter().map(|e| e.name).collect();
+        let mut names: Vec<String> = walk(root, 10, false, 100, None).into_iter().map(|e| e.name).collect();
         names.sort();
         assert_eq!(names, ["a.jpg", "d.txt"]);
         // Listings hide system files but show program folders (they just are not walked into).
@@ -388,7 +395,7 @@ mod tests {
         let top = list_dir(root, false).unwrap();
         assert_eq!(top.iter().filter(|e| e.name.starts_with('.')).count(), 0);
 
-        let all = walk(root, 10, false, 100);
+        let all = walk(root, 10, false, 100, None);
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].rel_dir.as_deref(), Some("a/b"));
         assert_eq!(all[0].tags, vec!["foo"], "filename tags are read");

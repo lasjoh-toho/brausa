@@ -12,6 +12,7 @@ export const de = {
   removeTag: 'Tag entfernen',
   setTag: '#{tag} setzen',
   tagSet: '#{tag} gesetzt',
+  gridUp: 'Kurz warten: eine Ebene hoch',
   openGrid: 'Ablagezonen öffnen',
   assignTag: '#{tag} zuweisen',
   tagAssigned: '#{tag} zugewiesen'
@@ -30,6 +31,7 @@ export const en: typeof de = {
   removeTag: 'Remove tag',
   setTag: 'Set #{tag}',
   tagSet: '#{tag} set',
+  gridUp: 'Wait a moment: one level up',
   openGrid: 'Open drop zones',
   assignTag: 'Assign #{tag}',
   tagAssigned: '#{tag} assigned'

@@ -11,6 +11,9 @@
   import { web } from '../state/web.svelte';
   import Icon from './Icon.svelte';
   import { filterPages, shortUrl } from '../core/web';
+  import { board } from '../state/board.svelte';
+  // pdf.js is large: load the reader only when a document is opened.
+  const loadReader = () => import('./Reader.svelte');
   import { t, loc } from '../i18n/index.svelte';
 
   let view = $state<HTMLElement>();
@@ -23,7 +26,7 @@
 
   // Anything brausa draws over the panel must not end up under the native page.
   const covered = $derived(
-    !!web.listOpen || !!app.preview || !!app.menu || !!app.dialog || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || drag.active
+    !!web.listOpen || web.suggest || !!app.preview || !!app.menu || !!app.dialog || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || wikis.settingsOpen || drag.active
   );
 
   function measure() {
@@ -36,12 +39,14 @@
     void covered;
     void web.width;
     void web.started;
+    void web.home;
+    void web.mode;
+    void board.reader;
     measure();
   });
 
   onMount(() => {
-    // Reopen the last page; addresses of local sites are only valid while the app runs.
-    if (!web.started && web.url && !/^http:\/\/127\.0\.0\.1:\d+\/[0-9a-f]+\//.test(web.url)) void web.go(web.url);
+    // The panel starts with the speed dial, not with the last page.
     const ro = new ResizeObserver(measure);
     if (view) ro.observe(view);
     window.addEventListener('resize', measure);
@@ -79,6 +84,12 @@
     web.listOpen = web.listOpen === which ? null : which;
   }
 
+  // Recent pages under the address bar: everything at first, then what matches the typed text.
+  const suggestions = $derived(
+    filterPages([...lib.bookmarks].reverse().concat(lib.history.filter((h) => !lib.bookmarks.some((b) => b.url === h.url))), address === web.url ? '' : address).slice(0, 12)
+  );
+  const docName = $derived(board.reader?.ref.name ?? '');
+
   const when = (ms: number) => new Date(ms).toLocaleString(loc(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 </script>
 
@@ -88,12 +99,14 @@
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('back')} aria-label={t('webpane.back')}><Icon name="back" size={14} /></button>
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('forward')} aria-label={t('webpane.forward')}><Icon name="forward" size={14} /></button>
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('reload')} aria-label={t('webpane.reload')}><Icon name="sync" size={14} /></button>
+    <button class="btn icon" class:on={web.home && web.mode === 'web'} onclick={() => web.goHome()} title={t('webpane.home')} aria-label={t('webpane.home')}><Icon name="grid" size={14} /></button>
     <form class="addr" onsubmit={(e) => (e.preventDefault(), (editing = false), address.trim() && void web.go(address))}>
       <Icon name={web.local ? 'folder' : secure ? 'globe' : 'warn'} size={12} />
       <input
         bind:value={address}
-        onfocus={(e) => ((editing = true), e.currentTarget.select())}
-        onblur={() => (editing = false)}
+        onfocus={(e) => ((editing = true), (web.suggest = true), e.currentTarget.select())}
+        onblur={() => ((editing = false), setTimeout(() => (web.suggest = false), 150))}
+        onkeydown={(e) => e.key === 'Escape' && (e.currentTarget.blur(), (address = web.url))}
         placeholder={t('webpane.address')}
         spellcheck="false"
       />
@@ -123,6 +136,12 @@
     <button class="btn icon" class:on={web.listOpen === 'history'} onclick={() => openList('history')} title={t('webpane.historyOf', { scope: scopeName })} aria-label={t('webpane.history')}>
       <Icon name="clock" size={13} />
     </button>
+    <button class="btn icon" class:on={web.adblock} onclick={() => web.setAdblock(!web.adblock)} title={web.adblock ? t('webpane.adblockOn') : t('webpane.adblockOff')} aria-label={t('webpane.adblock')}>
+      <Icon name="shield" size={13} />
+    </button>
+    <button class="btn icon" class:on={web.collect} onclick={() => web.setCollect(!web.collect)} title={web.collect ? t('webpane.collectOn') : t('webpane.collectOff')} aria-label={t('webpane.collect')}>
+      <Icon name="image" size={13} />
+    </button>
     <span class="grow"></span>
     {#if web.local}
       <button class="btn" class:warn={web.local.scripts} onclick={() => web.setScripts(!web.local!.scripts)} title={t('webpane.scriptsRemember')}>
@@ -135,8 +154,27 @@
       </span>
     {/if}
   </div>
+  {#if board.reader}
+    <div class="tabs" role="tablist">
+      <button class:on={web.mode === 'web'} role="tab" aria-selected={web.mode === 'web'} onclick={() => (web.mode = 'web')}><Icon name="globe" size={12} />{t('webpane.tabWeb')}</button>
+      <button class:on={web.mode === 'doc'} role="tab" aria-selected={web.mode === 'doc'} onclick={() => (web.mode = 'doc')} title={docName}><Icon name="doc" size={12} /><span>{docName}</span></button>
+    </div>
+  {/if}
   <div class="view" bind:this={view}>
-    {#if web.listOpen}
+    {#if web.mode === 'doc' && board.reader}
+      {#await loadReader() then R}<R.default docked />{/await}
+    {:else if web.suggest && suggestions.length}
+      <ul class="suggest">
+        {#each suggestions as p (p.url)}
+          <li>
+            <button class="page" onpointerdown={(e) => e.preventDefault()} onclick={() => ((address = p.url), web.pick(p.url))} title={p.url}>
+              <span class="t">{p.title || shortUrl(p.url)}</span>
+              <span class="u">{shortUrl(p.url)}</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {:else if web.listOpen}
       <div class="list">
         <div class="list-head">
           <b>{web.listOpen === 'history' ? t('webpane.history') : t('webpane.bookmarks')}</b>
@@ -171,17 +209,24 @@
         </ul>
         <p class="muted foot">{t('webpane.listFoot')}</p>
       </div>
-    {:else if !web.started}
-      <div class="start">
-        <Icon name="globe" size={28} />
-        <p>{t('webpane.startHint')}</p>
-        <p class="muted">{t('webpane.startInfo')}</p>
-        <p class="muted">{t('webpane.startLocal')}</p>
-        {#if lib.bookmarks.length}
-          <div class="marks">
-            {#each lib.bookmarks as p (p.url)}
-              <button class="chip" title={p.url} onclick={() => web.pick(p.url)}><Icon name="star" size={11} />{p.title || shortUrl(p.url)}</button>
+    {:else if !web.started || web.home}
+      <div class="dial">
+        {#if web.dial.length}
+          <div class="tiles">
+            {#each web.dial as p (p.url)}
+              <button class="tile" title={p.url} onclick={() => web.pick(p.url)}>
+                <span class="fav">{(p.title || shortUrl(p.url)).slice(0, 1).toUpperCase()}</span>
+                <span class="t">{p.title || shortUrl(p.url)}</span>
+                <span class="u">{shortUrl(p.url)}</span>
+              </button>
             {/each}
+          </div>
+        {:else}
+          <div class="start">
+            <Icon name="globe" size={28} />
+            <p>{t('webpane.startHint')}</p>
+            <p class="muted">{t('webpane.startInfo')}</p>
+            <p class="muted">{t('webpane.startLocal')}</p>
           </div>
         {/if}
       </div>
@@ -408,26 +453,113 @@
     margin: 0;
     font-size: 11px;
   }
-  .marks {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 6px;
-    max-width: 460px;
-    margin-top: 6px;
-  }
-  .marks .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
   .muted {
     color: var(--fg-faint);
     font-size: 12px;
     max-width: 420px;
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tabs button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 50%;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--fg-muted);
+    border-bottom: 2px solid transparent;
+  }
+  .tabs button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tabs button.on {
+    color: var(--fg);
+    border-bottom-color: var(--accent);
+  }
+  .view :global(.reader) {
+    height: 100%;
+  }
+  .suggest {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    overflow: auto;
+    background: var(--bg);
+  }
+  .suggest .page {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 7px;
+    text-align: left;
+  }
+  .suggest .page:hover {
+    background: var(--bg-sunken);
+  }
+  .suggest .t,
+  .dial .t {
+    font-size: 13px;
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .suggest .u,
+  .dial .u {
+    font-size: 11px;
+    color: var(--fg-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .dial {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    padding: 16px;
+    background: var(--bg);
+  }
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+  }
+  .dial .tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 14px 8px 10px;
+    border-radius: 12px;
+    background: var(--bg-elev);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .dial .tile:hover {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .fav {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    margin-bottom: 4px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 17px;
   }
 </style>

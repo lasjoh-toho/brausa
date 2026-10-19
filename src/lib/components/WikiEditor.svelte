@@ -32,7 +32,7 @@
 
   const own = $derived(`wiki-${r.name.trim()}`);
   const available = $derived([
-    ...wikis.bags.filter((b) => b.name !== own && !r.bags.includes(b.name)).map((b) => ({ bag: b.name, label: b.name, sub: b.readonly ? t('wiki.readonlyBag') : tn('wiki.tiddlers', b.tiddlers) })),
+    ...wikis.bags.filter((b) => b.name !== own && !r.bags.includes(b.name) && !b.hidden).map((b) => ({ bag: b.name, label: b.name, sub: b.readonly ? t('wiki.readonlyBag') : tn('wiki.tiddlers', b.tiddlers) })),
     ...wikis.maps.filter((m) => !r.bags.includes(m.bag)).map((m) => ({ bag: m.bag, label: m.title, sub: t('wiki.mapIn', { project: m.project }) }))
   ]);
   const selectedHtml = $derived(app.selectedEntries.find((e) => e.ext === 'html' || e.ext === 'htm'));

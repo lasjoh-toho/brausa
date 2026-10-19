@@ -14,6 +14,16 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.10
+
+- **No more freezes with many files.** Views draw page by page (more appear when scrolling); the photo map reads only photos. If the interface still hangs for 10 seconds, brausa restarts without that folder and offers to go on there **without subfolders**.
+- **Folders | Flat** toggle instead of "Stream"; flat view sorts by folder. **Sort menu:** clicking the current order again reverses it.
+- **System files** (AppData, Library, program folders) are not indexed or shown; "All kinds" offers them inside a chosen folder or with a search of 5+ characters.
+- **Drag & drop with Finder/Explorer** in both directions. A second click on a selected file deselects it. ⌘/Ctrl + scroll sizes the tiles and, past the largest size, opens the selected file large. **Tag button** at the top right.
+- **Drop grid:** shake the dragged files to open it; it dives through folders (one level up, "drop here", subfolders).
+- **Web panel:** speed dial, recent pages under the address bar, simple ad blocker, automatic saving of pictures to "Web-Bilder", PDFs and text files open in the panel (drag snippets onto the map).
+- **Wiki settings** (gear): bags, plugins, search across all wikis. **Project start page** with files, notes & snippets, pinboard, Kanban and wikis.
+
 ### New in 0.9
 
 - **No more hanging on system files.** Listings hide system files (AppData, Thumbs.db, recycle bin, everything Windows marks hidden or system). Stream and the live update leave program folders alone (node_modules, Program Files, Library on macOS, app bundles, photo libraries), so caches no longer cause constant reloading.
@@ -51,6 +61,15 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.10: kein Einfrieren, Ordner/Flach, Drag & Drop mit dem Finder, Projekt-Startseite**
+- **Kein Einfrieren mehr bei vielen Dateien:** Ansichten zeichnen seitenweise (beim Scrollen kommt mehr), die Foto-Karte liest nur Fotos. Hängt die Oberfläche trotzdem 10 Sekunden, startet brausa ohne diesen Ordner neu und bietet an, dort **ohne Unterordner** weiterzusuchen.
+- **Ordner | Flach** statt „Stream“; flach wird nach Ordner sortiert. **Sortiermenü:** die aktuelle Sortierung nochmals anklicken kehrt sie um.
+- **Systemdateien** (AppData, Library, Programmordner) werden weder indiziert noch gezeigt; „Alle Arten“ bietet sie in einem gewählten Ordner oder bei einer Suche ab 5 Zeichen an.
+- **Drag & Drop mit Finder/Explorer** in beide Richtungen. Zweiter Klick auf eine markierte Datei hebt die Markierung auf. ⌘/Strg + Scrollen ändert die Kachelgröße und öffnet über die größte Stufe hinaus die markierte Datei groß. **Tag-Knopf** oben rechts.
+- **Ablage-Raster:** gezogene Dateien schütteln öffnet es; es taucht durch Ordner (eine Ebene hoch, „hier ablegen“, Unterordner).
+- **Web-Fenster:** Schnellwahl, letzte Seiten unter der Adresszeile, einfacher Werbeblocker, Bilder automatisch in „Web-Bilder“ speichern, PDFs und Textdateien öffnen im Seitenfeld (Snippets auf die Map ziehen).
+- **Wiki-Einstellungen** (Zahnrad): Bags, Plugins, Suche über alle Wikis. **Projekt-Startseite** mit Dateien, Notizen & Snippets, Pinboard, Kanban und Wikis.
 
 **Neu in 0.9: kein Hängen mehr an Systemdateien, Tabelle, Bag-Übersicht**
 - **Systemdateien werden übersprungen:** Listen blenden Systemdateien aus (AppData, Thumbs.db, Papierkorb, alles, was Windows als versteckt oder System markiert). Stream und die Live-Aktualisierung lassen Programmordner aus (node_modules, Programme, unter macOS Library, App-Pakete, Fotomediatheken), Caches lösen kein ständiges Neuladen mehr aus.
