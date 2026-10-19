@@ -8,15 +8,19 @@ import type { Backend } from '../backend';
 import type { IndexReport, LibraryInfo } from '../backend/types';
 import { createBackend } from '../backend';
 import { parseCategories } from '../core/pattern';
-import { archiveRoot, inArchive, isArchive } from '../core/archive';
+import { archiveName, archiveRoot, inArchive, isArchive } from '../core/archive';
 import type { ProjectInfo } from '../backend/types';
 import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
 import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
-import { family } from '../core/format';
+import { family, formatSize } from '../core/format';
+import { extras, keeper } from '../core/dupes';
+import { renameOrder, type RenameStep } from '../core/rename';
 import { store } from '../platform';
+import { t, tn } from '../i18n/index.svelte';
+import { describe, followMoves, placeName, suggestName, type SmartFolder, type SmartView } from '../core/smart';
 
 export interface DropCell {
   label: string;
@@ -36,6 +40,8 @@ export interface Toast {
   id: number;
   text: string;
   undo?: () => Promise<void>;
+  /** Label of the button that runs `undo` (default: Undo). */
+  action?: string;
   error?: boolean;
 }
 
@@ -61,7 +67,9 @@ class AppState {
   currentProject = $derived(this.projects.find((p) => p.id === this.project) ?? null);
   /** Last project worked on; the map view falls back to it. */
   lastProject = $state<string | null>(store.get('lastProject', null));
-  places = $state<{ name: string; path: string }[]>([]);
+  /** Standard places as the core names them (German); `places` shows them in the UI language. */
+  private placesRaw = $state<{ name: string; path: string }[]>([]);
+  places = $derived(this.placesRaw.map((p) => ({ ...p, name: t(`places.${p.name}`) === `places.${p.name}` ? p.name : t(`places.${p.name}`) })));
   cwd = $state('');
   history = $state<string[]>([]);
   future = $state<string[]>([]);
@@ -72,8 +80,10 @@ class AppState {
   view = $state<ViewMode>(store.get('view', 'stream'));
   kanbanBy = $state<Exclude<GroupBy, 'none' | 'month'>>(store.get('kanbanBy', 'tag'));
   tagDepth = $state(store.get('tagDepth', 1));
-  sort = $state<SortKey>('name');
-  desc = $state(false);
+  sort = $state<SortKey>(store.get('sort', 'name'));
+  desc = $state(store.get('desc', false));
+  /** Width of the preview column in the three-panel view. */
+  previewWidth = $state(store.get('previewWidth', 420));
   search = $state('');
   searchMode = $state<'filter' | 'select'>('filter');
   funnel = $state<string | null>(null);
@@ -109,7 +119,23 @@ class AppState {
   /** Lazily generated thumbnail URLs, keyed by path + mtime. */
   thumbs = new SvelteMap<string, string | null>();
   renaming = $state<string | null>(null);
+  /** Entries in the batch rename dialog (null: closed). */
+  batchRenaming = $state<Entry[] | null>(null);
   menu = $state<{ x: number; y: number; entry: Entry | null } | null>(null);
+  /** Open confirmation dialog (see ask()). */
+  dialog = $state<{ title: string; text: string; ok: string; danger?: boolean; resolve: (yes: boolean) => void } | null>(null);
+
+  /** Saved searches/filters (intelligente Ordner). */
+  smartFolders = $state<SmartFolder[]>(store.get('smartFolders', []));
+
+  /** The current place and filters, as a smart folder would store them. */
+  currentView = $derived<SmartView>({
+    scope: this.project ? { project: this.project } : { folder: this.cwd },
+    search: this.searchMode === 'filter' ? this.search : '',
+    typeFilter: this.typeFilter,
+    recursive: this.recursive,
+    date: this.dateFilter
+  });
 
   /** Entries after all filters except the date range (the calendar shows these). */
   undated = $derived(
@@ -128,10 +154,35 @@ class AppState {
     this.currentProject ?? this.projectOf(this.cwd) ?? this.projects.find((p) => p.id === this.lastProject) ?? null
   );
 
+  /** Duplicate search result (groups of paths with equal content); null: not looking for duplicates. */
+  dupes = $state<string[][] | null>(null);
+  dupeBusy = $state(false);
+
   /** What the canvas shows. */
-  visible = $derived(this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated);
+  visible = $derived.by(() => {
+    const dated = this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated;
+    if (!this.dupes) return dated;
+    const keep = new Set(this.dupes.flat());
+    return dated.filter((e) => keep.has(e.path));
+  });
+
+  /** Duplicate groups as entries, still present and visible (groups of one drop out after deleting). */
+  dupeGroups = $derived.by(() => {
+    if (!this.dupes) return [];
+    const by = new Map(this.visible.map((e) => [e.path, e]));
+    return this.dupes
+      .map((g) => g.flatMap((p) => by.get(p) ?? []))
+      .filter((g) => g.length > 1)
+      .map((g) => {
+        // The copy that stays comes first.
+        const k = keeper(g);
+        return [k, ...g.filter((e) => e !== k)];
+      });
+  });
 
   groups = $derived.by(() => {
+    if (this.dupes)
+      return this.dupeGroups.map((g) => ({ key: g[0].path, label: t('app.dupeGroup', { name: g[0].name, size: formatSize(g[0].size) }), entries: g }));
     if (this.view === 'kanban') return groupEntries(this.visible, this.kanbanBy, { depth: this.tagDepth });
     if (this.view === 'timeline') return groupEntries(this.visible.filter((e) => e.kind === 'file'), 'month');
     return groupEntries(this.visible, 'none');
@@ -150,7 +201,7 @@ class AppState {
 
   async init() {
     this.home = await this.backend.homeDir();
-    this.places = await this.backend.places();
+    this.placesRaw = await this.backend.places();
     if (!this.gridConfig.cells.length) this.gridConfig = defaultGrid(this.places);
     const last = store.get<string>('cwd', '');
     await this.navigate(last || this.home, false).catch(() => this.navigate(this.home, false));
@@ -192,6 +243,7 @@ class AppState {
       this.future = [];
     }
     this.setProject(id);
+    this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;
     this.selection.clear();
@@ -225,7 +277,7 @@ class AppState {
     await this.backend.deleteProject(id);
     if (this.project === id) await this.navigate(this.cwd);
     await this.loadProjects();
-    this.toast(`Projekt „${p?.name ?? ''}“ gelöscht. Die Dateien selbst bleiben, wo sie sind.`);
+    this.toast(t('app.projectDeleted', { name: p?.name ?? '' }));
   }
 
   /** Files and folders join a project; they stay where they are. */
@@ -234,7 +286,7 @@ class AppState {
     try {
       const n = await this.backend.addToProject(id, entries.map((e) => e.path));
       await this.loadProjects();
-      this.toast(n ? `${n} ${n === 1 ? 'Objekt' : 'Objekte'} zu „${p?.name}“ hinzugefügt` : `Schon in „${p?.name}“`);
+      this.toast(n ? tn('app.addedToProject', n, { name: p?.name ?? '' }) : t('app.alreadyInProject', { name: p?.name ?? '' }));
       if (this.project === id) await this.refresh(true);
     } catch (e) {
       this.toast(String(e).replace(/^Error: /, ''), true);
@@ -247,14 +299,142 @@ class AppState {
     if (!p || !entries.length) return;
     const n = await this.backend.removeFromProject(p.id, entries.map((e) => e.path));
     const left = entries.length - n;
-    this.toast(
-      `${n} aus „${p.name}“ entfernt` + (left ? ` · ${left} gehören über einen Projektordner dazu und bleiben` : '') + '. Auf der Festplatte ändert sich nichts.'
-    );
+    this.toast(left ? t('app.removedFromProjectKept', { n, name: p.name, left }) : t('app.removedFromProject', { n, name: p.name }));
     await this.loadProjects();
     await this.refresh(true);
   }
 
   // ---------------------------------------------------------------- projects / index
+
+  // ---------------------------------------------------------------- duplicates
+
+  /** Look for files with equal content among the files shown (with subfolders). */
+  async findDuplicates() {
+    if (this.dupeBusy) return;
+    this.dupes = null;
+    if (!this.recursive && !this.project) {
+      this.recursive = true;
+      store.set('recursive', true);
+      await this.refresh();
+    }
+    const files = this.visible.filter((e) => e.kind === 'file' && !inArchive(e.path));
+    if (files.length < 2) {
+      this.toast(t('app.nothingToCompare'));
+      return;
+    }
+    this.dupeBusy = true;
+    try {
+      const groups = await this.backend.findDuplicates(files.map((e) => e.path));
+      if (!groups.length) this.toast(tn('app.noDupes', files.length));
+      else {
+        this.selection.clear();
+        this.dupes = groups;
+      }
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    } finally {
+      this.dupeBusy = false;
+    }
+  }
+
+  endDuplicates() {
+    this.dupes = null;
+    this.selection.clear();
+  }
+
+  /** Select every copy but one per group, ready for the trash. */
+  selectExtras() {
+    this.setSelection(extras(this.dupeGroups).map((e) => e.path));
+  }
+
+  // ---------------------------------------------------------------- smart folders
+
+  smartPlace(f: SmartView) {
+    return placeName(f.scope, (id) => this.projects.find((p) => p.id === id)?.name);
+  }
+
+  smartSummary(f: SmartView) {
+    return describe(f, this.smartPlace(f));
+  }
+
+  suggestSmartName() {
+    return suggestName(this.currentView, this.smartPlace(this.currentView));
+  }
+
+  private saveSmartFolders() {
+    store.set('smartFolders', $state.snapshot(this.smartFolders));
+  }
+
+  /** Save the current place and filters under a name. */
+  saveSmart(name: string) {
+    const v = $state.snapshot(this.currentView) as SmartView;
+    const f: SmartFolder = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: name.trim() || this.suggestSmartName(), ...v };
+    this.smartFolders = [...this.smartFolders, f];
+    this.saveSmartFolders();
+    this.toast(t('app.smartSaved', { name: f.name }));
+    return f;
+  }
+
+  /** Open the place and restore every filter of a smart folder. */
+  async openSmart(id: string) {
+    const f = this.smartFolders.find((x) => x.id === id);
+    if (!f) return;
+    if ('project' in f.scope && !this.projects.some((p) => 'project' in f.scope && p.id === f.scope.project)) {
+      this.toast(t('app.smartProjectGone', { name: f.name }), true);
+      return;
+    }
+    // Set the filters before loading, so the place is read only once.
+    this.typeFilter = f.typeFilter;
+    store.set('typeFilter', f.typeFilter);
+    this.searchMode = 'filter';
+    this.search = f.search;
+    if ('project' in f.scope) await this.openProject(f.scope.project);
+    else {
+      this.recursive = f.recursive;
+      store.set('recursive', f.recursive);
+      await this.navigate(f.scope.folder);
+    }
+    if (f.date) {
+      this.dateField = f.date.field;
+      store.set('dateField', f.date.field);
+      if (f.date.field === 'taken') void this.loadMediaInfo();
+    }
+    this.dateFilter = f.date;
+  }
+
+  renameSmart(id: string, name: string) {
+    if (!name.trim()) return;
+    this.smartFolders = this.smartFolders.map((f) => (f.id === id ? { ...f, name: name.trim() } : f));
+    this.saveSmartFolders();
+  }
+
+  /** Replace a smart folder's filters with the current ones. */
+  updateSmart(id: string) {
+    const v = $state.snapshot(this.currentView) as SmartView;
+    this.smartFolders = this.smartFolders.map((f) => (f.id === id ? { ...f, ...v } : f));
+    this.saveSmartFolders();
+  }
+
+  /** Keep smart folders pointing at folders that were moved or renamed. */
+  private followSmart(moved: Record<string, string>) {
+    const next = followMoves(this.smartFolders, moved);
+    if (next) {
+      this.smartFolders = next;
+      this.saveSmartFolders();
+    }
+  }
+
+  removeSmart(id: string) {
+    const f = this.smartFolders.find((x) => x.id === id);
+    if (!f) return;
+    const at = this.smartFolders.indexOf(f);
+    this.smartFolders = this.smartFolders.filter((x) => x.id !== id);
+    this.saveSmartFolders();
+    this.toast(t('app.smartRemoved', { name: f.name }), false, async () => {
+      this.smartFolders = [...this.smartFolders.slice(0, at), f, ...this.smartFolders.slice(at)];
+      this.saveSmartFolders();
+    });
+  }
 
   async loadLibraries() {
     this.libraries = (await this.backend.libraries()).sort((a, b) => a.name.localeCompare(b.name));
@@ -262,11 +442,11 @@ class AppState {
 
   private onIndexReport(r: IndexReport) {
     const parts: string[] = [];
-    if (r.relinked.length) parts.push(`${r.relinked.length} verschoben/umbenannt erkannt`);
-    if (r.imported) parts.push(`${r.imported} alte Sidecars übernommen`);
-    if (r.restored) parts.push(`${r.restored} zurückgekehrt`);
-    if (r.orphaned.length) parts.push(`${r.orphaned.length} vermisst`);
-    if (parts.length) this.toast('Index: ' + parts.join(' · '));
+    if (r.relinked.length) parts.push(t('app.indexRelinked', { n: r.relinked.length }));
+    if (r.imported) parts.push(t('app.indexImported', { n: r.imported }));
+    if (r.restored) parts.push(t('app.indexRestored', { n: r.restored }));
+    if (r.orphaned.length) parts.push(t('app.indexOrphaned', { n: r.orphaned.length }));
+    if (parts.length) this.toast(t('app.indexReport', { parts: parts.join(' · ') }));
     void this.loadLibraries();
     void this.refresh(true);
   }
@@ -295,6 +475,7 @@ class AppState {
     }
     this.cwd = path;
     this.setProject(null);
+    this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;
     this.selection.clear();
@@ -342,7 +523,7 @@ class AppState {
       });
       this.learnTags(this.raw.flatMap((e) => e.tags));
       if (!quiet && !this.project) this.backend.watch(this.cwd, recursive).catch(() => {});
-      if (this.view === 'map' || (this.view === 'calendar' && this.dateField === 'taken')) void this.loadMediaInfo();
+      if (this.view === 'map' || (this.view === 'calendar' && this.dateField === 'taken') || this.sort === 'taken') void this.loadMediaInfo();
     } catch (e) {
       this.toast(String(e), true);
       this.raw = [];
@@ -356,6 +537,37 @@ class AppState {
     this.typeFilter = v;
     store.set('typeFilter', v);
     if (v && !this.recursive) this.setRecursive(true);
+  }
+
+  /** Sort every view; picking the current key again flips the direction. */
+  setSort(key: SortKey, desc?: boolean) {
+    this.desc = desc ?? (key === this.sort ? !this.desc : key !== 'name' && key !== 'ext');
+    this.sort = key;
+    store.set('sort', key);
+    store.set('desc', this.desc);
+    if (key === 'taken') void this.loadMediaInfo();
+  }
+
+  setPreviewWidth(w: number) {
+    this.previewWidth = Math.max(240, Math.min(1200, w));
+    store.set('previewWidth', this.previewWidth);
+  }
+
+  /** Last entry clicked or reached with the arrow keys; the three-panel view previews it. */
+  cursor = $state<string | null>(null);
+  current = $derived(
+    (this.cursor && this.selection.has(this.cursor) ? this.visible.find((e) => e.path === this.cursor) : undefined) ??
+      this.selectedEntries[0] ??
+      null
+  );
+
+  /** Arrow keys: next/previous entry in the list (Shift extends the selection). */
+  step(delta: number, extend = false) {
+    const list = this.visible;
+    if (!list.length) return;
+    const at = this.cursor ? list.findIndex((e) => e.path === this.cursor) : -1;
+    const next = list[Math.max(0, Math.min(list.length - 1, at < 0 ? 0 : at + delta))];
+    this.select(next.path, extend && this.anchor ? 'range' : 'replace');
   }
 
   setRecursive(v: boolean) {
@@ -490,6 +702,7 @@ class AppState {
   // ---------------------------------------------------------------- selection
 
   select(path: string, mode: 'replace' | 'toggle' | 'range'): void {
+    this.cursor = path;
     if (mode === 'replace') {
       this.selection.clear();
       this.selection.add(path);
@@ -554,7 +767,73 @@ class AppState {
 
   // ---------------------------------------------------------------- operations
 
+  /** Asks before something that cannot simply be undone; resolves to the answer. */
+  ask(o: { title: string; text: string; ok: string; danger?: boolean }): Promise<boolean> {
+    this.dialog?.resolve(false);
+    return new Promise((resolve) => {
+      this.dialog = {
+        ...o,
+        resolve: (yes) => {
+          this.dialog = null;
+          resolve(yes);
+        }
+      };
+    });
+  }
+
+  /** Into an archive: always a copy, after asking (and naming what gets replaced). */
+  private async packInto(entries: Entry[], targetDir: string) {
+    const name = archiveName(targetDir);
+    if (entries.some((e) => archiveName(e.path) === name && inArchive(e.path))) {
+      this.toast(t('app.noMoveInArchive'), true);
+      return;
+    }
+    let replaced: string[] = [];
+    try {
+      replaced = await this.backend.archiveConflicts(targetDir, entries.map((e) => basename(e.path)));
+    } catch {
+      /* the archive itself will report the problem */
+    }
+    const n = entries.length;
+    const ok = await this.ask({
+      title: t('app.packTitle', { name: basename(name) }),
+      text: [
+        tn('app.packText', n, { name: entries[0].name }),
+        ...(replaced.length ? [t('app.packReplaced', { names: replaced.map((r) => t('app.quoted', { name: r })).join(', ') })] : []),
+        t('app.archiveBackup')
+      ].join(' '),
+      ok: t('app.packOk'),
+      danger: replaced.length > 0
+    });
+    if (!ok) return;
+    try {
+      const res = await this.backend.transfer(
+        entries.map((e) => e.path),
+        targetDir,
+        'copy'
+      );
+      const k = Object.keys(res.moved).length;
+      this.toast(tn('app.packed', k, { name: basename(name) }));
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    }
+    await this.afterFsChange();
+  }
+
+  async compress(entries: Entry[]) {
+    if (!entries.length) return;
+    try {
+      const p = await this.backend.compress(entries.map((e) => e.path));
+      await this.afterFsChange();
+      if (!inArchive(entries[0].path)) this.select(p, 'replace');
+      this.toast(t('app.created', { name: basename(p) }));
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    }
+  }
+
   async transfer(entries: Entry[], targetDir: string, mode: TransferMode) {
+    if (inArchive(targetDir)) return this.packInto(entries, targetDir);
     // Out of an archive is always a copy: the archive stays as it is.
     if (entries.some((e) => inArchive(e.path))) mode = 'copy';
     const paths = entries.map((e) => e.path).filter((p) => !(mode === 'move' && dirname(p) === targetDir));
@@ -563,7 +842,6 @@ class AppState {
     const n = Object.keys(res.moved).length;
     if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
     if (n) {
-      const verb = mode === 'move' ? 'verschoben' : 'kopiert';
       const undo =
         mode === 'move'
           ? async () => {
@@ -576,12 +854,13 @@ class AppState {
               await this.afterFsChange();
             }
           : undefined;
-      this.toast(`${n} ${n === 1 ? 'Objekt' : 'Objekte'} ${verb} → ${targetDir.split(/[\\/]/).pop()}`, false, undo);
+      this.toast(tn(mode === 'move' ? 'app.moved' : 'app.copied', n, { folder: targetDir.split(/[\\/]/).pop() ?? '' }), false, undo);
     }
     // Keep the tray pointing at the new locations.
     if (mode === 'move' && n) {
       this.staging = this.staging.map((e) => (res.moved[e.path] ? { ...e, path: res.moved[e.path] } : e));
       this.persistStaging();
+      this.followSmart(res.moved);
     }
     await this.afterFsChange();
   }
@@ -612,7 +891,7 @@ class AppState {
     await this.patchMeta(
       entries,
       { addTags: tags, color: meta.color ?? undefined },
-      `${entries.length} × ${tags.map((t) => '#' + t).join(' ')} zugewiesen`
+      t('app.assigned', { n: entries.length, tags: tags.map((x) => '#' + x).join(' ') })
     );
   }
 
@@ -639,7 +918,7 @@ class AppState {
   /** New folder, then straight into rename mode (like Finder). */
   async newFolder() {
     try {
-      const p = await this.mkdir('Neuer Ordner');
+      const p = await this.mkdir(t('app.newFolder'));
       this.select(p, 'replace');
       this.renaming = p;
     } catch (e) {
@@ -655,6 +934,7 @@ class AppState {
     try {
       const e = await this.backend.rename(path, newName);
       this.staging = this.staging.map((s) => (s.path === path ? { ...s, path: e.path, name: e.name } : s));
+      this.followSmart({ [path]: e.path });
       await this.afterFsChange();
       this.select(e.path, 'replace');
     } catch (err) {
@@ -662,12 +942,79 @@ class AppState {
     }
   }
 
+  /** Names already used in a folder (as far as the current listing knows). */
+  siblingNames(dir: string): string[] {
+    return this.raw.filter((e) => dirname(e.path) === dir).map((e) => e.name);
+  }
+
+  /**
+   * Rename one by one; names wanted by another entry of the batch are moved
+   * aside to a temporary name first, so swaps work. Returns what was done.
+   */
+  private async runRenames(steps: RenameStep[]): Promise<{ from: string; to: string }[]> {
+    const order = renameOrder(steps);
+    const done: { from: string; to: string }[] = [];
+    const aside = new Map<RenameStep, string>();
+    try {
+      for (const o of order)
+        if (o.viaTemp) aside.set(o.step, (await this.backend.rename(o.step.entry.path, `.brausa-${Date.now().toString(36)}-${o.step.entry.name}`)).path);
+      for (const o of order) {
+        const e = await this.backend.rename(aside.get(o.step) ?? o.step.entry.path, o.step.name);
+        aside.delete(o.step);
+        done.push({ from: o.step.entry.path, to: e.path });
+      }
+    } catch (err) {
+      this.toast(String(err).replace(/^Error: /, ''), true);
+      // Files still parked under a temporary name get their old name back.
+      for (const [st, p] of aside) await this.backend.rename(p, st.entry.name).catch(() => {});
+    }
+    return done;
+  }
+
+  /** Apply a planned batch rename (see core/rename), with undo. */
+  async batchRename(steps: RenameStep[]) {
+    this.batchRenaming = null;
+    const done = await this.runRenames(steps);
+    const moved = Object.fromEntries(done.map((d) => [d.from, d.to]));
+    const follow = (m: Record<string, string>) => {
+      this.staging = this.staging.map((e) => (m[e.path] ? { ...e, path: m[e.path], name: basename(m[e.path]) } : e));
+      this.persistStaging();
+      this.followSmart(m);
+    };
+    follow(moved);
+    await this.afterFsChange();
+    if (!done.length) return;
+    this.setSelection(done.map((d) => d.to));
+    this.toast(tn('app.renamed', done.length), false, async () => {
+      const back = done.map((d) => ({
+        entry: { ...this.raw.find((e) => e.path === d.to), path: d.to, name: basename(d.to) } as Entry,
+        name: basename(d.from),
+        changed: true
+      }));
+      const undone = await this.runRenames(back);
+      follow(Object.fromEntries(undone.map((d) => [d.from, d.to])));
+      await this.afterFsChange();
+    });
+  }
+
   async trash(entries: Entry[]) {
     if (!entries.length) return;
+    const packed = entries.filter((e) => inArchive(e.path));
+    if (packed.length) {
+      const archives = [...new Set(packed.map((e) => basename(archiveName(e.path))))];
+      const n = packed.length;
+      const ok = await this.ask({
+        title: t('app.trashArchiveTitle', { names: archives.map((a) => t('app.quoted', { name: a })).join(', ') }),
+        text: tn('app.trashArchiveText', n, { name: packed[0].name }),
+        ok: t('common.delete'),
+        danger: true
+      });
+      if (!ok) return;
+    }
     const res = await this.backend.trash(entries.map((e) => e.path));
     const n = Object.keys(res.moved).length;
     if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
-    if (n) this.toast(`${n} ${n === 1 ? 'Objekt' : 'Objekte'} in den Papierkorb gelegt`);
+    if (n) this.toast(tn(entries.some((e) => inArchive(e.path)) ? 'app.deletedFromArchive' : 'app.trashed', n));
     this.unstage(Object.keys(res.moved));
     await this.afterFsChange();
   }
@@ -713,11 +1060,11 @@ class AppState {
   // ---------------------------------------------------------------- toasts
 
   private toastId = 0;
-  toast(text: string, error = false, undo?: () => Promise<void>) {
+  toast(text: string, error = false, undo?: () => Promise<void>, opts: { action?: string; ms?: number } = {}) {
     const id = ++this.toastId;
     text = text.replace(/^Error: /, '');
-    this.toasts = [...this.toasts, { id, text, error, undo }];
-    setTimeout(() => this.dismiss(id), undo ? 7000 : 3500);
+    this.toasts = [...this.toasts, { id, text, error, undo, action: opts.action }];
+    setTimeout(() => this.dismiss(id), opts.ms ?? (undo ? 7000 : 3500));
   }
 
   dismiss(id: number) {

@@ -11,6 +11,7 @@
   import HtmlPreview from './HtmlPreview.svelte';
   import { tagColor } from '../core/tags';
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   let { onaccent }: { onaccent: (c: { color: string; light: boolean } | null) => void } = $props();
 
@@ -144,7 +145,7 @@
 </script>
 
 <div class="preview" transition:fade={{ duration: 200 }} role="dialog" aria-label={e.name}>
-  <button class="scrim" onclick={close} aria-label="Schließen"></button>
+  <button class="scrim" onclick={close} aria-label={t('common.close')}></button>
   {#if src && family(e.ext) === 'image'}
     <div
       class="frame"
@@ -179,8 +180,8 @@
     <div class="doc">
       <Icon name={family(e.ext) === 'other' ? 'file' : family(e.ext)} size={64} />
       <span>{e.ext.toUpperCase()}</span>
-      {#if mediaFailed}<span class="hint">Dieses Format kann brausa hier nicht abspielen.</span>{/if}
-      <button class="btn open" onclick={() => app.open(e)}><Icon name="open" size={14} /> In Standard-App öffnen</button>
+      {#if mediaFailed}<span class="hint">{t('preview.cannotPlay')}</span>{/if}
+      <button class="btn open" onclick={() => app.open(e)}><Icon name="open" size={14} /> {t('preview.openDefault')}</button>
     </div>
   {/if}
 
@@ -195,8 +196,8 @@
       </div>
     {/if}
   </div>
-  <button class="nav l" onclick={() => step(-1)} aria-label="Vorheriges"><Icon name="back" size={20} /></button>
-  <button class="nav r" onclick={() => step(1)} aria-label="Nächstes"><Icon name="forward" size={20} /></button>
+  <button class="nav l" onclick={() => step(-1)} aria-label={t('preview.previous')}><Icon name="back" size={20} /></button>
+  <button class="nav r" onclick={() => step(1)} aria-label={t('preview.next')}><Icon name="forward" size={20} /></button>
 </div>
 
 <style>

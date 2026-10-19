@@ -1,0 +1,94 @@
+// Texts from the pure core modules (rename, smart folders, dates, views, file types, pattern errors).
+export const de = {
+  'rename.phName': 'bisheriger Name',
+  'rename.phNumber': 'Nummer (1, 2, …)',
+  'rename.phNumberPadded': 'Nummer mit Nullen (001, 002, …)',
+  'rename.phDate': 'Datum (Aufnahme, sonst Änderung)',
+  'rename.phTime': 'Uhrzeit',
+  'rename.phFolder': 'Ordnername',
+  'rename.badRegex': 'Ungültiger regulärer Ausdruck',
+  'rename.empty': 'Name ist leer',
+  'rename.badChars': 'Enthält / \\ : * ? " < > |',
+  'rename.duplicate': 'Name doppelt',
+  'rename.exists': 'Gibt es schon',
+
+  'format.image': 'Bilder',
+  'format.video': 'Videos',
+  'format.audio': 'Audio',
+  'format.pdf': 'PDF',
+  'format.text': 'Text und Code',
+  'format.web': 'Webseiten',
+  'format.office': 'Office',
+
+  'views.name': 'Name',
+  'views.mtime': 'Geändert',
+  'views.ctime': 'Erstellt',
+  'views.taken': 'Aufgenommen',
+  'views.size': 'Größe',
+  'views.ext': 'Art',
+  'views.all': 'Alle',
+  'views.untagged': 'Ohne Tag',
+  'views.topLevel': '(oberste Ebene)',
+
+  'dates.weekdays': 'Mo,Di,Mi,Do,Fr,Sa,So',
+  'dates.mtime': 'Geändert',
+  'dates.ctime': 'Erstellt',
+  'dates.taken': 'Aufgenommen',
+  'dates.onlyWeekdays': '{range} · nur {days}',
+
+  'smart.withSubfolders': 'mit Unterordnern',
+  'smart.nameIn': '{what} in {place}',
+  'smart.project': 'Projekt',
+
+  'pattern.badSize': 'Ungültige Größe: {value}',
+  'pattern.badAge': 'Ungültige Zeitspanne: {value}',
+  'pattern.badCompare': 'Ungültiger Vergleich: {value}',
+  'pattern.unknownType': 'Unbekannter Typ: {value}'
+};
+
+export const en: typeof de = {
+  'rename.phName': 'current name',
+  'rename.phNumber': 'number (1, 2, …)',
+  'rename.phNumberPadded': 'number with zeros (001, 002, …)',
+  'rename.phDate': 'date (taken, else modified)',
+  'rename.phTime': 'time',
+  'rename.phFolder': 'folder name',
+  'rename.badRegex': 'Invalid regular expression',
+  'rename.empty': 'Name is empty',
+  'rename.badChars': 'Contains / \\ : * ? " < > |',
+  'rename.duplicate': 'Duplicate name',
+  'rename.exists': 'Already exists',
+
+  'format.image': 'Images',
+  'format.video': 'Videos',
+  'format.audio': 'Audio',
+  'format.pdf': 'PDF',
+  'format.text': 'Text and code',
+  'format.web': 'Web pages',
+  'format.office': 'Office',
+
+  'views.name': 'Name',
+  'views.mtime': 'Modified',
+  'views.ctime': 'Created',
+  'views.taken': 'Taken',
+  'views.size': 'Size',
+  'views.ext': 'Kind',
+  'views.all': 'All',
+  'views.untagged': 'No tag',
+  'views.topLevel': '(top level)',
+
+  'dates.weekdays': 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
+  'dates.mtime': 'Modified',
+  'dates.ctime': 'Created',
+  'dates.taken': 'Taken',
+  'dates.onlyWeekdays': '{range} · {days} only',
+
+  'smart.withSubfolders': 'with subfolders',
+  'smart.nameIn': '{what} in {place}',
+  'smart.project': 'Project',
+
+  'pattern.badSize': 'Invalid size: {value}',
+  'pattern.badAge': 'Invalid time span: {value}',
+  'pattern.badCompare': 'Invalid comparison: {value}',
+  'pattern.unknownType': 'Unknown type: {value}'
+};

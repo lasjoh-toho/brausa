@@ -4,16 +4,22 @@
   import { tagColor } from '../core/tags';
   import { UNTAGGED } from '../core/views';
   import { isToggleKey } from '../platform';
+  import { extras, waste } from '../core/dupes';
+  import { formatSize } from '../core/format';
+  import Icon from './Icon.svelte';
   import Tile from './Tile.svelte';
   import MapView from './MapView.svelte';
   import CalendarView from './CalendarView.svelte';
+  import FileList from './FileList.svelte';
+  import PreviewPane from './PreviewPane.svelte';
+  import { t, tn } from '../i18n/index.svelte';
 
   let el: HTMLElement;
   let lasso = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
   /** Rubber-band selection on empty canvas space. */
   function down(e: PointerEvent) {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('.tile, button, input, .cal, .leaflet-container')) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest('.tile, button, input, .cal, .leaflet-container, .pv')) return;
     const additive = e.shiftKey || isToggleKey(e);
     const base = additive ? new Set(app.selection) : new Set<string>();
     if (!additive) app.selection.clear();
@@ -47,19 +53,21 @@
     window.addEventListener('pointerup', up);
   }
 
+  const extraCount = $derived(app.dupes ? extras(app.dupeGroups).length : 0);
   const canvasHit = $derived(drag.active && drag.hit?.kind === 'canvas' && drag.source !== 'canvas');
 </script>
 
 <section
   class="canvas"
   class:hit={canvasHit}
+  class:panes={app.view === 'panes' && !app.dupes}
   bind:this={el}
   data-drop="canvas"
   data-autoscroll
   style:--tile="{app.tileSize}px"
   onpointerdown={down}
   oncontextmenu={(e) => {
-    if ((e.target as HTMLElement).closest('.tile, .cal, .leaflet-container')) return;
+    if ((e.target as HTMLElement).closest('.tile, .cal, .leaflet-container, .pv')) return;
     e.preventDefault();
     app.menu = { x: e.clientX, y: e.clientY, entry: null };
   }}
@@ -67,7 +75,31 @@
   aria-multiselectable="true"
   tabindex="-1"
 >
-  {#if app.view === 'kanban'}
+  {#if app.dupes}
+    <div class="dupebar">
+      <Icon name="copy" size={15} />
+      {#if app.dupeGroups.length}
+        <span
+          ><b>{tn('files.dupeExtras', extraCount)}</b>
+          {t('files.dupeSummary', { groups: tn('files.dupeGroups', app.dupeGroups.length), size: formatSize(waste(app.dupeGroups)) })}</span
+        >
+        <span class="grow"></span>
+        <button
+          class="btn"
+          title={t('files.selectExtrasHint')}
+          onclick={() => app.selectExtras()}>{t('files.selectExtras')}</button
+        >
+      {:else}
+        <span>{t('files.noDupes')}</span>
+        <span class="grow"></span>
+      {/if}
+      <button class="btn" onclick={() => app.endDuplicates()}>{t('common.done')}</button>
+    </div>
+  {/if}
+  {#if app.view === 'panes' && !app.dupes}
+    <FileList />
+    <PreviewPane />
+  {:else if app.view === 'kanban' && !app.dupes}
     <div class="kanban">
       {#each app.groups as g (g.key)}
         {@const hit = drag.active && drag.hit?.kind === 'column' && drag.hit.key === g.key}
@@ -84,15 +116,15 @@
           </div>
         </div>
       {:else}
-        <p class="empty">Keine Dateien</p>
+        <p class="empty">{t('files.noFiles')}</p>
       {/each}
     </div>
   {:else}
-    {#if app.view === 'calendar'}<CalendarView />{/if}
-    {#if app.view === 'map'}<MapView />{/if}
+    {#if app.view === 'calendar' && !app.dupes}<CalendarView />{/if}
+    {#if app.view === 'map' && !app.dupes}<MapView />{/if}
     {#each app.groups as g (g.key)}
-      {#if app.view === 'timeline'}
-        <h3 class="group-head"><span>{g.label}</span><span class="count">{g.entries.length}</span></h3>
+      {#if app.view === 'timeline' || app.dupes}
+        <h3 class="group-head" class:plain={!!app.dupes}><span>{g.label}</span><span class="count">{g.entries.length}</span></h3>
       {/if}
       <div class="grid">
         {#each g.entries as e (e.path)}
@@ -102,8 +134,8 @@
     {/each}
     {#if !app.visible.length && !app.loading}
       <p class="empty">
-        {app.search ? 'Nichts gefunden.' : app.project ? 'Das Projekt ist noch leer. Dateien und Ordner von überall hierher oder auf das Projekt in der Seitenleiste ziehen; sie bleiben, wo sie sind.' : 'Dieser Ordner ist leer.'}
-        {#if !app.recursive}<button class="btn" onclick={() => app.setRecursive(true)}>Unterordner als Stream zeigen</button>{/if}
+        {app.search ? t('files.nothingFound') : app.project ? t('files.projectEmpty') : t('files.folderEmpty')}
+        {#if !app.recursive}<button class="btn" onclick={() => app.setRecursive(true)}>{t('files.showStream')}</button>{/if}
       </p>
     {/if}
   {/if}
@@ -129,14 +161,46 @@
     outline: none;
     transition: box-shadow 0.15s;
   }
+  /* Three-panel view: list and preview scroll on their own. */
+  .canvas.panes {
+    display: flex;
+    padding: 0;
+    overflow: hidden;
+  }
   .canvas.hit {
     box-shadow: inset 0 0 0 2px var(--accent);
     background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
+  }
+  .dupebar {
+    position: sticky;
+    top: -14px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: -14px -16px 12px;
+    padding: 9px 16px;
+    font-size: 13px;
+    color: var(--fg-muted);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .dupebar b {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .grow {
+    flex: 1;
   }
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr));
     gap: 4px;
+  }
+  .group-head.plain {
+    position: static;
   }
   .group-head {
     position: sticky;

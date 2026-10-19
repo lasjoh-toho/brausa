@@ -1,6 +1,18 @@
 {
   "bundle": {
     "licenseFile": "../packaging/HINWEIS-Windows.rtf",
-    "resources": { "../packaging/LIESMICH-Windows.txt": "LIESMICH.txt" }
+    "resources": {
+      "../packaging/LIESMICH-Windows.txt": "LIESMICH.txt",
+      "../packaging/README-Windows.txt": "README.txt"
+    },
+    "windows": {
+      "nsis": {
+        "languages": [
+          "English",
+          "German"
+        ],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

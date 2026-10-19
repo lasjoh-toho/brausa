@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
   import { app } from '../state/app.svelte';
+  import { t as tr } from '../i18n/index.svelte';
 </script>
 
 <div class="toasts" aria-live="polite">
@@ -12,7 +13,7 @@
           onclick={async () => {
             app.dismiss(t.id);
             await t.undo?.();
-          }}>Rückgängig</button
+          }}>{t.action ?? tr('common.undo')}</button
         >
       {/if}
     </div>

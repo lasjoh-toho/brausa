@@ -18,3 +18,9 @@ export function inArchive(path: string): boolean {
 export function archiveRoot(path: string): string {
   return path + '!';
 }
+
+/** The archive file a path inside it belongs to (`/a/b.zip!/x` → `/a/b.zip`); other paths unchanged. */
+export function archiveName(path: string): string {
+  const m = /^(.*?\.(zip|tar|tgz|tar\.gz))!([\\/]|$)/i.exec(path);
+  return m ? m[1] : path;
+}

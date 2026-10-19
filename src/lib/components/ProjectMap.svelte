@@ -45,6 +45,11 @@
   import { isToggleKey, modLabel } from '../platform';
   import Icon from './Icon.svelte';
   import BoardSwitch from './BoardSwitch.svelte';
+  import { t, tn } from '../i18n/index.svelte';
+
+  /** Default statuses are stored in German; show them in the UI language. */
+  const STATUS_KEYS: Record<string, string> = { Offen: 'map.status.open', 'In Arbeit': 'map.status.doing', Erledigt: 'map.status.done' };
+  const statusLabel = (s: string) => (STATUS_KEYS[s] ? t(STATUS_KEYS[s]) : s);
 
   const COLORS = ['#0090ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
 
@@ -170,18 +175,20 @@
   const fileDrop = $derived(drag.active && drag.hit?.kind === 'board' && m ? fileTarget(drag.x, drag.y, isSnippetDrag) : null);
 
   $effect(() => {
-    const t = fileDrop;
-    const title = t?.id ? `„${m!.cards[t.id].title || 'Ohne Titel'}“` : '';
-    const what = isSnippetDrag ? 'Snippet' : 'Karte';
-    drag.boardHint = !t
+    const tg = fileDrop;
+    const title = tg?.id ? m!.cards[tg.id].title || t('map.untitled') : '';
+    const sn = isSnippetDrag ? 'Snippet' : 'Card';
+    drag.boardHint = !tg
       ? ''
-      : t.zone === 'link'
-        ? `Mit ${title} verknüpfen`
-        : t.zone === 'before' || t.zone === 'after'
-          ? `${t.zone === 'before' ? 'Über' : 'Unter'} ${title} stapeln`
-          : t.id
-            ? `Als ${what} in ${title} legen`
-            : `Als ${what} ablegen`;
+      : tg.zone === 'link'
+        ? t('map.drop.link', { title })
+        : tg.zone === 'before'
+          ? t('map.drop.stackAbove', { title })
+          : tg.zone === 'after'
+            ? t('map.drop.stackBelow', { title })
+            : tg.id
+              ? t(`map.drop.into${sn}`, { title })
+              : t(`map.drop.place${sn}`);
   });
 
   /** Card height for a snippet so its quote fits (about 34 characters per line). */
@@ -190,7 +197,7 @@
   async function dropFiles(items: Entry[], x: number, y: number, data?: unknown) {
     if (!m) return;
     const snippet = (data as { snippet?: Snippet } | undefined)?.snippet;
-    const t = fileTarget(x, y, !!snippet);
+    const tg = fileTarget(x, y, !!snippet);
     let refs: CardRef[];
     try {
       refs = await board.refsFor(items);
@@ -198,15 +205,15 @@
       return app.toast(String(e), true);
     }
     if (snippet) refs = [{ ...refs[0], ...snippet, quote: snippet.quote }];
-    if (t.id && t.zone === 'link') return attach(t.id, refs);
-    const stackOn = t.id && (t.zone === 'before' || t.zone === 'after') ? { id: t.id, where: t.zone } : null;
-    const parent = stackOn ? null : (t.id ?? ctx);
+    if (tg.id && tg.zone === 'link') return attach(tg.id, refs);
+    const stackOn = tg.id && (tg.zone === 'before' || tg.zone === 'after') ? { id: tg.id, where: tg.zone } : null;
+    const parent = stackOn ? null : (tg.id ?? ctx);
     const p = local({ clientX: x, clientY: y });
     const created: string[] = [];
     board.mutate((mm) => {
       refs.forEach((ref, i) => {
         const init: Partial<MapCard> = snippet
-          ? { kind: 'snippet', title: ref.name + (ref.page ? ` · S. ${ref.page}` : ''), text: snippet.quote, refs: [ref], w: 260, h: snippetHeight(snippet.quote) }
+          ? { kind: 'snippet', title: ref.page ? t('map.snippetTitle', { name: ref.name ?? '', page: ref.page }) : (ref.name ?? ''), text: snippet.quote, refs: [ref], w: 260, h: snippetHeight(snippet.quote) }
           : { title: ref.name ?? '', refs: [ref], h: board.isImage(ref) ? 190 : 120 };
         const id = placeCard(mm, stackOn ? mm.cards[stackOn.id].parent : parent, p.x, p.y, 0.1, init);
         // Several files: a small grid from the drop point.
@@ -228,7 +235,7 @@
     const fresh = refs.filter((r) => !c.refs?.some((x) => x.id === r.id));
     if (!fresh.length) return;
     board.mutate((mm) => (mm.cards[id].refs = [...(mm.cards[id].refs ?? []), ...fresh]));
-    app.toast(`„${c.title || 'Karte'}“ verknüpft mit ${fresh.map((r) => r.name).join(', ')}`);
+    app.toast(t('map.linked', { title: c.title || t('map.card'), files: fresh.map((r) => r.name).join(', ') }));
   }
 
   /** A file (tray, file list) under the pointer while dragging a card. */
@@ -548,7 +555,7 @@
   function toKanban() {
     const on = !selInKanban;
     board.mutate((mm) => board.selection.forEach((id) => (mm.cards[id].status = on ? (mm.cards[id].status ?? statuses[0]) : null)));
-    app.toast(on ? `Im Kanban unter „${statuses[0]}“` : 'Aus dem Kanban genommen');
+    app.toast(on ? t('map.toKanban', { status: statusLabel(statuses[0]) }) : t('map.fromKanban'));
   }
 
   function setColor(color: string | null) {
@@ -639,7 +646,7 @@
   oncontextmenu={(e) => e.preventDefault()}
   tabindex="-1"
   role="application"
-  aria-label="Projektmap"
+  aria-label={t('map.switch.map')}
   data-drop="board"
 >
   {#if m}
@@ -672,8 +679,8 @@
         {#if v.lod === 'full'}
           <div class="inner" style:width="{c.w}px" style:height="{c.h}px" style:transform="scale({v.k})">
             <div class="head" style:height="{HEADER}px">
-              <span class="t">{c.kind === 'stack' ? `Stapel · ${c.children.length}` : c.title || 'Ohne Titel'}</span>
-              {#if c.status}<span class="status">{c.status}</span>{/if}
+              <span class="t">{c.kind === 'stack' ? t('map.stack', { n: c.children.length }) : c.title || t('map.untitled')}</span>
+              {#if c.status}<span class="status">{statusLabel(c.status)}</span>{/if}
             </div>
             {#if pic}<img class="pic" class:full={!c.text} src={pic} alt="" draggable="false" />{/if}
             {#if c.kind === 'snippet'}
@@ -682,7 +689,7 @@
             {#if c.refs?.length}
               <div class="refs">
                 {#each c.refs as r, i (r.id ?? r.href ?? i)}
-                  <button class="ref" class:missing={r.missing} data-ref={i} title={r.missing ? 'Nicht gefunden' : r.path}>
+                  <button class="ref" class:missing={r.missing} data-ref={i} title={r.missing ? t('map.notFound') : r.path}>
                     <Icon name={r.dir ? 'folder' : 'file'} size={11} />{r.name ?? r.title ?? r.href}
                   </button>
                 {/each}
@@ -691,14 +698,14 @@
           </div>
         {:else if v.lod === 'title'}
           {#if pic}<img class="pic mini-pic" src={pic} alt="" draggable="false" />{/if}
-          <div class="mini">{c.title || 'Ohne Titel'}</div>
+          <div class="mini">{c.title || t('map.untitled')}</div>
         {/if}
         {#if c.children.length && !v.open && v.lod !== 'dot'}
-          <span class="count" title="{c.children.length} Unterkarten">{c.children.length}</span>
+          <span class="count" title={tn('map.subcards', c.children.length)}>{c.children.length}</span>
         {/if}
         {#if v.lod !== 'dot' && v.r.w > 70}
-          <button class="h zoom" data-handle="zoom" title="Hineinzoomen (Enter)"><Icon name="zoomIn" size={13} /></button>
-          <span class="h connect" data-handle="connect" title="Ziehen: Pfeil zu einer anderen Karte"></span>
+          <button class="h zoom" data-handle="zoom" title={t('map.zoomIn')}><Icon name="zoomIn" size={13} /></button>
+          <span class="h connect" data-handle="connect" title={t('map.connect')}></span>
           <span class="h resize" data-handle="resize"></span>
         {/if}
       </div>
@@ -729,7 +736,7 @@
     {#if selLink && selLine}
       <div class="linkbar ui" style:left="{(selLine.p.x + selLine.q.x) / 2}px" style:top="{(selLine.p.y + selLine.q.y) / 2 + 10}px">
         <input
-          placeholder="Beschriftung"
+          placeholder={t('map.link.label')}
           value={selLink.label ?? ''}
           onchange={(e) => {
             const v = e.currentTarget.value.trim();
@@ -740,21 +747,21 @@
             if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
           }}
         />
-        <button class="btn icon" title="Richtung umschalten" onclick={() => board.mutate(() => (selLink.directed = !selLink.directed))}>
+        <button class="btn icon" title={t('map.link.direction')} onclick={() => board.mutate(() => (selLink.directed = !selLink.directed))}>
           <Icon name={selLink.directed ? 'arrow' : 'line'} size={14} />
         </button>
-        <button class="btn icon" title="Verbindung löschen" onclick={removeSelected}><Icon name="trash" size={14} /></button>
+        <button class="btn icon" title={t('map.link.delete')} onclick={removeSelected}><Icon name="trash" size={14} /></button>
       </div>
     {/if}
 
     {#if board.editing && editRect}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="editor ui" style:left="{editRect.x}px" style:top="{editRect.y}px" style:width="{editRect.w}px" onkeydown={editKey}>
-        <input bind:this={titleEl} bind:value={draft.title} placeholder="Titel" />
-        <textarea bind:value={draft.text} rows="6" placeholder="Text (Markdown) …"></textarea>
+        <input bind:this={titleEl} bind:value={draft.title} placeholder={t('map.edit.title')} />
+        <textarea bind:value={draft.text} rows="6" placeholder={t('map.edit.text')}></textarea>
         <div class="row">
-          <span class="hint">{modLabel}↵ fertig · Esc</span>
-          <button class="btn primary" onclick={commitEdit}>Fertig</button>
+          <span class="hint">{modLabel}↵ {t('map.edit.doneHint')} · Esc</span>
+          <button class="btn primary" onclick={commitEdit}>{t('common.done')}</button>
         </div>
       </div>
     {/if}
@@ -766,7 +773,7 @@
             class="name"
             use:autofocus
             bind:value={nameDraft}
-            placeholder={naming === 'new' ? 'Name der neuen Map' : 'Neuer Name'}
+            placeholder={naming === 'new' ? t('map.menu.newName') : t('map.menu.rename')}
             onkeydown={(e) => {
               e.stopPropagation();
               if (e.key === 'Enter') finishNaming();
@@ -775,10 +782,10 @@
             onblur={finishNaming}
           />
         {:else}
-          <button class="crumb root" onclick={() => board.overview()} ondblclick={() => startNaming('rename')} title="Ganze Map zeigen (0) · Doppelklick: umbenennen">
+          <button class="crumb root" onclick={() => board.overview()} ondblclick={() => startNaming('rename')} title={t('map.menu.rootTitle')}>
             {m.title}
           </button>
-          <button class="btn icon" onclick={() => (menuOpen = !menuOpen)} aria-label="Maps"><Icon name="chevronDown" size={13} /></button>
+          <button class="btn icon" onclick={() => (menuOpen = !menuOpen)} aria-label={t('map.menu.maps')}><Icon name="chevronDown" size={13} /></button>
         {/if}
         {#if menuOpen}
           <div class="menu">
@@ -786,48 +793,48 @@
               <button class:on={mi.id === m.id} onclick={() => ((menuOpen = false), board.load(mi.id))}>{mi.title}</button>
             {/each}
             <hr />
-            <button onclick={() => startNaming('new')}><Icon name="plus" size={13} /> Neue Map</button>
-            <button onclick={() => startNaming('rename')}><Icon name="pencil" size={13} /> Umbenennen</button>
-            <button class="danger" onclick={() => ((menuOpen = false), board.remove())}><Icon name="trash" size={13} /> Map löschen</button>
+            <button onclick={() => startNaming('new')}><Icon name="plus" size={13} /> {t('map.menu.new')}</button>
+            <button onclick={() => startNaming('rename')}><Icon name="pencil" size={13} /> {t('common.rename')}</button>
+            <button class="danger" onclick={() => ((menuOpen = false), board.remove())}><Icon name="trash" size={13} /> {t('map.menu.delete')}</button>
           </div>
         {/if}
       </div>
       {#each trail as id (id)}
         <span class="sep">›</span>
-        <button class="crumb" onclick={() => flyInto(id)}>{m.cards[id]?.title || 'Ohne Titel'}</button>
+        <button class="crumb" onclick={() => flyInto(id)}>{m.cards[id]?.title || t('map.untitled')}</button>
       {/each}
     </nav>
 
     <div class="tools ui">
       <BoardSwitch />
       <span class="div"></span>
-      <button class="btn" onclick={newCardAtCenter} title="Neue Karte (N) – oder Doppelklick auf eine freie Stelle"><Icon name="plus" size={14} /> Karte</button>
-      <button class="btn icon" onclick={up} disabled={!focus} title="Eine Ebene hinauf (Esc)"><Icon name="zoomOut" size={15} /></button>
-      <button class="btn icon" onclick={() => board.overview()} title="Ganze Map (0)"><Icon name="fit" size={15} /></button>
-      <button class="btn icon" onclick={() => board.undo()} disabled={!board.canUndo} title="Rückgängig ({modLabel}Z)"><Icon name="undo" size={15} /></button>
-      <button class="btn icon" onclick={() => board.redo()} disabled={!board.canRedo} title="Wiederholen"><Icon name="redo" size={15} /></button>
+      <button class="btn" onclick={newCardAtCenter} title={t('map.tools.newCard')}><Icon name="plus" size={14} /> {t('map.card')}</button>
+      <button class="btn icon" onclick={up} disabled={!focus} title={t('map.tools.up')}><Icon name="zoomOut" size={15} /></button>
+      <button class="btn icon" onclick={() => board.overview()} title={t('map.tools.overview')}><Icon name="fit" size={15} /></button>
+      <button class="btn icon" onclick={() => board.undo()} disabled={!board.canUndo} title="{t('common.undo')} ({modLabel}Z)"><Icon name="undo" size={15} /></button>
+      <button class="btn icon" onclick={() => board.redo()} disabled={!board.canRedo} title={t('map.tools.redo')}><Icon name="redo" size={15} /></button>
     </div>
 
     {#if board.selection.size && !board.editing}
       <div class="selbar ui">
         {#each COLORS as col (col)}
-          <button class="swatch" style:background={col} onclick={() => setColor(col)} aria-label="Farbe {col}"></button>
+          <button class="swatch" style:background={col} onclick={() => setColor(col)} aria-label={t('map.sel.color', { color: col })}></button>
         {/each}
-        <button class="swatch none" onclick={() => setColor(null)} aria-label="Keine Farbe"></button>
+        <button class="swatch none" onclick={() => setColor(null)} aria-label={t('map.sel.noColor')}></button>
         <span class="div"></span>
         {#if board.selection.size === 1}
-          <button class="btn icon" title="Bearbeiten (F2)" onclick={() => startEdit([...board.selection][0])}><Icon name="pencil" size={14} /></button>
-          <button class="btn icon" title="Hineinzoomen (Enter)" onclick={() => flyInto([...board.selection][0])}><Icon name="zoomIn" size={14} /></button>
+          <button class="btn icon" title={t('map.sel.edit')} onclick={() => startEdit([...board.selection][0])}><Icon name="pencil" size={14} /></button>
+          <button class="btn icon" title={t('map.zoomIn')} onclick={() => flyInto([...board.selection][0])}><Icon name="zoomIn" size={14} /></button>
         {/if}
-        <button class="btn" class:on={selInKanban} title={selInKanban ? 'Aus dem Kanban nehmen' : 'Ins Kanban schicken'} onclick={toKanban}>
+        <button class="btn" class:on={selInKanban} title={selInKanban ? t('map.sel.fromKanban') : t('map.sel.toKanban')} onclick={toKanban}>
           <Icon name="kanban" size={14} /> Kanban
         </button>
-        <button class="btn icon" title="Löschen (Entf)" onclick={removeSelected}><Icon name="trash" size={14} /></button>
+        <button class="btn icon" title={t('map.sel.delete')} onclick={removeSelected}><Icon name="trash" size={14} /></button>
       </div>
     {/if}
 
     {#if !m.roots.length}
-      <p class="hint-empty">Doppelklick legt eine Karte an. Karten auf andere ziehen macht sie zu Unterkarten, der Punkt am rechten Rand zieht Pfeile.</p>
+      <p class="hint-empty">{t('map.empty')}</p>
     {/if}
   {/if}
 </section>

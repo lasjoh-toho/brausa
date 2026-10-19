@@ -1,3 +1,5 @@
+import { loc, t } from '../i18n/index.svelte';
+
 export function formatSize(bytes: number): string {
   if (bytes < 1000) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -7,10 +9,11 @@ export function formatSize(bytes: number): string {
     v /= 1000;
     i++;
   } while (v >= 1000 && i < units.length - 1);
-  return `${v.toFixed(v < 10 ? 1 : 0).replace('.', ',')} ${units[i]}`;
+  const digits = v < 10 ? 1 : 0;
+  return `${v.toLocaleString(loc(), { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false })} ${units[i]}`;
 }
 
-export function formatDate(ms: number, locale = 'de-DE'): string {
+export function formatDate(ms: number, locale = loc()): string {
   return new Date(ms).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
@@ -43,15 +46,12 @@ export function family(ext: string, kind: 'dir' | 'file' = 'file'): FileFamily {
 /** What a file is, for the type filter (`is:video`) and for choosing a viewer in the preview. */
 export type Category = 'image' | 'video' | 'audio' | 'pdf' | 'web' | 'text' | 'office';
 
-export const CATEGORIES: { key: Category; label: string }[] = [
-  { key: 'image', label: 'Bilder' },
-  { key: 'video', label: 'Videos' },
-  { key: 'audio', label: 'Audio' },
-  { key: 'pdf', label: 'PDF' },
-  { key: 'text', label: 'Text und Code' },
-  { key: 'web', label: 'Webseiten' },
-  { key: 'office', label: 'Office' }
-];
+export const CATEGORIES: { key: Category; label: string }[] = (['image', 'video', 'audio', 'pdf', 'text', 'web', 'office'] as Category[]).map((key) => ({
+  key,
+  get label() {
+    return t(`core.format.${key}`);
+  }
+}));
 
 export function category(ext: string): Category | null {
   if (IMAGE_EXT.has(ext)) return 'image';

@@ -20,6 +20,7 @@ import {
 import type { Entry } from '../core/types';
 import { family } from '../core/format';
 import { store } from '../platform';
+import { t } from '../i18n/index.svelte';
 
 type Snapshot = string;
 
@@ -68,7 +69,7 @@ class BoardState {
       const last = store.get<string>('map:' + root, '');
       const id = this.maps.find((m) => m.id === last)?.id ?? this.maps[0]?.id;
       if (id) await this.load(id);
-      else await this.create('Übersicht');
+      else await this.create(t('board.defaultTitle'));
     } catch (e) {
       app.toast(String(e), true);
     } finally {
@@ -180,7 +181,7 @@ class BoardState {
   async openRef(r: CardRef) {
     // Web pages open in the web panel (loaded lazily to keep this module free of it).
     if (r.kind === 'url' && r.href) return (await import('./web.svelte')).web.go(r.href);
-    if (!r.path || r.missing) return app.toast(`„${r.name ?? 'Datei'}“ wurde nicht gefunden`, true);
+    if (!r.path || r.missing) return app.toast(t('board.notFound', { name: r.name ?? t('board.file') }), true);
     if (!r.dir && READABLE.has(r.ext ?? '')) return this.openReader(r);
     if (r.dir) {
       app.setView('stream');
@@ -218,8 +219,8 @@ class BoardState {
     this.map = null;
     this.maps = await app.backend.listMaps(this.root);
     if (this.maps[0]) await this.load(this.maps[0].id);
-    else await this.create('Übersicht');
-    app.toast(`Map „${title}“ gelöscht`);
+    else await this.create(t('board.defaultTitle'));
+    app.toast(t('board.deleted', { title }));
   }
 
   private reset() {
@@ -294,7 +295,7 @@ class BoardState {
     try {
       await app.backend.saveMap(this.root, m);
     } catch (e) {
-      app.toast('Map nicht gespeichert: ' + String(e), true);
+      app.toast(t('board.notSaved', { error: String(e) }), true);
     }
   }
 

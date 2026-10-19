@@ -63,11 +63,14 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: brausa ${{ steps.tag.outputs.tag }}
-          prerelease: ${{ startsWith(steps.tag.outputs.tag, 'v0.') }}
+          # A full release, not a pre-release: the app's updater reads releases/latest.
+          prerelease: false
           body_path: docs/RELEASE_NOTES.md
           files: |
             packaging/LIESMICH-macOS.txt
             packaging/LIESMICH-Windows.txt
+            packaging/README-macOS.txt
+            packaging/README-Windows.txt
 
   # Installer for all three platforms (also on PRs, so macOS/Windows breakage shows up before merge).
   bundle:
@@ -87,6 +90,12 @@ jobs:
           - os: ubuntu-22.04
             args: ''
     runs-on: ${{ matrix.os }}
+    env:
+      # Update signing (see docs/UPDATES.md). Without the secret the installers are
+      # built as before, just without update files.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -101,7 +110,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf
       - run: npm ci
-      - run: npm run tauri build -- ${{ matrix.args }}
+      - name: Build
+        shell: bash
+        run: |
+          if [ "$HAS_UPDATER_KEY" = "true" ]; then
+            npm run tauri build -- ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set: building without update files"
+            npm run tauri build -- ${{ matrix.args }}
+          fi
       # Tauri's DMG has no room for extra files, so rebuild it with the app, the
       # Applications link and the read-me (how to allow the unsigned app, disclaimer).
       - if: matrix.os == 'macos-latest'
@@ -114,6 +131,7 @@ jobs:
           ditto "$b/macos/brausa.app" "$stage/brausa.app"
           ln -s /Applications "$stage/Applications"
           cp packaging/LIESMICH-macOS.txt "$stage/LIES MICH.txt"
+          cp packaging/README-macOS.txt "$stage/READ ME.txt"
           rm "$dmg"
           for i in 1 2 3; do
             hdiutil create -volname brausa -srcfolder "$stage" -ov -format UDZO "$dmg" && break
@@ -144,4 +162,27 @@ jobs:
             src-tauri/target/**/release/bundle/**/*-setup.exe
             src-tauri/target/**/release/bundle/**/*.AppImage
             src-tauri/target/**/release/bundle/**/*.deb
+            src-tauri/target/**/release/bundle/**/*.app.tar.gz
+            src-tauri/target/**/release/bundle/**/*.sig
           fail_on_unmatched_files: false
+
+  # latest.json tells installed copies about the new version (only when signed).
+  updater:
+    needs: [release, bundle]
+    if: ${{ needs.release.outputs.tag != '' && !failure() && !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: env.HAS_UPDATER_KEY == 'true'
+        run: |
+          mkdir sigs
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir sigs
+          node scripts/latest-json.mjs "$TAG" "$GITHUB_REPOSITORY" sigs docs/RELEASE_NOTES.md > latest.json
+          cat latest.json
+          gh release upload "$TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber

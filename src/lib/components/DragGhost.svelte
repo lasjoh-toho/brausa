@@ -1,6 +1,7 @@
 <script lang="ts">
   import { drag } from '../state/drag.svelte';
   import { copyLabel } from '../platform';
+  import { t } from '../i18n/index.svelte';
 
   const stack = $derived(drag.items.slice(0, 3));
 </script>
@@ -22,7 +23,7 @@
     {#if drag.label}
       <div class="label" class:copy={drag.copy}>{drag.label}</div>
     {:else}
-      <div class="label hint">{copyLabel} = kopieren · Esc = abbrechen</div>
+      <div class="label hint">{t('files.dragHint', { key: copyLabel })}</div>
     {/if}
   </div>
 {/if}

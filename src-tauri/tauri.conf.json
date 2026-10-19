@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "brausa",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "identifier": "org.brausa.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -35,5 +35,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM0MkVDMUIxOENGMEFGN0IKUldSN3IvQ01zY0V1TkFtS1lUdXU5YTJHL0tRMTBJVGlJT3FsZFFjem9QREgrYXNLbkhaV0lDVEkK",
+      "endpoints": [
+        "https://github.com/lasjoh-toho/brausa/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

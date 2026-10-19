@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { i18n } from '../i18n/index.svelte';
 import {
   applyTagPatch,
   expandTag,
@@ -15,6 +16,9 @@ import { filterEntries, groupEntries, UNTAGGED } from './views';
 import type { Entry } from './types';
 import { category } from './format';
 import { decisionFor, forget, hasScripts, remember, resolveLocal } from './htmlpreview';
+
+// Tests check the German texts.
+beforeAll(() => i18n.set('de'));
 
 const DAY = 86400e3;
 const NOW = Date.UTC(2026, 9, 16);
@@ -267,7 +271,7 @@ describe('web panel addresses', () => {
 
 describe('archives', () => {
   it('knows archives and paths inside them', async () => {
-    const { isArchive, inArchive, archiveRoot } = await import('./archive');
+    const { isArchive, inArchive, archiveRoot, archiveName } = await import('./archive');
     expect(isArchive('/a/Fotos.ZIP')).toBe(true);
     expect(isArchive('/a/x.tar.gz')).toBe(true);
     expect(isArchive('/a/x.gz')).toBe(false);
@@ -276,5 +280,171 @@ describe('archives', () => {
     expect(inArchive('C:\\a\\b.zip!\\c')).toBe(true);
     expect(inArchive('/a/b.zip')).toBe(false);
     expect(archiveRoot('/a/b.zip')).toBe('/a/b.zip!');
+    expect(archiveName('/a/b.zip!/c/d.txt')).toBe('/a/b.zip');
+    expect(archiveName('/a/b.tar.gz!')).toBe('/a/b.tar.gz');
+    expect(archiveName('/a/c.txt')).toBe('/a/c.txt');
+  });
+});
+
+describe('smart folders', () => {
+  const base = {
+    scope: { folder: '/h/Fotos' },
+    search: '#urlaub',
+    typeFilter: 'image',
+    recursive: true,
+    date: { field: 'taken' as const, from: new Date(2026, 6, 1).getTime(), to: new Date(2026, 10, 1).getTime(), weekdays: [0] }
+  };
+
+  it('knows when a view is worth saving and describes it', async () => {
+    const { hasFilter, describe, suggestName } = await import('./smart');
+    expect(hasFilter(base)).toBe(true);
+    expect(hasFilter({ ...base, search: '  ', typeFilter: null, date: null })).toBe(false);
+    expect(describe(base, 'Fotos')).toBe('Fotos · #urlaub · Bilder · 1.7.2026 – 31.10.2026 (Mo)');
+    expect(suggestName(base, 'Fotos')).toBe('#urlaub Bilder in Fotos');
+  });
+
+  it('matches the current view', async () => {
+    const { matches } = await import('./smart');
+    const f = { id: 'a', name: 'x', ...base };
+    expect(matches(f, { ...base, date: { ...base.date } })).toBe(true);
+    expect(matches(f, { ...base, search: '#arbeit' })).toBe(false);
+    expect(matches(f, { ...base, date: { ...base.date, weekdays: [0, 1] } })).toBe(false);
+    expect(matches(f, { ...base, scope: { project: 'p' } })).toBe(false);
+    // Stream does not matter for projects.
+    const p = { ...f, scope: { project: 'p' } };
+    expect(matches(p, { ...base, scope: { project: 'p' }, recursive: false })).toBe(true);
+  });
+
+  it('follows renamed and moved folders', async () => {
+    const { followMoves } = await import('./smart');
+    const fs = [
+      { id: 'a', name: 'a', ...base },
+      { id: 'b', name: 'b', ...base, scope: { folder: '/h/Fotos/2026' } },
+      { id: 'c', name: 'c', ...base, scope: { folder: '/h/Fotosammlung' } },
+      { id: 'd', name: 'd', ...base, scope: { project: 'p' } }
+    ];
+    const out = followMoves(fs, { '/h/Fotos': '/h/Bilder' })!;
+    expect(out.map((f) => ('folder' in f.scope ? f.scope.folder : f.scope.project))).toEqual(['/h/Bilder', '/h/Bilder/2026', '/h/Fotosammlung', 'p']);
+    expect(followMoves(fs, { '/h/Anderes': '/h/X' })).toBeNull();
+    expect(followMoves([{ id: 'w', name: 'w', ...base, scope: { folder: 'C:\\a\\b\\c' } }], { 'C:\\a\\b': 'D:\\z' })![0].scope).toEqual({ folder: 'D:\\z\\c' });
+  });
+});
+
+describe('duplicates', () => {
+  const f = (path: string, mtime: number, size = 100) => ({ path, name: path.split('/').pop()!, ext: 'jpg', kind: 'file' as const, size, mtime, ctime: 0, tags: [] });
+
+  it('recognises copy names', async () => {
+    const { looksLikeCopy } = await import('./dupes');
+    for (const n of ['Foto 2.jpg', 'Foto (1).jpg', 'Foto Kopie.jpg', 'Foto-copy.jpg', 'Copy of Foto.jpg', 'Kopie von Foto.jpg', 'Foto copy 3.jpg']) expect(looksLikeCopy(n), n).toBe(true);
+    for (const n of ['Foto.jpg', 'Urlaub 2026.jpg', 'Kopierer.pdf']) expect(looksLikeCopy(n), n).toBe(false);
+  });
+
+  it('keeps the original and counts the extras', async () => {
+    const { keeper, extras, waste } = await import('./dupes');
+    const a = f('/x/Foto.jpg', 300);
+    const b = f('/x/Foto 2.jpg', 100);
+    const c = f('/y/z/Foto.jpg', 200);
+    expect(keeper([b, c, a]).path).toBe('/y/z/Foto.jpg');
+    const d = f('/a.pdf', 5, 1000);
+    const e = f('/b/a.pdf', 5, 1000);
+    expect(keeper([e, d]).path).toBe('/a.pdf');
+    expect(extras([[a, b, c], [d, e]]).map((x) => x.path)).toEqual(['/x/Foto.jpg', '/x/Foto 2.jpg', '/b/a.pdf']);
+    expect(waste([[a, b, c], [d, e]])).toBe(1200);
+  });
+});
+
+describe('batch rename', () => {
+  const f = (path: string, extra: Partial<{ mtime: number; taken: number; kind: 'file' | 'dir' }> = {}) => {
+    const name = path.split('/').pop()!;
+    return { path, name, ext: name.split('.').pop()!, kind: 'file' as 'file' | 'dir', size: 1, mtime: new Date(2026, 9, 18, 9, 5, 7).getTime(), ctime: 0, tags: [], ...extra };
+  };
+  const none = () => [];
+
+  it('fills the pattern, replaces and changes case', async () => {
+    const { newName, DEFAULT_RENAME: D } = await import('./rename');
+    const e = f('/h/Reise/IMG_0042.JPG', { taken: new Date(2025, 6, 3, 14, 0, 9).getTime() });
+    expect(newName(e, 4, { ...D, pattern: 'Urlaub {n:3}' })).toBe('Urlaub 005.JPG');
+    expect(newName(e, 0, { ...D, pattern: '{datum} {zeit} {ordner}', start: 7 })).toBe('2025-07-03 14-00-09 Reise.JPG');
+    expect(newName(e, 0, { ...D, find: 'IMG_', replace: 'Foto ' })).toBe('Foto 0042.JPG');
+    expect(newName(e, 0, { ...D, find: '\\d+', replace: '#', regex: true })).toBe('IMG_#.JPG');
+    expect(newName(f('/h/mein bild-neu.png'), 0, { ...D, case: 'title' })).toBe('Mein Bild-Neu.png');
+    expect(newName(f('/h/Ordner.alt', { kind: 'dir' }), 0, { ...D, case: 'upper' })).toBe('ORDNER.ALT');
+  });
+
+  it('flags conflicts before renaming', async () => {
+    const { planRenames, DEFAULT_RENAME: D } = await import('./rename');
+    const a = f('/h/a.jpg');
+    const b = f('/h/b.jpg');
+    const same = planRenames([a, b], { ...D, pattern: 'x' }, none);
+    expect(same.map((s) => s.error)).toEqual(['Name doppelt', 'Name doppelt']);
+    const exists = planRenames([a], { ...D, pattern: 'c' }, () => ['a.jpg', 'c.jpg']);
+    expect(exists[0].error).toBe('Gibt es schon');
+    // Names of the batch itself become free.
+    const swap = planRenames([a, b], { ...D, pattern: '{name}', find: 'a', replace: 'b' }, () => ['a.jpg', 'b.jpg']);
+    expect(swap.map((s) => s.error)).toEqual(['Name doppelt', 'Name doppelt']);
+    expect(planRenames([a], { ...D, pattern: 'x/y' }, none)[0].error).toMatch(/Enthält/);
+    expect(planRenames([a], { ...D, pattern: '' }, none)[0].error).toBe('Name ist leer');
+    expect(planRenames([a], { ...D, find: '(', regex: true }, none)[0].error).toBe('Ungültiger regulärer Ausdruck');
+    // Case-only change of the same file is fine.
+    const up = planRenames([a], { ...D, case: 'upper' }, () => ['a.jpg'])[0];
+    expect([up.name, up.changed, up.error]).toEqual(['A.jpg', true, undefined]);
+  });
+
+  it('routes swaps through temporary names', async () => {
+    const { planRenames, renameOrder, DEFAULT_RENAME: D } = await import('./rename');
+    const a = f('/h/1.jpg');
+    const b = f('/h/2.jpg');
+    const c = f('/h/3.jpg');
+    // Reverse numbering: 1→3, 2→2 (unchanged), 3→1.
+    const steps = planRenames([a, b, c], { ...D, pattern: '{n}', start: 0 }, () => ['1.jpg', '2.jpg', '3.jpg']).map((s, i) => ({ ...s, name: `${3 - i}.jpg`, changed: i !== 1 }));
+    const order = renameOrder(steps);
+    expect(order.map((o) => [o.step.entry.name, o.step.name, o.viaTemp])).toEqual([
+      ['1.jpg', '3.jpg', true],
+      ['3.jpg', '1.jpg', true]
+    ]);
+    // A plain chain without cycles: a → x needs no temp name.
+    expect(renameOrder(planRenames([a], { ...D, pattern: 'x' }, none))[0].viaTemp).toBe(false);
+  });
+});
+
+describe('web library', () => {
+  it('keeps a history without repeats and fills in titles', async () => {
+    const { addVisit, setTitle } = await import('./web');
+    let h = addVisit([], { url: 'https://a.org/', title: '', at: 1 });
+    h = addVisit(h, { url: 'https://b.org/', title: 'B', at: 2 });
+    h = setTitle(h, 'https://a.org/', 'A');
+    h = addVisit(h, { url: 'https://a.org/', title: '', at: 3 });
+    expect(h).toEqual([
+      { url: 'https://a.org/', title: 'A', at: 3 },
+      { url: 'https://b.org/', title: 'B', at: 2 }
+    ]);
+    expect(addVisit(h, { url: 'http://127.0.0.1:4711/abc/index.html', title: 'lokal', at: 4 })).toBe(h);
+    expect(addVisit(h, { url: 'https://c.org/', title: 'C', at: 5 }, 2).map((p) => p.url)).toEqual(['https://c.org/', 'https://a.org/']);
+  });
+
+  it('toggles bookmarks and filters pages', async () => {
+    const { toggleBookmark, filterPages, shortUrl } = await import('./web');
+    const p = { url: 'https://www.wikipedia.org/wiki/Brausa', title: 'Brausa – Wikipedia', at: 1 };
+    const b = toggleBookmark([], p);
+    expect(b).toEqual([p]);
+    expect(toggleBookmark(b, { ...p, at: 2 })).toEqual([]);
+    expect(filterPages(b, 'wiki brausa')).toEqual([p]);
+    expect(filterPages(b, 'brausa python')).toEqual([]);
+    expect(shortUrl(p.url)).toBe('wikipedia.org/wiki/Brausa');
+  });
+});
+
+describe('sorting', () => {
+  it('sorts by created and taken date, folders first', async () => {
+    const { sortEntries } = await import('./views');
+    const e = (name: string, mtime: number, extra: object = {}) => ({ path: '/' + name, name, ext: 'jpg', kind: 'file' as 'file' | 'dir', size: 1, mtime, ctime: 0, tags: [], ...extra });
+    const a = e('a.jpg', 30, { taken: 10, ctime: 5 });
+    const b = e('b.jpg', 20, { ctime: 50 });
+    const c = e('c.jpg', 25, { taken: 40 });
+    const d = { ...e('Ordner', 99), kind: 'dir' as const };
+    expect(sortEntries([a, b, c, d], 'taken').map((x) => x.name)).toEqual(['Ordner', 'a.jpg', 'b.jpg', 'c.jpg']);
+    expect(sortEntries([a, b, c, d], 'taken', true).map((x) => x.name)).toEqual(['Ordner', 'c.jpg', 'b.jpg', 'a.jpg']);
+    // Without a creation date the modification date counts.
+    expect(sortEntries([a, b, c], 'ctime').map((x) => x.name)).toEqual(['a.jpg', 'c.jpg', 'b.jpg']);
   });
 });

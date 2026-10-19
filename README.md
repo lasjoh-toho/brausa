@@ -1,114 +1,123 @@
+[Deutsch](README.de.md) · **English**
+
 # brausa
 
-Ein visueller, plattformunabhängiger Datei-Browser für macOS, Windows und Linux.
-Er ist für schnelles Sortieren per Drag & Drop gebaut, mit portablen Tags ohne
-Lock-in und flachen Bild-Streams statt tiefer Ordnerbäume.
+A visual, cross-platform file browser for macOS, Windows and Linux.
+It is built for fast sorting by drag & drop, with portable tags without
+lock-in and flat image streams instead of deep folder trees.
 
-> Vollständiges Konzept, Architektur und Roadmap: **[docs/KONZEPT.md](docs/KONZEPT.md)**
+> Full concept, architecture and roadmap (in German): **[docs/KONZEPT.md](docs/KONZEPT.md)**
 
-![Stream-Ansicht](docs/img/stream.jpg)
+![Stream view](docs/img/stream.jpg)
 
-| Ziehen in den Baum (aufklappen beim Hovern, Breadcrumb-Leiste) | Ablage-Raster |
+| Dragging into the tree (expands on hover, breadcrumb bar) | Drop zones grid |
 |---|---|
 | ![](docs/img/drag-baum.jpg) | ![](docs/img/ablage-raster.jpg) |
-| **Kanban nach Tags** | **Vorschau fließt unter die Toolbar** |
+| **Kanban by tags** | **Preview flows under the toolbar** |
 | ![](docs/img/kanban.jpg) | ![](docs/img/vorschau.jpg) |
 
-## Installieren
+## Install
 
-Installer für macOS, Windows und Linux gibt es unter [Releases](https://github.com/lasjoh-toho/brausa/releases).
+Installers for macOS, Windows and Linux are available under [Releases](https://github.com/lasjoh-toho/brausa/releases).
 
-> **Experimentelle Software.** brausa ist eine Vorab-Version und wurde nach bestem Wissen und Gewissen erstellt. Trotzdem kann sie Fehler enthalten und arbeitet direkt mit Ihren Dateien. Die Nutzung erfolgt auf eigene Gefahr; soweit gesetzlich zulässig, wird keine Verantwortung oder Haftung übernommen. Bitte vorher eine Datensicherung anlegen und zuerst mit Testordnern ausprobieren.
+> **Experimental software.** brausa is a pre-release version and was made to the best of our knowledge and belief. Even so, it may contain bugs, and it works directly on your files. Use it at your own risk; to the extent permitted by law, no responsibility or liability is accepted. Please make a backup first and try it out on test folders before anything else.
 
-brausa ist nicht bei Apple oder Microsoft signiert, deshalb muss man den ersten Start freigeben. Wie das geht, steht in [LIESMICH für macOS](packaging/LIESMICH-macOS.txt) (liegt auch im DMG) und [LIESMICH für Windows](packaging/LIESMICH-Windows.txt) (Hinweis im Installer, Datei im Programmordner).
+brausa is not signed with Apple or Microsoft, so you have to allow the first start. How to do that is explained in the [README for macOS](packaging/README-macOS.txt) (also included in the DMG) and the [README for Windows](packaging/README-Windows.txt) (notice in the installer, file in the program folder).
 
-## Was schon geht
+The interface follows the desktop language (German or English, otherwise English) and can be changed in Settings (gear icon at the top of the sidebar). Shortly after starting, brausa looks for updates and installs them on request (for maintainers: [docs/UPDATES.md](docs/UPDATES.md)).
 
-| Bereich | Funktion |
+## What already works
+
+| Area | Feature |
 |---|---|
-| **Ordnerbaum** | Klappt beim Ziehen über einem Ordner nach ~0,5 s auf und danach wieder zu. **Dual-Zone-Drop:** linke Hälfte verschiebt (mit ⌥ bzw. Strg: kopiert), rechte Hälfte überträgt Tags und Farbe des Ordners. |
-| **Breadcrumb-Drop** | Beim Ziehen erscheint oben eine Pfadleiste; jedes Segment ist ein Ablageziel. |
-| **Ablage-Raster** | Datei auf **Ablage** in der Toolbar ziehen öffnet ein konfigurierbares N×M-Raster aus Ordnern und Tags. Ein Klick auf „Ablage“ öffnet die Einstellungen dazu. |
-| **Stream** | Unterordner werden zu einer durchgehenden Bildwand mit Pfad-Badge pro Kachel. Ordner aus dem Baum auf die Fläche ziehen filtert auf diesen Zweig (Funnel). Daneben wählt **Alle Arten ▾** eine Dateiart (Medien, Bilder, Videos, Audio, PDF, Text und Code, Webseiten, Office) und schaltet dabei Stream ein: so sieht man z. B. alle Videos aus allen Unterordnern. |
-| **Ansichten** | Stream-Grid, Kanban (Spalten nach Tags oder Unterordnern, Ziehen zwischen Spalten setzt den Tag um), Zeitachse (nach Monat), **Kalender**, **Karte** (OpenStreetMap; Fotos mit GPS aus EXIF, Marker in der Nähe werden zusammengefasst). |
-| **Kalender-Heatmap** | Zoombar: alle Jahre → Jahr (Tage) → Monat (mit Foto pro Tag). **Klick auf eine Jahreszahl** öffnet statt der Jahresübersicht ein Tagesband über alle Jahre (beim gewählten Jahr), mit allen Wochentagen, hervorgehobenem Wochenende und der Summe je Wochentag. Das Band scrollt waagerecht, Rahmen gehen über den Jahreswechsel; × führt zurück zu allen Jahren. Doppelklick oder ⌘/Strg + Scrollen bzw. Pinch zoomt. **Ziehen über Zellen setzt einen Zeitfilter**, der in allen Ansichten gilt. In der Tages-Heatmap ist das ein **Rahmen** über Wochen und Wochentage: ein Rahmen über die Montagszeile von Juli bis Oktober wählt nur diese Montage; ⌘/Strg + Ziehen fügt einen weiteren Rahmen hinzu (z. B. die Sonntage), ein Klick auf *Mo … So* schaltet einzelne Wochentage um. Wählbar nach Änderungs-, Erstellungs- oder Aufnahmedatum (EXIF). |
-| **Dateien** | Doppelklick öffnet in der Standard-App, „Im Finder/Dateimanager zeigen“, Umbenennen (F2, macOS ↵), Papierkorb (Entf, macOS ⌘⌫), neuer Ordner (⌘/Strg+⇧N), Kontextmenü per Rechtsklick. |
-| **Vorschaubilder** | Werden im Rust-Kern verkleinert, gecacht und erst geladen, wenn die Kachel sichtbar wird. Hochkant-Fotos werden laut EXIF gedreht. |
-| **Live-Aktualisierung** | Änderungen durch andere Programme (Sync-Clients, Downloads) erscheinen automatisch. |
-| **Auswahl** | Klick, Shift-Bereich, ⌘/Strg-Toggle, Lasso, ⌘/Strg+A, **Auswahl per Muster** (`*.png > 5MB`, `#ToReview`, `modified < 30d`, `ext:jpg,png`, `is:video`, `is:medien`, `-is:bild`, `-#done`). |
-| **Ablage-Tray** | Dateien aus beliebigen Ordnern sammeln (Drag oder `S`). Der Inhalt bleibt beim Navigieren erhalten und lässt sich als Gruppe verschieben oder taggen. |
-| **Zweites Panel** | Das Symbol links neben *Ablage* öffnet rechts ein zweites Panel mit einem anderen Ordner (Orte und Projekte im Menü, ⇄ tauscht die Ordner beider Seiten). Dateien und Ordner zieht man in beide Richtungen: auf die Liste oder einen Unterordner im Panel, auf die Hauptansicht oder in Baum, Orte und Projekte. ⌥/Strg kopiert statt zu verschieben, Rückgängig über die Meldung. Die Grenze zur Hauptansicht lässt sich mit der Maus verschieben (wird beim Überfahren farbig). |
-| **Web-Fenster** | Die Weltkugel in der Toolbar öffnet rechts ein Web-Fenster für Seiten aus dem Internet (Adresse oder Suchbegriff). Es ist **abgeschottet**: eigene Cookies und Logins, getrennt vom normalen Browser, und kein Zugriff auf brausa oder deine Dateien. **Downloads** und **Speichern** (Seite als HTML) landen im ersten Ordner des offenen Projekts bzw. im aktuellen Ordner und gehören dann zum Projekt. **Auf die Map** legt markierten Text als Snippet (sonst die Seite als Karte) mit Link auf die Projektmap; ein Klick darauf öffnet die Seite wieder. **Lokale Websites:** Rechtsklick auf eine HTML-Datei → *Im Web-Fenster öffnen*; brausa stellt den Ordner nur auf diesem Rechner unter einer zufälligen Adresse bereit, Links und nachgeladene Dateien funktionieren, Skripte laufen nur, wenn sie für den Ordner erlaubt sind (Knopf oben rechts). |
-| **Archive** | ZIP-, tar- und tar.gz-Dateien öffnen sich per Doppelklick **wie Ordner** (nur lesend): durchblättern, Stream, Filter, Vorschau mit der Leertaste (Bilder, PDF, Text, Medien), Doppelklick öffnet eine Datei in der Standard-App. Dateien oder Ordner aus dem Archiv in einen Ordner, ins zweite Panel oder in den Baum ziehen **packt sie aus**; das Archiv bleibt unverändert. |
-| **Tags** | `T` öffnet die Quick-Tag-Leiste mit Autovervollständigung, zuletzt benutzten Tags und Farben. Hierarchische Tags (`Work/Design/UI` erscheint auch unter `#Work`). Gespeichert im zentralen Index (siehe Projekte); Tags im Dateinamen (`Foto[urlaub strand].jpg`) werden mitgelesen. |
-| **Projekte** | Projekte sind **unabhängig von Ordnern**: frei benannte Sammlungen (+ bei *Projekte* in der Seitenleiste). Dateien und Ordner von überall auf ein Projekt ziehen fügt sie hinzu, **ohne sie zu verschieben**; ein Ordner gehört mit seinem ganzen Inhalt dazu. Ein Klick zeigt alle Dateien des Projekts in allen Ansichten (Stream, Kanban, Kalender, Karte, Projektmap). Entf nimmt eine Datei nur aus dem Projekt heraus, auf der Festplatte ändert sich nichts. Dateien bleiben Mitglied, auch wenn sie im Finder/Explorer verschoben oder umbenannt werden. Umbenennen per Doppelklick oder ✎, Löschen mit × (die Dateien bleiben). Ordner, die früher Projekte waren, werden automatisch zu Projekten mit diesem Ordner. |
-| **Index** | Tags, Farben und Verknüpfungen liegen in einem zentralen Index (lesbar, sortiert); brausa erkennt Dateien, die in anderen Programmen verschoben oder umbenannt wurden, über Datei-ID und Prüfsumme wieder. |
-| **Projektmap** | Unendliche, zoombare Fläche pro Projekt (Symbol ganz rechts in der Ansichtsleiste), gespeichert bei den Programmdaten von brausa (bei früheren Ordner-Projekten weiter in `<Ordner>/.brausa/maps/`). Die Map gehört zum geöffneten Projekt, sonst zu einem Projekt, das den aktuellen Ordner enthält, sonst zum zuletzt benutzten. Doppelklick legt eine Karte an (Titel + Markdown-Text). **Karte auf eine andere ziehen macht sie zur Unterkarte** (⌥/Alt hält sie auf ihrer Ebene). Mit dem Punkt am rechten Rand zieht man **Pfeile**, auch über Ebenen hinweg; Pfeile lassen sich beschriften. Mausrad zoomt stufenlos, `↵` fliegt in eine Karte, `Esc` eine Ebene hinauf, die Breadcrumb zeigt, wo man ist. Farben, Größe ändern, Rückgängig/Wiederholen. Mehrere Maps pro Projekt. |
-| **Dateien auf der Map** | Das Ordner-Symbol oben rechts öffnet die Dateien des Projekts. Datei (auch aus Ordnerbaum oder Ablage) auf die Map ziehen ergibt eine Karte mit Vorschaubild; Doppelklick öffnet sie in der Standard-App. Auf den **rechten Rand** einer Karte gezogen, wird die Datei mit der Karte **verknüpft**. Umgekehrt verknüpft eine Karte, die man auf eine Datei in der Liste oder Ablage zieht, sich mit ihr. Karten merken sich Dateien über den Index: im Finder verschoben oder umbenannt, bleibt die Verknüpfung erhalten. |
-| **Leser und Snippets** | PDFs, HTML-, Markdown- und Textdateien öffnen sich (Doppelklick in der Dateiliste oder auf der Karte) im **Leser links neben der Map**. Text markieren und auf die Map ziehen ergibt ein **Snippet** mit Rücksprung: Klick auf das Snippet öffnet die Quelle an genau der Stelle und lässt sie aufleuchten; alle Snippets eines Dokuments bleiben darin markiert. Snippets an die **Ober- oder Unterkante** eines anderen ziehen **stapelt** sie (wie in LiquidText); herausziehen löst sie wieder. HTML wird ohne Skripte und Formulare angezeigt. |
-| **TiddlyWiki (Bags und Recipes)** | Unter *Wikis* in der Seitenleiste stellt man ein Wiki aus **Bags** zusammen, wie im MultiWikiServer: Projektmaps (Karten werden zu Tiddlern mit `brausa-id`, Unterkarten zu `list`, Pfeile zu `brausa-links` für tw5-graph) und **gemeinsame Bags** (Glossar, Personen …), die mehrere Wikis teilen. Ziel ist ein Ordner- oder Einzeldatei-Wiki, das man in **TiddlyDesktop-RS** öffnet. **Abgleichen** (↻) holt Änderungen aus dem Wiki zurück und schreibt dann alle Bags ins Wiki. Kartentexte und Umbenennungen gehen zurück in die Map, alles andere landet wie beim MultiWikiServer im eigenen Bag des Wikis und **überdeckt** dort gemeinsame Tiddler. Das Werkzeug **Überdeckungen** (Ebenen-Symbol neben *Wikis*) zeigt diese mit Zeilenvergleich und löst sie gezielt auf: für alle übernehmen, zusammenführen, verwerfen oder als Variante behalten. **Plugins sind eingebaut** (Markdown, tw5-graph mit Pinboard und Kanban): Maps erscheinen im Wiki ohne Installation als Pinboard und Kanban. Konflikte bleiben als Kopie erhalten; Einzeldatei-Wikis werden vorher gesichert. |
-| **Kanban für Karten** | „Kanban“ in der Auswahlleiste schickt Karten ins Projekt-Kanban (Map/Kanban oben rechts umschalten). Spalten = Status, Karten zwischen Spalten ziehen, eigene Spalten anlegen; ein Klick zeigt die Karte auf der Map. |
-| **Vorschau** | Doppelklick oder Leertaste: Das Bild wächst aus der Kachel bis unter die Toolbar, die zu Glas in der Bildfarbe wird. ←/→ blättert. Auch **Videos und Audio** (mit Player; welche Formate laufen, hängt vom System ab, sonst „In Standard-App öffnen“), **PDFs**, **Text und Code** (php, js, css, json, py … mit Syntax-Farben; Markdown formatiert oder als Quelltext) und **Webseiten**. Enthält eine Seite Skripte, fragt brausa, ob sie laufen dürfen, mit Warnung; die Antwort lässt sich für die Datei oder den ganzen Ordner merken und über „Ändern“ zurücknehmen. Die Seite läuft abgeschottet ohne Zugriff auf brausa oder andere Dateien. |
-| **Rückgängig** | Verschieben lässt sich über die Meldung unten rechts zurücknehmen. |
+| **Folder tree** | While dragging over a folder, it expands after ~0.5 s and collapses again afterwards. **Dual-zone drop:** the left half moves (with ⌥ or Ctrl: copies), the right half applies the folder's tags and colour. |
+| **Breadcrumb drop** | While dragging, a path bar appears at the top; every segment is a drop target. |
+| **Drop zones grid** | Dragging a file onto **Drop zones** in the toolbar opens a configurable N×M grid of folders and tags. Clicking “Drop zones” opens its settings. |
+| **Stream** | Subfolders become one continuous image wall with a path badge on each tile. Dragging a folder from the tree onto the canvas filters to that branch (funnel). Next to it, **All kinds ▾** picks a kind of file (Media, Images, Videos, Audio, PDF, Text and code, Web pages, Office) and switches Stream on at the same time: this way you can see, for example, all videos from all subfolders. |
+| **List with preview** | The classic three-column view (second icon in the view bar): on the left places, projects and the folder tree, in the middle a list with name, date, size and kind, on the right the preview of the selected file with size, dates, location and tags. Clicking a column header sorts (once more: reversed), ↑/↓ moves through the list (with ⇧ extends the selection), Space shows it large. Dragging, renaming, the context menu and dropping onto folders work as in the tile view; the border to the preview can be moved. |
+| **Sorting** | The menu next to *All kinds* sorts all views by Name, Modified, Created, Taken (EXIF, otherwise modification date), Size or Kind; the button next to it reverses the direction. Folders always come first, and the choice is remembered. |
+| **Views** | Tile grid (stream), Kanban (columns by tags or subfolders, dragging between columns changes the tag), Timeline (by month), **Calendar**, **Map** (OpenStreetMap; photos with GPS from EXIF, nearby markers are clustered). |
+| **Calendar heatmap** | Zoomable: all years → year (days) → month (with a photo per day). **Clicking a year number** opens, instead of the year overview, a band of days across all years (at the chosen year), with all weekdays, highlighted weekends and the total per weekday. The band scrolls sideways, frames can span the turn of the year; × goes back to all years. Double-click or ⌘/Ctrl + scroll or pinch zooms. **Dragging across cells sets a date filter** that applies in all views. In the day heatmap this is a **frame** across weeks and weekdays: a frame over the Monday row from July to October selects only those Mondays; ⌘/Ctrl + drag adds another frame (e.g. the Sundays), clicking *Mon … Sun* toggles single weekdays. Selectable by modification, creation or capture date (EXIF). |
+| **Files** | Double-click opens in the default app, “Show in Finder” / “Show in file manager”, rename (F2, macOS ↵; with several selected files **batch rename**, see below), trash (Del, macOS ⌘⌫), new folder (⌘/Ctrl+⇧N), context menu by right-click. |
+| **Batch rename** | Select several files, F2 (macOS ↵) or right-click → *Rename … items …*. A **pattern** with placeholders (`{name}`, `{n}`, `{n:3}` for 001, `{date}` and `{time}` from the capture or modification date, `{folder}`) builds the new name; the extension stays. On top of that **Replace** (also with a regular expression), start number and case (lower, UPPER, Title Case). The **preview** shows every new name and marks conflicts (duplicate, already exists, invalid characters) before anything happens. Names can also be swapped among each other; undo via the notification. |
+| **Thumbnails** | Are scaled down in the Rust core, cached and only loaded once the tile becomes visible. Portrait photos are rotated according to EXIF. |
+| **Live updates** | Changes made by other programs (sync clients, downloads) appear automatically. |
+| **Selection** | Click, Shift range, ⌘/Ctrl toggle, lasso, ⌘/Ctrl+A, **select by pattern** (`*.png > 5MB`, `#ToReview`, `modified < 30d`, `ext:jpg,png`, `is:video`, `is:media`, `-is:image`, `-#done`). |
+| **Tray** | Collect files from any folders (drag or `S`). The contents stay while you navigate and can be moved or tagged as a group. |
+| **Second panel** | The icon to the left of *Drop zones* opens a second panel on the right with another folder (places and projects in the menu, ⇄ swaps the folders of both sides). Files and folders can be dragged in both directions: onto the list or a subfolder in the panel, onto the main view or into the tree, places and projects. ⌥/Ctrl copies instead of moving, undo via the notification. The border to the main view can be moved with the mouse (it lights up on hover). |
+| **Web window** | The globe in the toolbar opens a web window on the right for pages from the internet (address or search term). It is **isolated**: its own cookies and logins, separate from your normal browser, and no access to brausa or your files. **Downloads** and **Save** (page as HTML) end up in the first folder of the open project or in the current folder, and then belong to the project. **To the map** puts the selected text on the project map as a snippet (otherwise the page as a card) with a link; clicking it opens the page again. **Bookmarks and history per project:** the star in the address bar remembers the page, *Bookmarks* and the clock show the bookmarks and history of the open project (or of the project the current folder belongs to) with search; the bookmarks also appear on the start page of the web window. **Local websites:** right-click an HTML file → *Open in web window*; brausa serves the folder only on this computer under a random address, links and loaded files work, scripts only run if they are allowed for the folder (button at the top right). |
+| **Archives** | ZIP, tar and tar.gz files open by double-click **like folders**: browse, Stream, filters, preview with Space (images, PDF, text, media), double-click opens a file in the default app. Dragging files or folders from the archive into a folder, the second panel or the tree **unpacks them**. Dragging files onto an archive or into an opened archive folder **packs them** (as a copy), Del **deletes inside the archive**; both after confirmation, and the previous version of the archive goes to the trash. Right-click → *Compress* creates a ZIP from files and folders. |
+| **Duplicates** | Right-click on empty space → *Find duplicates* (or on a folder → *Find duplicates in “…”*) compares the displayed files including subfolders, in a project all files of the project; search and filters apply too (e.g. images only). The content is compared: first the size, then a quick and finally a full checksum; the same file under several names (hard links) does not count. The canvas then shows only the groups of identical files, and the top shows how much space would be freed. **Select extras** selects all but one file per group (the one that stays is the one not named like a copy, otherwise the oldest; it comes first), Del moves them to the trash, *Done* ends the search. |
+| **Tags** | `T` opens the quick tag bar with autocomplete, recently used tags and colours. Hierarchical tags (`Work/Design/UI` also appears under `#Work`). Stored in the central index (see Projects); tags in the file name (`Photo[holiday beach].jpg`) are read too. |
+| **Projects** | Projects are **independent of folders**: freely named collections (+ next to *Projects* in the sidebar). Dragging files and folders from anywhere onto a project adds them **without moving them**; a folder belongs to it with all its contents. A click shows all files of the project in all views (Stream, Kanban, Calendar, Map, Project map). Del only takes a file out of the project; nothing changes on disk. Files stay members even when they are moved or renamed in Finder/Explorer. Rename by double-click or ✎, delete with × (the files stay). Folders that used to be projects automatically become projects containing that folder. |
+| **Smart folders** | Save search, kind filter, Stream and calendar frames together with the folder or project: as soon as a filter is set, “Save current view” (or +) appears under *Smart folders*. A click restores everything, and the open smart folder is highlighted. The tooltip shows what is saved; ◎ replaces the filters with the current view, ✎ or double-click renames, × removes (undo via the notification). Renamed or moved folders are tracked. |
+| **Index** | Tags, colours and links live in a central index (readable, sorted); brausa recognises files that were moved or renamed in other programs by file ID and checksum. |
+| **Project map** | An infinite, zoomable canvas per project (icon at the far right of the view bar), stored with brausa's app data (for former folder projects still in `<folder>/.brausa/maps/`). The map belongs to the open project, otherwise to a project that contains the current folder, otherwise to the last one used. Double-click creates a card (title + Markdown text). **Dragging a card onto another one makes it a sub-card** (⌥/Alt keeps it on its level). The dot on the right edge draws **arrows**, also across levels; arrows can be labelled. The mouse wheel zooms smoothly, `↵` flies into a card, `Esc` goes up one level, and the breadcrumb shows where you are. Colours, resizing, undo/redo. Several maps per project. |
+| **Files on the map** | The folder icon at the top right opens the project's files. Dragging a file (also from the folder tree or the tray) onto the map creates a card with a thumbnail; double-click opens it in the default app. Dropped on the **right edge** of a card, the file gets **linked** to the card. The other way round, a card dragged onto a file in the list or the tray links itself to it. Cards remember files through the index: moved or renamed in Finder, the link is kept. |
+| **Reader and snippets** | PDFs, HTML, Markdown and text files open (double-click in the file list or on the card) in the **reader to the left of the map**. Selecting text and dragging it onto the map creates a **snippet** with a way back: clicking the snippet opens the source at exactly that spot and makes it light up; all snippets of a document stay marked in it. Dragging snippets onto the **top or bottom edge** of another one **stacks** them (as in LiquidText); dragging them out separates them again. HTML is shown without scripts and forms. |
+| **TiddlyWiki (bags and recipes)** | Under *Wikis* in the sidebar you put together a wiki from **bags**, as in MultiWikiServer: project maps (cards become tiddlers with `brausa-id`, sub-cards become `list`, arrows become `brausa-links` for tw5-graph) and **shared bags** (glossary, people …) that several wikis share. The target is a folder or single-file wiki that you open in **TiddlyDesktop-RS**. **Sync** (↻) takes changes back from the wiki and then writes all bags to the wiki. Card texts and renames go back into the map; everything else ends up, as in MultiWikiServer, in the wiki's own bag and **overrides** shared tiddlers there. The **Overlays** tool (layers icon next to *Wikis*) shows these with a line-by-line comparison and resolves them selectively: promote to all, merge, discard or keep as variant. **Plugins are built in** (Markdown, tw5-graph with pinboard and kanban): maps appear in the wiki as a pinboard and kanban without installing anything. Conflicts are kept as a copy; single-file wikis are backed up first. |
+| **Kanban for cards** | “Kanban” in the selection bar sends cards to the project kanban (switch between Map/Kanban at the top right). Columns = status, drag cards between columns, create your own columns; a click shows the card on the map. |
+| **Preview** | Double-click or Space: the image grows out of the tile up to below the toolbar, which turns into glass in the image's colour. ←/→ browses. Also **videos and audio** (with player; which formats play depends on the system, otherwise “Open in default app”), **PDFs**, **text and code** (php, js, css, json, py … with syntax colours; Markdown formatted or as source) and **web pages**. If a page contains scripts, brausa asks whether they may run, with a warning; the answer can be remembered for the file or the whole folder and taken back via “Change”. The page runs isolated without access to brausa or other files. |
+| **Undo** | Moves can be undone via the notification at the bottom right. |
 
-## Entwickeln
+## Development
 
-Voraussetzungen: Node ≥ 20 und Rust (stable). Unter Linux zusätzlich
+Requirements: Node ≥ 20 and Rust (stable). On Linux additionally
 `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev`
-([Tauri-Voraussetzungen](https://v2.tauri.app/start/prerequisites/)).
+([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
 
 ```bash
 npm install
-npm run tauri dev        # Desktop-App mit echtem Dateisystem
-npm run dev              # nur UI im Browser, mit Demo-Daten (http://localhost:1420)
-npm test                 # Domänenkern (Vitest)
-npm run check            # Typprüfung
-cd src-tauri && cargo test   # Rust-Kern
-npm run tauri build      # Installer für das aktuelle Betriebssystem
+npm run tauri dev        # desktop app with the real file system
+npm run dev              # UI only in the browser, with demo data (http://localhost:1420)
+npm test                 # domain core (Vitest)
+npm run check            # type check
+cd src-tauri && cargo test   # Rust core
+npm run tauri build      # installer for the current operating system
 ```
 
-Im Browser läuft automatisch das `DemoBackend` mit generierten Beispielbildern.
-Damit lässt sich die Oberfläche ohne Rust-Toolchain entwickeln.
+In the browser, the `DemoBackend` with generated sample images runs automatically.
+This lets you develop the interface without a Rust toolchain.
 
-## Aufbau
+## Structure
 
 ```
-src/lib/core/       reines TypeScript: Tags, Muster-Auswahl, Ansichten, Pfade (+ Tests)
-src/lib/backend/    Backend-Interface · TauriBackend · DemoBackend
-src/lib/state/      App-Zustand (Svelte-5-Runes) · Drag-Controller
-src/lib/components/ Sidebar, Baum, Toolbar, Canvas, Tray, Overlays
-src-tauri/src/      Rust: Dateisystem, Sidecar-Metadaten, Tauri-Commands (+ Tests)
-docs/KONZEPT.md     Konzept, Architektur, Roadmap
+src/lib/core/       plain TypeScript: tags, pattern selection, views, paths (+ tests)
+src/lib/backend/    backend interface · TauriBackend · DemoBackend
+src/lib/state/      app state (Svelte 5 runes) · drag controller
+src/lib/components/ sidebar, tree, toolbar, canvas, tray, overlays
+src-tauri/src/      Rust: file system, sidecar metadata, Tauri commands (+ tests)
+docs/KONZEPT.md     concept, architecture, roadmap (German)
 ```
 
-## Tastenkürzel
+## Keyboard shortcuts
 
-| Taste | Aktion |
+| Key | Action |
 |---|---|
-| `T` | Auswahl (oder Ablage) taggen |
-| `S` | Auswahl in die Ablage legen |
-| `Leertaste` | Vorschau |
-| Doppelklick, `⌘/Strg+O` | In Standard-App öffnen (Ordner: hineinwechseln) |
-| `F2` (macOS auch `↵`) | Umbenennen |
-| `Entf` (macOS `⌘⌫`) | In den Papierkorb |
-| `⌘/Strg+⇧N` | Neuer Ordner |
-| `⌘/Strg+F` | Suche oder Muster |
-| `⌘/Strg+A` | Alles auswählen |
-| `⌫` bzw. `⌘/Strg+↑` | Übergeordneter Ordner |
-| `⌘/Strg+[` / `]` | Zurück / Vor |
-| `Esc` | Funnel bzw. Auswahl aufheben, Drag abbrechen |
-| `⌥` (macOS) bzw. `Strg` beim Ziehen | Kopieren statt Verschieben |
+| `T` | Tag the selection (or the tray) |
+| `S` | Put the selection in the tray |
+| `Space` | Preview |
+| Double-click, `⌘/Ctrl+O` | Open in default app (folder: go into it) |
+| `F2` (macOS also `↵`) | Rename |
+| `Del` (macOS `⌘⌫`) | Move to trash |
+| `⌘/Ctrl+⇧N` | New folder |
+| `⌘/Ctrl+F` | Search or pattern |
+| `⌘/Ctrl+A` | Select all |
+| `⌫` or `⌘/Ctrl+↑` | Parent folder |
+| `⌘/Ctrl+[` / `]` | Back / Forward |
+| `Esc` | Clear funnel or selection, cancel drag |
+| `⌥` (macOS) or `Ctrl` while dragging | Copy instead of move |
 
-**In der Projektmap**
+**In the project map**
 
-| Taste | Aktion |
+| Key | Action |
 |---|---|
-| Doppelklick (frei / in einer Karte) | Neue Karte bzw. Unterkarte |
-| Doppelklick auf den Kartentitel, `F2` | Bearbeiten (`⌘/Strg+↵` oder `Esc` beendet) |
-| `N` | Neue Karte in der Mitte |
-| `↵` | In die ausgewählte Karte hineinfliegen |
-| `Esc` | Auswahl aufheben, sonst eine Ebene hinauf |
-| `0` | Ganze Map zeigen |
-| `Entf` / `⌫` | Karte oder Pfeil löschen |
-| `⌘/Strg+Z`, `⌘/Strg+⇧Z` | Rückgängig, Wiederholen |
-| Ziehen mit `⌥`/Alt | Verschieben, ohne zu verschachteln |
+| Double-click (empty space / inside a card) | New card or sub-card |
+| Double-click on the card title, `F2` | Edit (`⌘/Ctrl+↵` or `Esc` finishes) |
+| `N` | New card in the centre |
+| `↵` | Fly into the selected card |
+| `Esc` | Clear selection, otherwise one level up |
+| `0` | Show whole map |
+| `Del` / `⌫` | Delete card or arrow |
+| `⌘/Ctrl+Z`, `⌘/Ctrl+⇧Z` | Undo, Redo |
+| Drag with `⌥`/Alt | Move without nesting |

@@ -2,6 +2,7 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
+import { t } from '../i18n/index.svelte';
 import type { ProjectMap } from '../core/map';
 import type {
   Backend,
@@ -95,7 +96,7 @@ export class TauriBackend implements Backend {
   // Files are read through the asset protocol (scope: all files), like thumbnails.
   async fileData(path: string) {
     const r = await fetch(await this.localUrl(path));
-    if (!r.ok) throw new Error(`„${path}“ ließ sich nicht lesen (${r.status})`);
+    if (!r.ok) throw new Error(t('demo.readFailed', { path, status: r.status }));
     return r.arrayBuffer();
   }
 
@@ -109,6 +110,18 @@ export class TauriBackend implements Backend {
 
   async rename(path: string, newName: string) {
     return withThumb(await invoke<Entry>('rename', { path, newName }));
+  }
+
+  compress(paths: string[]) {
+    return invoke<string>('compress', { paths });
+  }
+
+  findDuplicates(paths: string[]) {
+    return invoke<string[][]>('find_duplicates', { paths });
+  }
+
+  archiveConflicts(dir: string, names: string[]) {
+    return invoke<string[]>('archive_conflicts', { dir, names });
   }
 
   trash(paths: string[]) {

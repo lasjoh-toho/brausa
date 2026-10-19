@@ -9,7 +9,6 @@
   import {
     countDates,
     dateOf,
-    DATE_FIELD_LABEL,
     dayKey,
     formatRange,
     frameRange,
@@ -28,9 +27,18 @@
   import { family } from '../core/format';
   import type { Entry } from '../core/types';
   import Icon from './Icon.svelte';
+  import { t, tn, loc } from '../i18n/index.svelte';
 
-  const MONTHS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
-  const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  // Short month and weekday (Monday first) names in the interface language, without the trailing dot.
+  const short = (fmt: Intl.DateTimeFormat, d: Date) => fmt.format(d).replace(/\.$/, '');
+  const MONTHS = $derived.by(() => {
+    const f = new Intl.DateTimeFormat(loc(), { month: 'short' });
+    return Array.from({ length: 12 }, (_, m) => short(f, new Date(2024, m, 1)));
+  });
+  const WEEKDAYS = $derived.by(() => {
+    const f = new Intl.DateTimeFormat(loc(), { weekday: 'short' });
+    return Array.from({ length: 7 }, (_, i) => short(f, new Date(2024, 0, 1 + i))); // 2024-01-01 is a Monday
+  });
 
   const counts = $derived(countDates(app.undated, app.dateField));
   const years = $derived.by(() => {
@@ -232,7 +240,7 @@
   <div class="year" class:band>
     <div class="wd">
       {#each WEEKDAYS as w, i (w)}
-        <button class:we={i > 4} class:on={!!app.dateFilter?.weekdays?.includes(i)} onclick={() => toggleWeekday(i)} title="Nur {w} (Klick schaltet um)">{w}</button>
+        <button class:we={i > 4} class:on={!!app.dateFilter?.weekdays?.includes(i)} onclick={() => toggleWeekday(i)} title={t('calendar.onlyWeekday', { day: w })}>{w}</button>
       {/each}
     </div>
     <div class="scrollx" use:toYear={band ? openYear : null}>
@@ -254,12 +262,12 @@
             data-col={d.col}
             data-from={d.date}
             data-to={new Date(new Date(d.date).setDate(new Date(d.date).getDate() + 1)).getTime()}
-            title="{new Date(d.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}: {n} Dateien"
+            title="{new Date(d.date).toLocaleDateString(loc(), { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}: {tn('common.files', n)}"
           ></div>
         {/each}
       </div>
     </div>
-    <div class="wsum" title="Dateien je Wochentag">
+    <div class="wsum" title={t('calendar.perWeekday')}>
       {#each perWeekday as n, i (i)}
         <span><i style:width="{(n / maxWeekday) * 100}%"></i><em>{n}</em></span>
       {/each}
@@ -267,37 +275,37 @@
   </div>
 {/snippet}
 
-<div class="cal" role="application" aria-label="Kalender">
+<div class="cal" role="application" aria-label={t('calendar.label')}>
   <div class="head">
     <nav class="zoom">
       {#if years.length > 1}
-        <button class="crumb" class:on={lvl === 'years'} onclick={() => (zoom = 'years')}>Alle Jahre</button>
+        <button class="crumb" class:on={lvl === 'years'} onclick={() => (zoom = 'years')}>{t('calendar.allYears')}</button>
       {/if}
       {#if lvl !== 'years'}
         {#if years.length > 1}<span class="sep">›</span>{/if}
         <button class="crumb" class:on={lvl === 'year'} onclick={() => (zoom = 'year')}>{y}</button>
       {/if}
       {#if lvl === 'month'}
-        <span class="sep">›</span><span class="crumb on">{new Date(y, month).toLocaleDateString('de-DE', { month: 'long' })}</span>
+        <span class="sep">›</span><span class="crumb on">{new Date(y, month).toLocaleDateString(loc(), { month: 'long' })}</span>
       {/if}
       {#if lvl !== 'years'}
         <span class="steps">
-          <button class="btn icon" onclick={() => step(-1)} aria-label="Zurück"><Icon name="back" size={14} /></button>
-          <button class="btn icon" onclick={() => step(1)} aria-label="Weiter"><Icon name="forward" size={14} /></button>
+          <button class="btn icon" onclick={() => step(-1)} aria-label={t('calendar.back')}><Icon name="back" size={14} /></button>
+          <button class="btn icon" onclick={() => step(1)} aria-label={t('calendar.next')}><Icon name="forward" size={14} /></button>
         </span>
       {/if}
     </nav>
 
     <div class="seg">
       {#each ['mtime', 'ctime', 'taken'] as const as f (f)}
-        <button class="btn" class:on={app.dateField === f} onclick={() => setField(f)}>{DATE_FIELD_LABEL[f]}</button>
+        <button class="btn" class:on={app.dateField === f} onclick={() => setField(f)}>{t(`calendar.field.${f}`)}</button>
       {/each}
     </div>
 
     {#if app.dateFilter}
       <span class="chip sel">
         {formatRange(app.dateFilter)} · {app.visible.length}
-        <button onclick={() => app.setDateFilter(null)} aria-label="Zeitfilter entfernen"><Icon name="x" size={11} /></button>
+        <button onclick={() => app.setDateFilter(null)} aria-label={t('calendar.clearFilter')}><Icon name="x" size={11} /></button>
       </span>
     {/if}
   </div>
@@ -309,7 +317,7 @@
         <span></span>
         {#each MONTHS as m (m)}<span class="mlabel">{m}</span>{/each}
         {#each years as yr (yr)}
-          <button class="ylabel" class:open={openYear === yr} title="Tage und Wochentage von {yr} zeigen" onclick={() => (openYear = openYear === yr ? null : yr)}>
+          <button class="ylabel" class:open={openYear === yr} title={t('calendar.showYear', { year: yr })} onclick={() => (openYear = openYear === yr ? null : yr)}>
             {yr} <Icon name={openYear === yr ? 'chevronDown' : 'chevron'} size={10} />
           </button>
           {#each MONTHS as _, m (m)}
@@ -320,7 +328,7 @@
               class:sel={selected(from, to)}
               data-from={from}
               data-to={to}
-              title="{MONTHS[m]} {yr}: {n} Dateien"
+              title="{MONTHS[m]} {yr}: {tn('common.files', n)}"
             >
               {#if n}<span class="n">{n}</span>{/if}
             </div>
@@ -329,10 +337,10 @@
       </div>
     {:else if band}
       <div class="otitle">
-        <b>Tage</b>
-        <span class="hint">waagerecht scrollen für frühere Jahre; Rahmen gehen über den Jahreswechsel</span>
+        <b>{t('calendar.days')}</b>
+        <span class="hint">{t('calendar.bandHint')}</span>
         <span class="grow"></span>
-        <button class="btn icon" onclick={() => (openYear = null)} title="Zurück zu allen Jahren" aria-label="Schließen"><Icon name="x" size={12} /></button>
+        <button class="btn icon" onclick={() => (openYear = null)} title={t('calendar.backToYears')} aria-label={t('common.close')}><Icon name="x" size={12} /></button>
       </div>
       {@render heatmap()}
     {:else if lvl === 'year'}
@@ -361,8 +369,8 @@
   </div>
 
   <div class="legend">
-    <span>Ziehen: Zeitraum wählen, in der Jahres-Heatmap als Rahmen über Wochen und Wochentage · ⌘/Strg + Ziehen fügt hinzu · Klick auf Mo … So: nur diese Tage · Doppelklick oder ⌘/Strg + Scrollen: zoomen</span>
-    <span class="scale">weniger {#each [0, 1, 2, 3, 4] as l (l)}<i class="cell l{l}"></i>{/each} mehr</span>
+    <span>{t('calendar.legend')}</span>
+    <span class="scale">{t('calendar.less')} {#each [0, 1, 2, 3, 4] as l (l)}<i class="cell l{l}"></i>{/each} {t('calendar.more')}</span>
   </div>
 </div>
 

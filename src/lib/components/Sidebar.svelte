@@ -4,8 +4,12 @@
   import { wikis } from '../state/wikis.svelte';
   import { drag } from '../state/drag.svelte';
   import { tagColor } from '../core/tags';
+  import { hasFilter, matches } from '../core/smart';
   import TreeNode from './TreeNode.svelte';
   import Icon from './Icon.svelte';
+  import Settings from './Settings.svelte';
+  import { updates } from '../state/updates.svelte';
+  import { t, tn, loc } from '../i18n/index.svelte';
 
   const homeEntry = $derived<Entry>({
     path: app.home,
@@ -29,6 +33,21 @@
   let naming = $state<string | null>(null);
   let renaming = $state<string | null>(null);
   let deleting = $state<string | null>(null);
+  let settingsOpen = $state(false);
+  /** Smart folder being named (null: no input) or renamed. */
+  let smartNaming = $state<string | null>(null);
+  let smartRenaming = $state<string | null>(null);
+
+  const filtered = $derived(hasFilter(app.currentView));
+  const smartOpen = $derived(app.smartFolders.find((f) => matches(f, app.currentView))?.id ?? null);
+
+  function newSmart() {
+    if (!filtered) {
+      app.toast(t('sidebar.smartNeedsFilter'));
+      return;
+    }
+    smartNaming = app.suggestSmartName();
+  }
 
   // Map bags list the projects' maps, so reload when projects change.
   $effect(() => {
@@ -51,10 +70,15 @@
 <aside class="sidebar">
   <div class="brand" data-tauri-drag-region>
     brausa
-    {#if app.backend.name === 'demo'}<span class="demo" title="Läuft im Browser mit Beispieldaten">Demo</span>{/if}
+    {#if app.backend.name === 'demo'}<span class="demo" title={t('sidebar.demoHint')}>Demo</span>{/if}
+    <span class="grow"></span>
+    <button class="gear" class:dot={!!updates.available} title={t('settings.title')} aria-label={t('settings.title')} onclick={() => (settingsOpen = !settingsOpen)}>
+      <Icon name="gear" size={14} />
+    </button>
   </div>
+  {#if settingsOpen}<Settings onclose={() => (settingsOpen = false)} />{/if}
 
-  <div class="section">Orte</div>
+  <div class="section">{t('sidebar.places')}</div>
   {#each app.places as p (p.path)}
     {@const hit = drag.active && drag.hit?.kind === 'folder' && drag.hit.path === p.path}
     <div
@@ -80,8 +104,8 @@
   {/each}
 
   <div class="section with-action">
-    Projekte
-    <button class="add" title="Neues Projekt (frei benannt, Dateien von überall)" onclick={() => ((naming = ''), (renaming = null))}>
+    {t('sidebar.projects')}
+    <button class="add" title={t('sidebar.newProject')} onclick={() => ((naming = ''), (renaming = null))}>
       <Icon name="plus" size={13} />
     </button>
   </div>
@@ -90,7 +114,7 @@
     <input
       class="pinput"
       bind:value={naming}
-      placeholder="Projektname"
+      placeholder={t('sidebar.projectName')}
       autofocus
       onkeydown={(e) => {
         if (e.key === 'Enter' && naming?.trim()) void app.createProject(naming).then(() => (naming = null));
@@ -122,7 +146,11 @@
         data-key={p.id}
         role="button"
         tabindex="0"
-        title="{p.name}: {p.files.length} Dateien{p.folders.length ? `, ${p.folders.length} Ordner` : ''}&#10;Dateien und Ordner hierher ziehen fügt sie hinzu (sie bleiben, wo sie sind)."
+        title={(p.folders.length
+          ? t('sidebar.projectInfoFolders', { name: p.name, files: tn('common.files', p.files.length), folders: tn('sidebar.folders', p.folders.length) })
+          : t('sidebar.projectInfo', { name: p.name, files: tn('common.files', p.files.length) })) +
+          '\n' +
+          t('sidebar.projectDropHint')}
         onclick={() => app.openProject(p.id)}
         ondblclick={() => (renaming = p.id)}
         onkeydown={(e) => e.key === 'Enter' && app.openProject(p.id)}
@@ -130,12 +158,12 @@
         <Icon name="kanban" size={15} />
         <span class="pname">{p.name}</span>
         {#if deleting === p.id}
-          <button class="rm sure" onclick={(e) => (e.stopPropagation(), (deleting = null), void app.deleteProject(p.id))}>Löschen?</button>
+          <button class="rm sure" onclick={(e) => (e.stopPropagation(), (deleting = null), void app.deleteProject(p.id))}>{t('sidebar.confirmDelete')}</button>
         {:else}
-          <button class="rm" title="Umbenennen" onclick={(e) => (e.stopPropagation(), (renaming = p.id))}><Icon name="pencil" size={11} /></button>
+          <button class="rm" title={t('common.rename')} onclick={(e) => (e.stopPropagation(), (renaming = p.id))}><Icon name="pencil" size={11} /></button>
           <button
             class="rm"
-            title="Projekt löschen (die Dateien bleiben, wo sie sind)"
+            title={t('sidebar.deleteProject')}
             onclick={(e) => (e.stopPropagation(), (deleting = p.id), setTimeout(() => deleting === p.id && (deleting = null), 3000))}
             ><Icon name="x" size={11} /></button
           >
@@ -143,18 +171,92 @@
       </div>
     {/if}
   {:else}
-    {#if naming === null}<p class="hint">Mit + ein Projekt anlegen, dann Dateien und Ordner von überall darauf ziehen.</p>{/if}
+    {#if naming === null}<p class="hint">{t('sidebar.projectsEmpty')}</p>{/if}
   {/each}
 
   <div class="section with-action">
-    Wikis
+    {t('sidebar.smartFolders')}
+    <button class="add" title={t('sidebar.newSmart')} onclick={newSmart}>
+      <Icon name="plus" size={13} />
+    </button>
+  </div>
+  {#if smartNaming !== null}
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      class="pinput"
+      bind:value={smartNaming}
+      placeholder={t('sidebar.smartName')}
+      title={app.smartSummary(app.currentView)}
+      autofocus
+      onfocus={(e) => e.currentTarget.select()}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') {
+          app.saveSmart(smartNaming ?? '');
+          smartNaming = null;
+        } else if (e.key === 'Escape') smartNaming = null;
+      }}
+      onblur={() => (smartNaming = null)}
+    />
+  {/if}
+  {#each app.smartFolders as f (f.id)}
+    {#if smartRenaming === f.id}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="pinput"
+        value={f.name}
+        autofocus
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            app.renameSmart(f.id, e.currentTarget.value);
+            smartRenaming = null;
+          } else if (e.key === 'Escape') smartRenaming = null;
+        }}
+        onblur={() => (smartRenaming = null)}
+      />
+    {:else}
+      <div
+        class="place project"
+        class:current={smartOpen === f.id}
+        role="button"
+        tabindex="0"
+        title={app.smartSummary(f)}
+        onclick={() => app.openSmart(f.id)}
+        ondblclick={() => (smartRenaming = f.id)}
+        onkeydown={(e) => e.key === 'Enter' && app.openSmart(f.id)}
+      >
+        <Icon name="filter" size={15} />
+        <span class="pname">{f.name}</span>
+        {#if filtered && smartOpen !== f.id}
+          <button
+            class="rm"
+            title={t('sidebar.replaceSmart', { summary: app.smartSummary(app.currentView) })}
+            onclick={(e) => (e.stopPropagation(), app.updateSmart(f.id))}><Icon name="target" size={11} /></button
+          >
+        {/if}
+        <button class="rm" title={t('common.rename')} onclick={(e) => (e.stopPropagation(), (smartRenaming = f.id))}><Icon name="pencil" size={11} /></button>
+        <button class="rm" title={t('sidebar.removeSmart')} onclick={(e) => (e.stopPropagation(), app.removeSmart(f.id))}
+          ><Icon name="x" size={11} /></button
+        >
+      </div>
+    {/if}
+  {/each}
+  {#if filtered && !smartOpen && smartNaming === null}
+    <button class="place save" title={app.smartSummary(app.currentView)} onclick={newSmart}>
+      <Icon name="plus" size={13} />{t('sidebar.saveView')}
+    </button>
+  {:else if !app.smartFolders.length && smartNaming === null}
+    <p class="hint">{t('sidebar.smartEmpty')}</p>
+  {/if}
+
+  <div class="section with-action">
+    {t('sidebar.wikis')}
     <span class="grow"></span>
     {#if wikis.overlays.length}
-      <button class="ov" class:pending={wikis.pending} title="Überdeckungen gemeinsamer Bags prüfen und auflösen" onclick={() => (wikis.overlaysOpen = true)}>
+      <button class="ov" class:pending={wikis.pending} title={t('sidebar.overlays')} onclick={() => (wikis.overlaysOpen = true)}>
         <Icon name="layers" size={12} />{wikis.pending || ''}
       </button>
     {/if}
-    <button class="add" title="Neues Wiki aus Bags zusammenstellen (TiddlyWiki)" onclick={() => wikis.open('')}>
+    <button class="add" title={t('sidebar.newWiki')} onclick={() => wikis.open('')}>
       <Icon name="plus" size={13} />
     </button>
   </div>
@@ -163,27 +265,27 @@
       class="place project"
       role="button"
       tabindex="0"
-      title="{w.target.path}&#10;{w.bags.length} Bags{w.lastSync ? ` · zuletzt abgeglichen ${new Date(w.lastSync).toLocaleString()}` : ''}"
+      title={w.target.path + '\n' + tn('sidebar.bags', w.bags.length) + (w.lastSync ? ' · ' + t('sidebar.lastSync', { date: new Date(w.lastSync).toLocaleString(loc()) }) : '')}
       onclick={() => wikis.open(w.name)}
       onkeydown={(e) => e.key === 'Enter' && wikis.open(w.name)}
     >
       <Icon name="book" size={15} />
       <span class="pname">{w.name}</span>
-      <button class="rm" title="Wiki öffnen" onclick={(e) => (e.stopPropagation(), openTarget(w.target.path, w.target.kind))}>
+      <button class="rm" title={t('sidebar.openWiki')} onclick={(e) => (e.stopPropagation(), openTarget(w.target.path, w.target.kind))}>
         <Icon name="open" size={11} />
       </button>
       <button
         class="sync"
         class:spin={wikis.syncing === w.name}
-        title="Abgleichen: Änderungen aus dem Wiki übernehmen, dann ins Wiki schreiben"
+        title={t('sidebar.syncWiki')}
         onclick={(e) => (e.stopPropagation(), wikis.sync(w.name))}><Icon name="sync" size={12} /></button
       >
     </div>
   {:else}
-    <p class="hint">Maps und gemeinsame Bags als TiddlyWiki – mit + anlegen.</p>
+    <p class="hint">{t('sidebar.wikisEmpty')}</p>
   {/each}
 
-  <div class="section">Ordner</div>
+  <div class="section">{t('sidebar.folderTree')}</div>
   <div class="tree" data-autoscroll role="tree">
     {#if app.home}
       <TreeNode entry={homeEntry} />
@@ -191,7 +293,7 @@
   </div>
 
   {#if topTags.length}
-    <div class="section">Tags</div>
+    <div class="section">{t('sidebar.tags')}</div>
     <div class="tags">
       {#each topTags as [t, n] (t)}
         <button class="chip tag" class:on={app.search.trim() === '#' + t} onclick={() => filterTag(t)}>
@@ -222,6 +324,30 @@
     font-weight: 650;
     letter-spacing: -0.02em;
     font-size: 15px;
+  }
+  .gear {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    margin-right: 2px;
+    border-radius: 6px;
+    color: var(--fg-faint);
+  }
+  .gear:hover {
+    background: var(--bg-sunken);
+    color: var(--fg);
+  }
+  .gear.dot::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
   }
   .demo {
     margin-left: 8px;
@@ -261,6 +387,16 @@
     background: var(--accent-soft);
     box-shadow: inset 0 0 0 1.5px var(--accent);
     color: var(--fg);
+  }
+  .save {
+    width: 100%;
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg-faint);
+    text-align: left;
+  }
+  .save:hover {
+    color: var(--accent);
   }
   .tree {
     flex: none;

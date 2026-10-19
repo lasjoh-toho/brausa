@@ -36,7 +36,7 @@ mod gtk_layer {
 
     pub fn prepare(window: &tauri::Window) -> Result<(), String> {
         let vbox = window.default_vbox().map_err(|e| e.to_string())?;
-        let main = vbox.children().last().cloned().ok_or("Kein Webview im Fenster")?;
+        let main = vbox.children().last().cloned().ok_or_else(|| crate::tr!("Kein Webview im Fenster", "No webview in the window"))?;
         vbox.remove(&main);
         let overlay = gtk::Overlay::new();
         overlay.add(&main);
@@ -153,15 +153,15 @@ impl Web {
 
     /// Opens (or navigates) the panel at `url` and puts it at `b` (CSS pixels of the main window).
     pub fn open(&self, app: &AppHandle, url: &str, b: Bounds) -> Result<(), String> {
-        let url = Url::parse(url).map_err(|e| format!("Ungültige Adresse: {e}"))?;
+        let url = Url::parse(url).map_err(|e| crate::tr!(format!("Ungültige Adresse: {e}"), format!("Invalid address: {e}")))?;
         if !allowed(&url) {
-            return Err(format!("„{}“-Adressen öffnet das Web-Fenster nicht", url.scheme()));
+            return Err(crate::tr!(format!("„{}“-Adressen öffnet das Web-Fenster nicht", url.scheme()), format!("The web panel does not open “{}” addresses", url.scheme())));
         }
         if let Some(w) = app.get_webview(LABEL) {
             w.navigate(url).map_err(|e| e.to_string())?;
             return self.place(app, b, true);
         }
-        let window = app.get_window("main").ok_or("Kein Hauptfenster")?;
+        let window = app.get_window("main").ok_or_else(|| crate::tr!("Kein Hauptfenster", "No main window"))?;
         let data = app.path().app_data_dir().map_err(|e| e.to_string())?.join("web");
         let (title, load) = (app.clone(), app.clone());
         let me = app.clone();
@@ -239,13 +239,13 @@ impl Web {
 
     /// Runs `js` in the page and returns its JSON-encoded result.
     pub fn eval(&self, app: &AppHandle, js: &str) -> Result<String, String> {
-        let w = app.get_webview(LABEL).ok_or("Das Web-Fenster ist nicht offen")?;
+        let w = app.get_webview(LABEL).ok_or_else(|| crate::tr!("Das Web-Fenster ist nicht offen", "The web panel is not open"))?;
         let (tx, rx) = mpsc::channel();
         w.eval_with_callback(js, move |r| {
             let _ = tx.send(r);
         })
         .map_err(|e| e.to_string())?;
-        rx.recv_timeout(Duration::from_secs(10)).map_err(|_| "Die Seite antwortet nicht".to_string())
+        rx.recv_timeout(Duration::from_secs(10)).map_err(|_| crate::tr!("Die Seite antwortet nicht", "The page does not respond").to_string())
     }
 
     /// Saves the page as it is shown now (HTML after scripts ran) into `dir`.
@@ -286,7 +286,7 @@ impl Web {
             return Ok(p);
         }
         let server = tiny_http::Server::http("127.0.0.1:0").map_err(|e| e.to_string())?;
-        let p = server.server_addr().to_ip().map(|a| a.port()).ok_or("Kein Port")?;
+        let p = server.server_addr().to_ip().map(|a| a.port()).ok_or_else(|| crate::tr!("Kein Port", "No port"))?;
         let sites = self.sites.clone();
         std::thread::spawn(move || {
             for req in server.incoming_requests() {

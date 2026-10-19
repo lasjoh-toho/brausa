@@ -8,6 +8,7 @@ import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../cor
 import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiOverlay, WikiRecipe } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
+import { t } from '../i18n/index.svelte';
 
 interface Node {
   entry: Entry;
@@ -184,7 +185,7 @@ export class DemoBackend implements Backend {
 
   async listDir(path: string): Promise<Entry[]> {
     const n = this.find(path);
-    if (!n?.children) throw new Error(`Kein Ordner: ${path}`);
+    if (!n?.children) throw new Error(t('demo.notAFolder', { path }));
     return [...n.children.values()].map((c) => this.decorate(c.entry));
   }
 
@@ -216,16 +217,16 @@ export class DemoBackend implements Backend {
   async transfer(paths: string[], targetDir: string, mode: TransferMode): Promise<TransferResult> {
     const target = this.find(targetDir);
     const res: TransferResult = { moved: {}, errors: [] };
-    if (!target?.children) return { moved: {}, errors: paths.map((p) => ({ path: p, message: 'Ziel fehlt' })) };
+    if (!target?.children) return { moved: {}, errors: paths.map((p) => ({ path: p, message: t('demo.noTarget') })) };
     for (const p of paths) {
       const src = this.find(p);
       const parent = this.find(dirname(p));
       if (!src || !parent?.children) {
-        res.errors.push({ path: p, message: 'Nicht gefunden' });
+        res.errors.push({ path: p, message: t('demo.notFound') });
         continue;
       }
       if (src.children && isWithin(targetDir, p)) {
-        res.errors.push({ path: p, message: 'Ordner kann nicht in sich selbst verschoben werden' });
+        res.errors.push({ path: p, message: t('demo.intoItself') });
         continue;
       }
       if (mode === 'move' && dirname(p) === targetDir) continue;
@@ -296,13 +297,13 @@ export class DemoBackend implements Backend {
   }
 
   async fileData(path: string) {
-    if (!this.find(path)) throw new Error('Nicht gefunden');
-    if (extOf(path) !== 'pdf') throw new Error('Demo-Modus: nur PDFs haben Inhalt');
+    if (!this.find(path)) throw new Error(t('demo.notFound'));
+    if (extOf(path) !== 'pdf') throw new Error(t('demo.onlyPdfs'));
     return DEMO_PDF.slice().buffer as ArrayBuffer;
   }
 
   async readText(path: string) {
-    if (!this.find(path)) throw new Error('Nicht gefunden');
+    if (!this.find(path)) throw new Error(t('demo.notFound'));
     if (extOf(path) === 'html') return DEMO_HTML;
     return '# Notizen\n\nDie Map soll **Snippets** aus PDFs und Webseiten aufnehmen.\n\n- Stapel wie in LiquidText\n- Rücksprung zur Quelle\n';
   }
@@ -318,9 +319,9 @@ export class DemoBackend implements Backend {
     const parent = this.find(dirname(path));
     const node = this.find(path);
     const name = newName.trim();
-    if (!parent?.children || !node) throw new Error('Nicht gefunden');
-    if (!name || /[\\/]/.test(name)) throw new Error('Ungültiger Name');
-    if (name !== node.entry.name && parent.children.has(name)) throw new Error(`„${name}“ existiert bereits`);
+    if (!parent?.children || !node) throw new Error(t('demo.notFound'));
+    if (!name || /[\\/]/.test(name)) throw new Error(t('demo.invalidName'));
+    if (name !== node.entry.name && parent.children.has(name)) throw new Error(t('demo.exists', { name }));
     parent.children.delete(node.entry.name);
     this.retarget(node, joinPath(dirname(path), name));
     this.relink(path, joinPath(dirname(path), name));
@@ -329,22 +330,40 @@ export class DemoBackend implements Backend {
     return this.decorate(node.entry);
   }
 
+  async compress(): Promise<string> {
+    throw new Error(t('demo.compressAppOnly'));
+  }
+
+  /** Demo files have no content; equal size stands in for equal content. */
+  async findDuplicates(paths: string[]): Promise<string[][]> {
+    const by = new Map<number, string[]>();
+    for (const p of paths) {
+      const e = this.find(p)?.entry;
+      if (e && e.kind === 'file' && e.size > 0) by.set(e.size, [...(by.get(e.size) ?? []), p]);
+    }
+    return [...by.values()].filter((g) => g.length > 1);
+  }
+
+  async archiveConflicts(): Promise<string[]> {
+    return [];
+  }
+
   async trash(paths: string[]): Promise<TransferResult> {
     const res: TransferResult = { moved: {}, errors: [] };
     for (const p of paths) {
       const parent = this.find(dirname(p));
       if (parent?.children?.delete(basename(p))) res.moved[p] = '';
-      else res.errors.push({ path: p, message: 'Nicht gefunden' });
+      else res.errors.push({ path: p, message: t('demo.notFound') });
     }
     return res;
   }
 
   async openDefault(path: string) {
-    throw new Error(`Demo-Modus: „${basename(path)}“ würde jetzt in der Standard-App geöffnet.`);
+    throw new Error(t('demo.wouldOpen', { name: basename(path) }));
   }
 
   async reveal(path: string) {
-    throw new Error(`Demo-Modus: „${basename(path)}“ würde im Dateimanager gezeigt.`);
+    throw new Error(t('demo.wouldReveal', { name: basename(path) }));
   }
 
   async watch() {}
@@ -397,7 +416,7 @@ export class DemoBackend implements Backend {
   }
 
   async createProject(name: string) {
-    if (!name.trim()) throw new Error('Der Projektname fehlt');
+    if (!name.trim()) throw new Error(t('demo.projectNameMissing'));
     const id = 'p_' + Date.now().toString(36);
     const p: ProjectInfo = { id, name: name.trim(), color: null, files: [], folders: [], root: `/.projects/${id}` };
     this.projs.push(p);
@@ -406,7 +425,7 @@ export class DemoBackend implements Backend {
 
   private proj(id: string) {
     const p = this.projs.find((x) => x.id === id);
-    if (!p) throw new Error(`Projekt „${id}“ gibt es nicht`);
+    if (!p) throw new Error(t('demo.noSuchProject', { id }));
     return p;
   }
 
@@ -474,7 +493,7 @@ export class DemoBackend implements Backend {
   }
 
   private requireProject(root: string) {
-    if (!this.libs.some((l) => l.root === root) && !this.projs.some((p) => p.root === root)) throw new Error(`„${root}“ ist kein Projekt`);
+    if (!this.libs.some((l) => l.root === root) && !this.projs.some((p) => p.root === root)) throw new Error(t('demo.notAProject', { root }));
   }
 
   async listMaps(root: string): Promise<MapInfo[]> {
@@ -485,7 +504,7 @@ export class DemoBackend implements Backend {
   async loadMap(root: string, id: string) {
     this.requireProject(root);
     const m = this.readMaps(root)[id];
-    if (!m) throw new Error('Map nicht gefunden');
+    if (!m) throw new Error(t('demo.mapNotFound'));
     return structuredClone(m);
   }
 
@@ -539,7 +558,7 @@ export class DemoBackend implements Backend {
 
   // The web panel is a native webview: only in the desktop app.
   private noWeb(): never {
-    throw new Error('Das Web-Fenster gibt es nur in der Desktop-App.');
+    throw new Error(t('demo.webAppOnly'));
   }
   async webOpen() {
     this.noWeb();
@@ -577,7 +596,7 @@ export class DemoBackend implements Backend {
   }
 
   async deleteWikiBag(name: string) {
-    if (this.recipes.some((r) => r.bags.includes(name))) throw new Error(`Bag „${name}“ wird noch von einem Wiki benutzt`);
+    if (this.recipes.some((r) => r.bags.includes(name))) throw new Error(t('demo.bagInUse', { name }));
     this.bags = this.bags.filter((b) => b.name !== name);
   }
 
@@ -634,7 +653,7 @@ export class DemoBackend implements Backend {
 
   async resolveOverlay(title: string, bag: string, how: OverlayResolution) {
     const o = this.overlays.find((x) => x.title === title && x.bag === bag);
-    if (!o) throw new Error(`„${title}“ wird nicht mehr überdeckt`);
+    if (!o) throw new Error(t('demo.notOverlaid', { title }));
     const drop = (recipe: string) => (o.variants = o.variants.filter((v) => v.recipe !== recipe));
     if (how.action === 'promote') {
       o.base = { ...o.variants.find((v) => v.recipe === how.recipe)!.fields };
@@ -659,7 +678,7 @@ export class DemoBackend implements Backend {
   }
 
   async syncWiki(): Promise<never> {
-    throw new Error('Demo-Modus: Der Abgleich mit TiddlyWiki braucht die App (Dateien auf der Festplatte).');
+    throw new Error(t('demo.syncAppOnly'));
   }
 
   async deleteMap(root: string, id: string) {

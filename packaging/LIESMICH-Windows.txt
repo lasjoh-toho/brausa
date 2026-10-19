@@ -52,6 +52,19 @@ Windows wieder einschalten. Überlegen Sie das gut; im Zweifel brausa auf diesem
 Rechner nicht verwenden.
 
 
+UPDATES
+-------
+brausa sucht kurz nach dem Start nach einer neuen Version (abschaltbar in den
+Einstellungen, Zahnrad oben in der Seitenleiste) und installiert sie auf Wunsch.
+Updates sind signiert; brausa installiert nur Updates seines Herausgebers.
+
+
+SPRACHE
+-------
+brausa folgt der Sprache des Systems (Deutsch oder Englisch, sonst Englisch).
+Einstellungen (Zahnrad) > Sprache stellt sie um.
+
+
 DEINSTALLIEREN
 --------------
 Einstellungen > Apps > Installierte Apps > brausa > Deinstallieren. Tags, Farben

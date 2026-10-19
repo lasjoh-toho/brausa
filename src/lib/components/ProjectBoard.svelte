@@ -8,6 +8,7 @@
   // pdf.js is large: load the reader only when a document is opened.
   const loadReader = () => import('./Reader.svelte');
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   /** Maps belong to a project: the open one, one holding this folder, or the last one used. */
   const project = $derived(app.boardProject);
@@ -31,15 +32,15 @@
   {#if !project}
     <div class="empty">
       <Icon name="nodes" size={28} />
-      <p>Maps gehören zu einem Projekt. Projekte sammeln Dateien und Ordner von überall.</p>
+      <p>{t('map.board.noProject')}</p>
       {#if app.projects.length}
         <div class="pick">
           {#each app.projects as p (p.id)}<button class="btn" onclick={() => app.openProject(p.id)}><Icon name="kanban" size={13} />{p.name}</button>{/each}
         </div>
       {/if}
       <form class="pick" onsubmit={(e) => (e.preventDefault(), naming.trim() && void app.createProject(naming).then(() => (naming = '')))}>
-        <input bind:value={naming} placeholder="Neues Projekt …" />
-        <button class="btn primary" disabled={!naming.trim()}>Anlegen</button>
+        <input bind:value={naming} placeholder={t('map.board.newProject')} />
+        <button class="btn primary" disabled={!naming.trim()}>{t('map.board.create')}</button>
       </form>
     </div>
   {:else if board.mode === 'kanban'}

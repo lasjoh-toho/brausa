@@ -5,6 +5,7 @@
   import { DEFAULT_STATUSES, ancestors, type MapCard } from '../core/map';
   import BoardSwitch from './BoardSwitch.svelte';
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   /** The project's cards with a status, as columns. Same data as the map, another view. */
   const m = $derived(board.map);
@@ -15,6 +16,10 @@
     const extra = [...new Set(cards.map((c) => c.status!))].filter((s) => !base.includes(s));
     return [...base, ...extra].map((s) => ({ status: s, cards: cards.filter((c) => c.status === s) }));
   });
+
+  /** Default statuses are stored in German; show them in the UI language. */
+  const STATUS_KEYS: Record<string, string> = { Offen: 'map.status.open', 'In Arbeit': 'map.status.doing', Erledigt: 'map.status.done' };
+  const statusLabel = (s: string) => (STATUS_KEYS[s] ? t(STATUS_KEYS[s]) : s);
 
   const fileRef = (c: MapCard) => c.refs?.find((r) => r.kind === 'file');
 
@@ -69,8 +74,8 @@
   }
 
   function isUndo(e: KeyboardEvent) {
-    const t = e.target as HTMLElement;
-    return (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && t.tagName !== 'INPUT';
+    const el = e.target as HTMLElement;
+    return (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && el.tagName !== 'INPUT';
   }
 
   function autofocus(n: HTMLElement) {
@@ -81,14 +86,14 @@
 <section class="ck">
   <header>
     <span class="title">{m?.title ?? ''} · Kanban</span>
-    <span class="hint">Karten kommen über „Kanban“ in der Map hierher. Klick zeigt die Karte auf der Map.</span>
+    <span class="hint">{t('map.kanban.hint')}</span>
     <div class="right"><BoardSwitch /></div>
   </header>
 
   <div class="cols">
     {#each columns as col (col.status)}
       <div class="col" class:over={dragging?.over === col.status} data-status={col.status}>
-        <div class="col-head">{col.status}<span class="n">{col.cards.length}</span></div>
+        <div class="col-head">{statusLabel(col.status)}<span class="n">{col.cards.length}</span></div>
         <div class="col-body">
           {#each col.cards as c (c.id)}
             {@const r = fileRef(c)}
@@ -102,7 +107,7 @@
               onpointerdown={(e) => down(e, c)}
             >
               {#if pic}<img src={pic} alt="" draggable="false" />{/if}
-              <div class="t">{c.title || 'Ohne Titel'}</div>
+              <div class="t">{c.title || t('map.untitled')}</div>
               {#if path(c)}<div class="p">{path(c)}</div>{/if}
               {#if c.refs?.length}
                 <div class="refs">
@@ -126,7 +131,7 @@
         <input
           use:autofocus
           bind:value={newCol}
-          placeholder="Name der Spalte"
+          placeholder={t('map.kanban.columnName')}
           onkeydown={(e) => {
             if (e.key === 'Enter') addColumn();
             if (e.key === 'Escape') adding = false;
@@ -134,18 +139,18 @@
           onblur={addColumn}
         />
       {:else}
-        <button class="btn" onclick={() => (adding = true)}><Icon name="plus" size={13} /> Spalte</button>
+        <button class="btn" onclick={() => (adding = true)}><Icon name="plus" size={13} /> {t('map.kanban.column')}</button>
       {/if}
-      <div class="col none" class:over={dragging?.over === '__none'} data-status="__none">Hierher ziehen: aus dem Kanban nehmen</div>
+      <div class="col none" class:over={dragging?.over === '__none'} data-status="__none">{t('map.kanban.dropRemove')}</div>
     </div>
   </div>
 
   {#if dragging}
     {@const c = m?.cards[dragging.id]}
-    <div class="float" style:left="{dragging.x + 8}px" style:top="{dragging.y + 8}px">{c?.title || 'Ohne Titel'}</div>
+    <div class="float" style:left="{dragging.x + 8}px" style:top="{dragging.y + 8}px">{c?.title || t('map.untitled')}</div>
   {/if}
   {#if m && !columns.some((c) => c.cards.length)}
-    <p class="empty">Noch keine Karten im Kanban. Karte in der Map auswählen und unten auf „Kanban“ klicken.</p>
+    <p class="empty">{t('map.kanban.empty')}</p>
   {/if}
 </section>
 

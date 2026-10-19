@@ -429,7 +429,7 @@ impl Store {
 
     fn bag_dir(&self, name: &str) -> io::Result<PathBuf> {
         if !valid_bag(name) {
-            return Err(err(format!("Ungültiger Bag-Name „{name}“")));
+            return Err(err(crate::tr!(format!("Ungültiger Bag-Name „{name}“"), format!("Invalid bag name “{name}”"))));
         }
         Ok(self.dir.join("bags").join(name))
     }
@@ -461,7 +461,7 @@ impl Store {
 
     pub fn delete_bag(&self, name: &str) -> io::Result<()> {
         if self.recipes().iter().any(|r| r.bags.iter().any(|b| b == name)) {
-            return Err(err(format!("Bag „{name}“ wird noch von einem Wiki benutzt")));
+            return Err(err(crate::tr!(format!("Bag „{name}“ wird noch von einem Wiki benutzt"), format!("Bag “{name}” is still used by a wiki"))));
         }
         let d = self.bag_dir(name)?;
         if d.exists() {
@@ -516,7 +516,7 @@ impl Store {
     /// Create or replace a recipe. A new recipe gets its own writable top bag.
     pub fn put_recipe(&self, mut r: Recipe) -> io::Result<Recipe> {
         if !valid_bag(&r.name) {
-            return Err(err(format!("Ungültiger Name „{}“", r.name)));
+            return Err(err(crate::tr!(format!("Ungültiger Name „{}“", r.name), format!("Invalid name “{}”", r.name))));
         }
         if r.target.kind != "folder" && r.target.kind != "file" {
             return Err(err("Ziel muss ein Wiki-Ordner oder eine Wiki-Datei sein"));
@@ -527,7 +527,7 @@ impl Store {
         }
         for b in &r.bags {
             if !b.starts_with(MAP_BAG) && !self.bag_dir(b)?.exists() {
-                self.put_bag(&BagInfo { name: b.clone(), description: format!("Eigener Bag von „{}“", r.name), ..Default::default() })?;
+                self.put_bag(&BagInfo { name: b.clone(), description: crate::tr!(format!("Eigener Bag von „{}“", r.name), format!("Own bag of “{}”", r.name)), ..Default::default() })?;
             }
         }
         let mut list = self.recipes();
@@ -558,7 +558,7 @@ impl Store {
             return Ok(plugin_tiddlers().into_iter().map(|f| (f["title"].clone(), f)).collect());
         }
         if let Some(spec) = bag.strip_prefix(MAP_BAG) {
-            let (root, id) = spec.split_once('|').ok_or_else(|| err("Ungültiger Map-Bag"))?;
+            let (root, id) = spec.split_once('|').ok_or_else(|| err(crate::tr!("Ungültiger Map-Bag", "Invalid map bag")))?;
             let m = maps::load(Path::new(root), id)?;
             return Ok(map_tiddlers(&m).into_iter().map(|f| (f["title"].clone(), f)).collect());
         }
@@ -614,7 +614,7 @@ impl Store {
             .overlays()?
             .into_iter()
             .find(|o| o.title == title && o.bag == bag)
-            .ok_or_else(|| err(format!("„{title}“ wird nicht mehr überdeckt")))?;
+            .ok_or_else(|| err(crate::tr!(format!("„{title}“ wird nicht mehr überdeckt"), format!("“{title}” is no longer overlaid"))))?;
         let recipes = self.recipes();
         let own_bag = |recipe: &str| recipes.iter().find(|r| r.name == recipe).and_then(|r| r.bags.last().cloned());
         let shared_writable = !bag.starts_with('@') && !self.bag_readonly(bag);
@@ -627,7 +627,7 @@ impl Store {
         match how {
             Resolve::Promote { recipe, all } => {
                 if !shared_writable {
-                    return Err(err(format!("„{bag}“ ist schreibgeschützt; nur Verwerfen oder Behalten ist möglich")));
+                    return Err(err(crate::tr!(format!("„{bag}“ ist schreibgeschützt; nur Verwerfen oder Behalten ist möglich"), format!("“{bag}” is read-only; you can only discard or keep"))));
                 }
                 let v = o.variants.iter().find(|v| v.recipe == recipe).ok_or_else(|| err("Diese Fassung gibt es nicht"))?;
                 self.put_tiddler(bag, &strip_wiki_fields(&v.fields))?;
@@ -639,7 +639,7 @@ impl Store {
             }
             Resolve::Merge { text } => {
                 if !shared_writable {
-                    return Err(err(format!("„{bag}“ ist schreibgeschützt")));
+                    return Err(err(crate::tr!(format!("„{bag}“ ist schreibgeschützt"), format!("“{bag}” is read-only"))));
                 }
                 let mut f = o.base.clone();
                 f.insert("text".into(), text);
@@ -666,7 +666,7 @@ impl Store {
     /// Two-way sync: changes made in the wiki go back to bags and maps, then
     /// the recipe is written to the wiki.
     pub fn sync(&self, name: &str) -> io::Result<SyncReport> {
-        let mut r = self.recipes().into_iter().find(|x| x.name == name).ok_or_else(|| err(format!("Wiki „{name}“ gibt es nicht")))?;
+        let mut r = self.recipes().into_iter().find(|x| x.name == name).ok_or_else(|| err(crate::tr!(format!("Wiki „{name}“ gibt es nicht"), format!("There is no wiki “{name}”"))))?;
         let mut rep = SyncReport::default();
         let state: SyncState =
             fs::read(self.state_file(name)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
@@ -677,7 +677,7 @@ impl Store {
         if r.target.kind == "file" {
             if let (Some(before), Some(now)) = (state.file_mtime, mtime(target)) {
                 if now != before && !first {
-                    rep.warnings.push("Die Wiki-Datei wurde seit dem letzten Abgleich gespeichert; ihre Änderungen werden übernommen.".into());
+                    rep.warnings.push(crate::tr!("Die Wiki-Datei wurde seit dem letzten Abgleich gespeichert; ihre Änderungen werden übernommen.", "The wiki file was saved since the last sync; its changes are taken over.").into());
                 }
             }
         }
@@ -722,7 +722,7 @@ impl Store {
                     continue;
                 }
                 if *bag != top {
-                    rep.warnings.push(format!("„{title}“ kommt aus dem Bag „{bag}“ und erscheint beim nächsten Abgleich wieder"));
+                    rep.warnings.push(crate::tr!(format!("„{title}“ kommt aus dem Bag „{bag}“ und erscheint beim nächsten Abgleich wieder"), format!("“{title}” comes from the bag “{bag}” and will reappear on the next sync")));
                     continue;
                 }
                 if before.get(title).map(|(f, b)| b == bag && hash(f) == *h).unwrap_or(false) {
@@ -767,14 +767,14 @@ fn apply_card_edits(root: &Path, map_id: &str, edits: &[Fields], state: &SyncSta
     for f in edits {
         let id = &f["brausa-id"];
         let Some(card) = m.get_mut("cards").and_then(|c| c.get_mut(id.as_str())).and_then(Value::as_object_mut) else {
-            rep.warnings.push(format!("Karte zu „{}“ gibt es nicht mehr", f["title"]));
+            rep.warnings.push(crate::tr!(format!("Karte zu „{}“ gibt es nicht mehr", f["title"]), format!("The card for “{}” no longer exists", f["title"])));
             continue;
         };
         // Changed in brausa too since the last sync? Then brausa wins (the wiki copy is in the report).
         if let Some(now) = current.get(id) {
             let then = state.pushed.get(&now["title"]).map(|(_, h)| h.clone());
             if then.as_deref() != Some(hash(now).as_str()) && then.is_some() {
-                rep.conflicts.push(format!("{} (Karte in brausa geändert, Wiki-Fassung nicht übernommen)", f["title"]));
+                rep.conflicts.push(crate::tr!(format!("{} (Karte in brausa geändert, Wiki-Fassung nicht übernommen)", f["title"]), format!("{} (card changed in brausa, wiki version not taken over)", f["title"])));
                 continue;
             }
         }
@@ -862,7 +862,7 @@ fn read_wiki(t: &Target) -> io::Result<WikiTiddlers> {
         "folder" => Ok(read_tiddler_dir(&p.join("tiddlers"))),
         _ => {
             if !p.exists() {
-                return Err(err(format!("Wiki-Datei „{}“ nicht gefunden", t.path)));
+                return Err(err(crate::tr!(format!("Wiki-Datei „{}“ nicht gefunden", t.path), format!("Wiki file “{}” not found", t.path))));
             }
             let html = fs::read_to_string(p)?;
             let mut out = BTreeMap::new();
@@ -873,7 +873,7 @@ fn read_wiki(t: &Target) -> io::Result<WikiTiddlers> {
                 }
             }
             if out.is_empty() {
-                return Err(err("Keine TiddlyWiki-Datei ab Version 5.2 (kein Tiddler-Speicher gefunden)"));
+                return Err(err(crate::tr!("Keine TiddlyWiki-Datei ab Version 5.2 (kein Tiddler-Speicher gefunden)", "Not a TiddlyWiki 5.2+ file (no tiddler store found)")));
             }
             Ok(out)
         }

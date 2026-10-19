@@ -152,7 +152,13 @@ export interface Backend {
   /** EXIF GPS + capture date, batched. */
   mediaInfo(paths: string[]): Promise<MediaInfo[]>;
   rename(path: string, newName: string): Promise<Entry>;
-  /** Move to the system trash. `moved` lists the trashed paths. */
+  /** Packs files and folders into a new ZIP next to the first one; returns its path. */
+  compress(paths: string[]): Promise<string>;
+  /** Groups of files with identical content among `paths`, largest waste first. */
+  findDuplicates(paths: string[]): Promise<string[][]>;
+  /** Names in an archive folder that dropping `names` there would replace. */
+  archiveConflicts(dir: string, names: string[]): Promise<string[]>;
+  /** Move to the system trash (inside an archive: remove from it). `moved` lists the removed paths. */
   trash(paths: string[]): Promise<TransferResult>;
   openDefault(path: string): Promise<void>;
   reveal(path: string): Promise<void>;

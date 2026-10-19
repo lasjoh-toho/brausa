@@ -21,7 +21,7 @@
         data-drop="crumb"
         data-path={c.path}
       >
-        {c.name}
+        {c.name.replace(/!$/, '')}
       </div>
     {/each}
   </div>

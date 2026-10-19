@@ -5,6 +5,7 @@
   import type { PDFDocumentProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
   import './textlayer.css';
   import { app } from '../state/app.svelte';
+  import { t } from '../i18n/index.svelte';
 
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -87,7 +88,7 @@
   {#if error}
     <p class="msg">{error}</p>
   {:else if !pdf}
-    <p class="msg">PDF wird geladen …</p>
+    <p class="msg">{t('pdf.loading')}</p>
   {:else}
     {#each sizes as s, i (i)}
       <div class="page" style="width: {s.w * scale}px; height: {s.h * scale}px; --total-scale-factor: {scale}; --scale-round-x: 1px; --scale-round-y: 1px" use:page={{ n: i + 1, scale }}></div>

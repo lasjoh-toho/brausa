@@ -8,6 +8,7 @@
   import { filterEntries } from '../core/views';
   import { family } from '../core/format';
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   /**
    * "Bausteine": the project's files and folders, to drag onto the map
@@ -47,14 +48,14 @@
 
 <aside class="panel">
   <div class="head">
-    <Icon name="folder" size={14} /> Dateien
+    <Icon name="folder" size={14} /> {t('reader.panel.files')}
     <span class="n">{files.length}</span>
   </div>
-  <input class="search" bind:value={q} placeholder="Filtern … *.pdf #tag" spellcheck="false" />
-  <div class="hint">Auf die Map ziehen legt eine Karte an; rechter Kartenrand verknüpft. Karte hierher ziehen verknüpft sie mit der Datei.</div>
+  <input class="search" bind:value={q} placeholder={t('reader.panel.filter')} spellcheck="false" />
+  <div class="hint">{t('reader.panel.hint')}</div>
 
   {#if dirs.length && !q}
-    <div class="sec">Ordner</div>
+    <div class="sec">{t('reader.panel.folders')}</div>
     <div class="dirs">
       {#each dirs as d (d.path)}
         <div
@@ -71,10 +72,10 @@
     </div>
   {/if}
 
-  <div class="sec">{q ? 'Treffer' : 'Zuletzt geändert'}</div>
+  <div class="sec">{q ? t('reader.panel.matches') : t('reader.panel.recent')}</div>
   <div class="list" data-autoscroll>
     {#each shown as e (e.path)}
-      {@const t = app.thumbOf(e)}
+      {@const th = app.thumbOf(e)}
       <div
         class="item"
         role="button"
@@ -85,7 +86,7 @@
         ondblclick={() => (READABLE.has(e.ext) ? board.openReader({ kind: 'file', path: e.path, name: e.name, ext: e.ext }) : app.open(e))}
       >
         <div class="thumb">
-          {#if t}<img src={t} alt="" draggable="false" />{:else}<span>{e.ext || family(e.ext)}</span>{/if}
+          {#if th}<img src={th} alt="" draggable="false" />{:else}<span>{e.ext || family(e.ext)}</span>{/if}
         </div>
         <div class="meta">
           <div class="name">{e.name}</div>
@@ -93,7 +94,7 @@
         </div>
       </div>
     {:else}
-      <p class="none">{loading ? 'Lädt …' : 'Keine Dateien'}</p>
+      <p class="none">{loading ? t('reader.loading') : t('reader.panel.none')}</p>
     {/each}
   </div>
 </aside>

@@ -14,8 +14,20 @@ export function isCopyKey(e: { altKey: boolean; ctrlKey: boolean }): boolean {
   return isMac ? e.altKey : e.ctrlKey;
 }
 
-export const modLabel = isMac ? '⌘' : 'Strg';
-export const copyLabel = isMac ? '⌥' : 'Strg';
+/** German keyboards say Strg, others Ctrl; read once at start (see i18n, which this file must not import). */
+function ctrlName(): string {
+  let choice = 'system';
+  try {
+    choice = JSON.parse(localStorage.getItem('brausa:lang') ?? '"system"');
+  } catch {
+    /* default */
+  }
+  const lang = choice === 'system' && typeof navigator !== 'undefined' ? (navigator.language ?? '') : choice;
+  return lang.toLowerCase().startsWith('de') ? 'Strg' : 'Ctrl';
+}
+
+export const modLabel = isMac ? '⌘' : ctrlName();
+export const copyLabel = isMac ? '⌥' : ctrlName();
 
 /** localStorage that never throws (private windows, blocked storage). */
 export const store = {
