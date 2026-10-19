@@ -19,6 +19,8 @@
   import Toasts from './lib/components/Toasts.svelte';
   import ContextMenu from './lib/components/ContextMenu.svelte';
   import Confirm from './lib/components/Confirm.svelte';
+  import BatchRename from './lib/components/BatchRename.svelte';
+  import { inArchive } from './lib/core/archive';
   import ProjectBoard from './lib/components/ProjectBoard.svelte';
   import WikiEditor from './lib/components/WikiEditor.svelte';
   import OverlayTool from './lib/components/OverlayTool.svelte';
@@ -52,7 +54,7 @@
       e.preventDefault();
       return;
     }
-    if (wikis.editing !== null || wikis.overlaysOpen || app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.dialog || app.renaming) return;
+    if (wikis.editing !== null || wikis.overlaysOpen || app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.dialog || app.renaming || app.batchRenaming) return;
 
     const sel = app.selectedEntries;
     const k = e.key.toLowerCase();
@@ -64,6 +66,7 @@
       e.preventDefault();
     } else if (e.key === 'F2' || (isMac && e.key === 'Enter')) {
       if (sel.length === 1) app.renaming = sel[0].path;
+      else if (sel.length > 1 && !sel.some((x) => inArchive(x.path))) app.batchRenaming = sel;
       e.preventDefault();
     } else if ((isMac && mod && e.key === 'Backspace') || (!isMac && e.key === 'Delete')) {
       // In a project, Entf takes files out of the project; they stay on disk.
@@ -118,6 +121,7 @@
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
   {#if app.menu}<ContextMenu onTag={() => (tagSource = 'selection')} onPreview={openPreview} />{/if}
   {#if app.dialog}<Confirm />{/if}
+  {#if app.batchRenaming}<BatchRename />{/if}
   <Toasts />
   <DragGhost />
 </div>

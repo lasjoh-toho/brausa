@@ -25,6 +25,9 @@
           ...(one ? [{ label: isMac ? 'Im Finder zeigen' : 'Im Dateimanager zeigen', icon: 'folder', run: () => app.reveal(one) }] : []),
           null,
           ...(one ? [{ label: 'Umbenennen', icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.renaming = one.path) }] : []),
+          ...(targets.length > 1 && !packed
+            ? [{ label: `${targets.length} Objekte umbenennen …`, icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.batchRenaming = targets) }]
+            : []),
           ...(files.length ? [{ label: 'Taggen', icon: 'tag', key: 'T', run: onTag }] : []),
           ...(files.length ? [{ label: 'In die Ablage', icon: 'tray', key: 'S', run: () => app.stage(files) }] : []),
           null,

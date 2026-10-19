@@ -17,6 +17,7 @@ import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
 import { family, formatSize } from '../core/format';
 import { extras, keeper } from '../core/dupes';
+import { renameOrder, type RenameStep } from '../core/rename';
 import { store } from '../platform';
 import { describe, followMoves, placeName, suggestName, type SmartFolder, type SmartView } from '../core/smart';
 
@@ -111,6 +112,8 @@ class AppState {
   /** Lazily generated thumbnail URLs, keyed by path + mtime. */
   thumbs = new SvelteMap<string, string | null>();
   renaming = $state<string | null>(null);
+  /** Entries in the batch rename dialog (null: closed). */
+  batchRenaming = $state<Entry[] | null>(null);
   menu = $state<{ x: number; y: number; entry: Entry | null } | null>(null);
   /** Open confirmation dialog (see ask()). */
   dialog = $state<{ title: string; text: string; ok: string; danger?: boolean; resolve: (yes: boolean) => void } | null>(null);
@@ -900,6 +903,61 @@ class AppState {
     } catch (err) {
       this.toast(String(err), true);
     }
+  }
+
+  /** Names already used in a folder (as far as the current listing knows). */
+  siblingNames(dir: string): string[] {
+    return this.raw.filter((e) => dirname(e.path) === dir).map((e) => e.name);
+  }
+
+  /**
+   * Rename one by one; names wanted by another entry of the batch are moved
+   * aside to a temporary name first, so swaps work. Returns what was done.
+   */
+  private async runRenames(steps: RenameStep[]): Promise<{ from: string; to: string }[]> {
+    const order = renameOrder(steps);
+    const done: { from: string; to: string }[] = [];
+    const aside = new Map<RenameStep, string>();
+    try {
+      for (const o of order)
+        if (o.viaTemp) aside.set(o.step, (await this.backend.rename(o.step.entry.path, `.brausa-${Date.now().toString(36)}-${o.step.entry.name}`)).path);
+      for (const o of order) {
+        const e = await this.backend.rename(aside.get(o.step) ?? o.step.entry.path, o.step.name);
+        aside.delete(o.step);
+        done.push({ from: o.step.entry.path, to: e.path });
+      }
+    } catch (err) {
+      this.toast(String(err).replace(/^Error: /, ''), true);
+      // Files still parked under a temporary name get their old name back.
+      for (const [st, p] of aside) await this.backend.rename(p, st.entry.name).catch(() => {});
+    }
+    return done;
+  }
+
+  /** Apply a planned batch rename (see core/rename), with undo. */
+  async batchRename(steps: RenameStep[]) {
+    this.batchRenaming = null;
+    const done = await this.runRenames(steps);
+    const moved = Object.fromEntries(done.map((d) => [d.from, d.to]));
+    const follow = (m: Record<string, string>) => {
+      this.staging = this.staging.map((e) => (m[e.path] ? { ...e, path: m[e.path], name: basename(m[e.path]) } : e));
+      this.persistStaging();
+      this.followSmart(m);
+    };
+    follow(moved);
+    await this.afterFsChange();
+    if (!done.length) return;
+    this.setSelection(done.map((d) => d.to));
+    this.toast(`${done.length} ${done.length === 1 ? 'Objekt' : 'Objekte'} umbenannt`, false, async () => {
+      const back = done.map((d) => ({
+        entry: { ...this.raw.find((e) => e.path === d.to), path: d.to, name: basename(d.to) } as Entry,
+        name: basename(d.from),
+        changed: true
+      }));
+      const undone = await this.runRenames(back);
+      follow(Object.fromEntries(undone.map((d) => [d.from, d.to])));
+      await this.afterFsChange();
+    });
   }
 
   async trash(entries: Entry[]) {
