@@ -16,6 +16,8 @@ class WikiState {
   /** Shared tiddlers covered by wikis' own versions (see the overlay tool). */
   overlays = $state<WikiOverlay[]>([]);
   overlaysOpen = $state(false);
+  /** Bag overview (matrix, graph, layers). */
+  overviewOpen = $state(false);
   /** Overlays that still need a decision (not identical, not kept). */
   pending = $derived(this.overlays.filter((o) => o.variants.some((v) => !v.kept)).length);
   /** Project maps that can be used as bags: `@map:<root>|<id>` → title. */
@@ -64,6 +66,12 @@ class WikiState {
     await board.flush(true);
     await this.load();
     this.editing = name;
+  }
+
+  /** Open the bag overview with fresh lists. */
+  async openOverview() {
+    await this.load();
+    this.overviewOpen = true;
   }
 
   async save(r: WikiRecipe, previous: string | null) {

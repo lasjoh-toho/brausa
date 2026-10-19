@@ -17,10 +17,43 @@ export interface SmartFolder {
   /** Include subfolders (Stream). */
   recursive: boolean;
   date: DateRange | null;
+  /** Further projects it is linked to (it shows under them too). */
+  projects?: string[];
 }
 
 /** The parts of the current view a smart folder captures. */
-export type SmartView = Omit<SmartFolder, 'id' | 'name'>;
+export type SmartView = Omit<SmartFolder, 'id' | 'name' | 'projects'>;
+
+/** Smart folders under a project: its own (place = the project) and linked ones. */
+export function ofProject(list: SmartFolder[], project: string): { folder: SmartFolder; linked: boolean }[] {
+  return list.flatMap((f): { folder: SmartFolder; linked: boolean }[] =>
+    'project' in f.scope && f.scope.project === project
+      ? [{ folder: f, linked: false }]
+      : f.projects?.includes(project)
+        ? [{ folder: f, linked: true }]
+        : []
+  );
+}
+
+/** Smart folders that are not a project's own (they show in the global list). */
+export function globalOnes(list: SmartFolder[]): SmartFolder[] {
+  return list.filter((f) => !('project' in f.scope));
+}
+
+/** Link or unlink a smart folder with a project. */
+export function toggleLink(f: SmartFolder, project: string): SmartFolder {
+  const set = new Set(f.projects ?? []);
+  if (set.has(project)) set.delete(project);
+  else set.add(project);
+  return { ...f, projects: [...set] };
+}
+
+/** A project is gone: its own smart folders go too, links to it disappear. */
+export function dropProject(list: SmartFolder[], project: string): SmartFolder[] {
+  return list
+    .filter((f) => !('project' in f.scope && f.scope.project === project))
+    .map((f) => (f.projects?.includes(project) ? { ...f, projects: f.projects.filter((p) => p !== project) } : f));
+}
 
 /** Worth saving: something narrows the view beyond the place itself. */
 export function hasFilter(v: SmartView): boolean {

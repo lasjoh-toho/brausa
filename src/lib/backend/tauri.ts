@@ -1,3 +1,4 @@
+import type { SmartFolder } from '../core/smart';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
@@ -17,6 +18,7 @@ import type {
   WalkOptions,
   OverlayResolution,
   WikiBag,
+  WikiLayer,
   WikiOverlay,
   WikiRecipe,
   WikiSyncReport
@@ -114,6 +116,14 @@ export class TauriBackend implements Backend {
 
   compress(paths: string[]) {
     return invoke<string>('compress', { paths });
+  }
+
+  smartFolders() {
+    return invoke<SmartFolder[] | null>('smart_folders');
+  }
+
+  saveSmartFolders(list: SmartFolder[]) {
+    return invoke<void>('save_smart_folders', { list });
   }
 
   findDuplicates(paths: string[]) {
@@ -280,6 +290,10 @@ export class TauriBackend implements Backend {
 
   syncWiki(name: string) {
     return invoke<WikiSyncReport>('tw_sync', { name });
+  }
+
+  wikiLayers(recipe: string) {
+    return invoke<WikiLayer[]>('tw_layers', { recipe });
   }
 
   wikiOverlays() {

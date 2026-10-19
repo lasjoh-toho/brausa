@@ -20,7 +20,7 @@ import { extras, keeper } from '../core/dupes';
 import { renameOrder, type RenameStep } from '../core/rename';
 import { store } from '../platform';
 import { t, tn } from '../i18n/index.svelte';
-import { describe, followMoves, placeName, suggestName, type SmartFolder, type SmartView } from '../core/smart';
+import { describe, dropProject, followMoves, placeName, suggestName, toggleLink, type SmartFolder, type SmartView } from '../core/smart';
 
 export interface DropCell {
   label: string;
@@ -126,7 +126,7 @@ class AppState {
   dialog = $state<{ title: string; text: string; ok: string; danger?: boolean; resolve: (yes: boolean) => void } | null>(null);
 
   /** Saved searches/filters (intelligente Ordner). */
-  smartFolders = $state<SmartFolder[]>(store.get('smartFolders', []));
+  smartFolders = $state<SmartFolder[]>([]);
 
   /** The current place and filters, as a smart folder would store them. */
   currentView = $derived<SmartView>({
@@ -210,6 +210,7 @@ class AppState {
     await this.backend.onChange((paths) => this.onFsChange(paths));
     await this.loadLibraries();
     await this.loadProjects();
+    await this.loadSmartFolders();
     if (this.project) await this.refresh();
     await this.backend.onIndexReport((r) => this.onIndexReport(r));
   }
@@ -275,6 +276,11 @@ class AppState {
   async deleteProject(id: string) {
     const p = this.projects.find((x) => x.id === id);
     await this.backend.deleteProject(id);
+    const kept = dropProject(this.smartFolders, id);
+    if (kept.length !== this.smartFolders.length || kept.some((f, i) => f !== this.smartFolders[i])) {
+      this.smartFolders = kept;
+      this.saveSmartFolders();
+    }
     if (this.project === id) await this.navigate(this.cwd);
     await this.loadProjects();
     this.toast(t('app.projectDeleted', { name: p?.name ?? '' }));
@@ -361,8 +367,28 @@ class AppState {
     return suggestName(this.currentView, this.smartPlace(this.currentView));
   }
 
+  /** Smart folders live in the core (smart.json); older versions kept them in the browser storage. */
+  private async loadSmartFolders() {
+    try {
+      const saved = await this.backend.smartFolders();
+      if (saved) this.smartFolders = saved;
+      else {
+        this.smartFolders = store.get<SmartFolder[]>('smartFolders', []);
+        this.saveSmartFolders();
+      }
+    } catch (e) {
+      this.toast(String(e), true);
+    }
+  }
+
   private saveSmartFolders() {
-    store.set('smartFolders', $state.snapshot(this.smartFolders));
+    this.backend.saveSmartFolders($state.snapshot(this.smartFolders) as SmartFolder[]).catch((e) => this.toast(String(e), true));
+  }
+
+  /** Show a smart folder under a project too, or no longer. */
+  linkSmart(id: string, project: string) {
+    this.smartFolders = this.smartFolders.map((f) => (f.id === id ? toggleLink(f, project) : f));
+    this.saveSmartFolders();
   }
 
   /** Save the current place and filters under a name. */
@@ -659,6 +685,27 @@ class AppState {
   setTileSize(v: number) {
     this.tileSize = v;
     store.set('tileSize', v);
+  }
+
+  /** Filters narrowing the view right now (the empty view offers to remove them). */
+  activeFilters = $derived.by(() => {
+    const f: { kind: 'search' | 'type' | 'date' | 'funnel'; label: string }[] = [];
+    if (this.searchMode === 'filter' && this.search.trim()) f.push({ kind: 'search', label: this.search.trim() });
+    if (this.typeFilter) f.push({ kind: 'type', label: this.typeFilter });
+    if (this.dateFilter) f.push({ kind: 'date', label: '' });
+    if (this.funnel) f.push({ kind: 'funnel', label: basename(this.funnel) });
+    return f;
+  });
+
+  clearFilter(kind: 'search' | 'type' | 'date' | 'funnel') {
+    if (kind === 'search') this.search = '';
+    else if (kind === 'type') this.setTypeFilter(null);
+    else if (kind === 'date') this.setDateFilter(null);
+    else this.setFunnel(null);
+  }
+
+  clearFilters() {
+    for (const f of this.activeFilters) this.clearFilter(f.kind);
   }
 
   setFunnel(path: string | null) {

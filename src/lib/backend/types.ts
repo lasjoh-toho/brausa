@@ -1,3 +1,4 @@
+import type { SmartFolder } from '../core/smart';
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
 import type { ProjectMap } from '../core/map';
 
@@ -74,11 +75,19 @@ export interface WikiRecipe {
   lastSync?: string | null;
   /** Put brausa's bundled plugins (Markdown, tw5-graph, Pinboard, Kanban) into the wiki. */
   plugins: boolean;
+  /** Include the shared bag „lokal“ (file links to this computer, notes tagged lokal/privat) right below the wiki's own bag. */
+  local: boolean;
   /** Overlays kept on purpose as this wiki's own variant. */
   kept?: string[];
 }
 
 export type TiddlerFields = Record<string, string>;
+
+/** One layer of a wiki: `@plugins` (built-in), real bags, `lokal`, `@map:…`, the wiki's own bag on top. */
+export interface WikiLayer {
+  bag: string;
+  titles: string[];
+}
 
 /** A shared tiddler that wikis cover with their own version (MultiWikiServer-style overlay). */
 export interface WikiOverlay {
@@ -154,6 +163,9 @@ export interface Backend {
   rename(path: string, newName: string): Promise<Entry>;
   /** Packs files and folders into a new ZIP next to the first one; returns its path. */
   compress(paths: string[]): Promise<string>;
+  /** Saved smart folders; null before the first save. */
+  smartFolders(): Promise<SmartFolder[] | null>;
+  saveSmartFolders(list: SmartFolder[]): Promise<void>;
   /** Groups of files with identical content among `paths`, largest waste first. */
   findDuplicates(paths: string[]): Promise<string[][]>;
   /** Names in an archive folder that dropping `names` there would replace. */
@@ -222,6 +234,8 @@ export interface Backend {
   deleteWikiRecipe(name: string): Promise<void>;
   syncWiki(name: string): Promise<WikiSyncReport>;
   wikiOverlays(): Promise<WikiOverlay[]>;
+  /** The layers of a wiki in load order (bottom first, the last one wins): bag and its tiddler titles. */
+  wikiLayers(recipe: string): Promise<WikiLayer[]>;
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;

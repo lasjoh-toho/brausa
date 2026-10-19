@@ -11,6 +11,7 @@
   import MapView from './MapView.svelte';
   import CalendarView from './CalendarView.svelte';
   import FileList from './FileList.svelte';
+  import NoResults from './NoResults.svelte';
   import PreviewPane from './PreviewPane.svelte';
   import { t, tn } from '../i18n/index.svelte';
 
@@ -60,7 +61,7 @@
 <section
   class="canvas"
   class:hit={canvasHit}
-  class:panes={app.view === 'panes' && !app.dupes}
+  class:panes={(app.view === 'panes' || app.view === 'table') && !app.dupes}
   bind:this={el}
   data-drop="canvas"
   data-autoscroll
@@ -99,6 +100,8 @@
   {#if app.view === 'panes' && !app.dupes}
     <FileList />
     <PreviewPane />
+  {:else if app.view === 'table' && !app.dupes}
+    <FileList table />
   {:else if app.view === 'kanban' && !app.dupes}
     <div class="kanban">
       {#each app.groups as g (g.key)}
@@ -116,7 +119,7 @@
           </div>
         </div>
       {:else}
-        <p class="empty">{t('files.noFiles')}</p>
+        {#if app.activeFilters.length}<NoResults />{:else}<p class="empty">{t('files.noFiles')}</p>{/if}
       {/each}
     </div>
   {:else}
@@ -132,7 +135,9 @@
         {/each}
       </div>
     {/each}
-    {#if !app.visible.length && !app.loading}
+    {#if !app.visible.length && !app.loading && app.activeFilters.length}
+      <NoResults />
+    {:else if !app.visible.length && !app.loading}
       <p class="empty">
         {app.search ? t('files.nothingFound') : app.project ? t('files.projectEmpty') : t('files.folderEmpty')}
         {#if !app.recursive}<button class="btn" onclick={() => app.setRecursive(true)}>{t('files.showStream')}</button>{/if}
@@ -161,7 +166,7 @@
     outline: none;
     transition: box-shadow 0.15s;
   }
-  /* Three-panel view: list and preview scroll on their own. */
+  /* Three-panel and table view: the list (and preview) scroll on their own. */
   .canvas.panes {
     display: flex;
     padding: 0;

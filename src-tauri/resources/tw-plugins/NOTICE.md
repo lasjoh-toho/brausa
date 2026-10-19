@@ -7,7 +7,7 @@ Graph, Pinboard und Kanban kommen aus den Releases von
 Welches Release eingebaut ist, steht in `TIDDLYVISUALS`. Aktualisieren:
 `scripts/update-tw-plugins.sh [tag]`. Der Workflow *TiddlyVisuals-Plugins* prüft das
 jede Woche und schlägt neue Releases als Pull Request vor.
-Markdown und vis-network: `scripts/build-tw-plugins.sh <Pfad zu TiddlyVisuals>`.
+Markdown, vis-network und Relink: `scripts/build-tw-plugins.sh <Pfad zu TiddlyVisuals>`.
 
 | Datei | Plugin | Lizenz |
 |---|---|---|
@@ -16,3 +16,4 @@ Markdown und vis-network: `scripts/build-tw-plugins.sh <Pfad zu TiddlyVisuals>`.
 | `vis-network.json` | `$:/plugins/flibbles/vis-network` (mit vis-network) | BSD-3-Clause, Apache-2.0/MIT (vis-network) |
 | `pinboard.json` | `$:/plugins/lasjoh-toho/pinboard` (TiddlyVisuals) | BSD-3-Clause |
 | `kanban.json` | `$:/plugins/lasjoh-toho/kanban` (TiddlyVisuals) | BSD-3-Clause |
+| `relink.json` | `$:/plugins/flibbles/relink` 2.5.2 (Flibbles, tw5-relink): Umbenennen folgt in Listen, `story`-Felder und Pinboard-Boards | BSD-3-Clause |

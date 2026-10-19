@@ -1,3 +1,4 @@
+import type { SmartFolder } from '../core/smart';
 /**
  * In-memory backend so the UI runs in any browser (dev, tests, screenshots).
  * Generates a believable folder structure with procedural "photos".
@@ -5,7 +6,7 @@
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiOverlay, WikiRecipe } from './types';
+import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiLayer, WikiOverlay, WikiRecipe } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 import { t } from '../i18n/index.svelte';
@@ -334,6 +335,16 @@ export class DemoBackend implements Backend {
     throw new Error(t('demo.compressAppOnly'));
   }
 
+  private smart: SmartFolder[] | null = null;
+
+  async smartFolders() {
+    return this.smart ? structuredClone(this.smart) : null;
+  }
+
+  async saveSmartFolders(list: SmartFolder[]) {
+    this.smart = structuredClone(list);
+  }
+
   /** Demo files have no content; equal size stands in for equal content. */
   async findDuplicates(paths: string[]): Promise<string[][]> {
     const by = new Map<number, string[]>();
@@ -609,7 +620,7 @@ export class DemoBackend implements Backend {
     const top = r.bags[r.bags.length - 1];
     const bags = !top || top.startsWith('@map:') || this.bags.find((b) => b.name === top)?.readonly ? [...r.bags, own] : r.bags;
     if (!this.bags.some((b) => b.name === own) && bags.includes(own)) await this.putWikiBag({ name: own, description: `Eigener Bag von „${r.name}“`, readonly: false });
-    const out = { ...r, bags, plugins: r.plugins ?? true };
+    const out = { ...r, bags, plugins: r.plugins ?? true, local: r.local ?? true };
     this.recipes = [...this.recipes.filter((x) => x.name !== r.name), out];
     return structuredClone(out);
   }
@@ -665,6 +676,28 @@ export class DemoBackend implements Backend {
     } else if (how.action === 'discard') drop(how.recipe);
     else o.variants = o.variants.map((v) => (v.recipe === how.recipe ? { ...v, kept: how.keep } : v));
     this.overlays = this.overlays.filter((x) => x.variants.length);
+  }
+
+  /** Layers of a wiki, bottom first, with made-up titles where the demo has no tiddlers. */
+  async wikiLayers(recipe: string): Promise<WikiLayer[]> {
+    const r = this.recipes.find((x) => x.name === recipe);
+    if (!r) throw new Error(recipe);
+    const own = `wiki-${r.name}`;
+    const stack = [...(r.plugins ? ['@plugins'] : []), ...r.bags.filter((b) => b !== own), ...(r.local ? ['lokal'] : []), own];
+    const glossary = ['Zoomable User Interface', 'Snippet', 'Bag', 'Recipe', 'Tiddler', 'Karte', 'Projekt', 'Pinboard', 'Kanban', 'Markdown', 'Overlay', 'Wiki'];
+    const titles = async (bag: string): Promise<string[]> => {
+      if (bag === '@plugins') return (await this.wikiPlugins()).map(([n]) => `$:/plugins/brausa/${n.toLowerCase()}`);
+      if (bag === 'lokal') return ['Datei: Notizen.md', 'Datei: Plan.pdf', 'Privat: Telefonnummern'];
+      if (bag.startsWith('@map:')) {
+        const [root, id] = bag.slice(5).split('|');
+        return Object.values(this.readMaps(root)[id]?.cards ?? {}).map((c) => c.title).filter(Boolean);
+      }
+      if (bag === own) return ['Start', ...this.overlays.filter((o) => o.variants.some((v) => v.recipe === r.name)).map((o) => o.title)];
+      if (bag === 'glossar') return glossary;
+      const n = this.bags.find((b) => b.name === bag)?.tiddlers ?? 0;
+      return Array.from({ length: n }, (_, i) => (i < 2 ? glossary[i] : `${bag} ${i + 1}`));
+    };
+    return Promise.all(stack.map(async (bag) => ({ bag, titles: await titles(bag) })));
   }
 
   async wikiPlugins(): Promise<[string, string][]> {

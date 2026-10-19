@@ -1,6 +1,7 @@
 mod archive;
 mod dupes;
 mod i18n;
+mod smart;
 mod fsops;
 mod library;
 mod maps;
@@ -31,6 +32,7 @@ struct Index(Mutex<Registry>);
 
 /// Projects: named collections of files and folders from anywhere.
 struct Projs(Mutex<projects::Projects>);
+struct Smart(smart::SmartFolders);
 
 /// TiddlyWiki bags and recipes (serialised: one sync at a time).
 struct Wikis(Mutex<tw::Store>);
@@ -431,6 +433,13 @@ async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
     w.0.lock().map_err(err)?.overlays().map_err(err)
 }
 
+/// A wiki's layers in load order with their tiddler titles.
+#[tauri::command]
+async fn tw_layers(w: State<'_, Wikis>, recipe: String) -> CmdResult<Vec<serde_json::Value>> {
+    let layers = w.0.lock().map_err(err)?.layers(&recipe).map_err(err)?;
+    Ok(layers.into_iter().map(|(bag, titles)| serde_json::json!({ "bag": bag, "titles": titles })).collect())
+}
+
 #[tauri::command]
 async fn tw_resolve_overlay(w: State<'_, Wikis>, title: String, bag: String, how: tw::Resolve) -> CmdResult<()> {
     w.0.lock().map_err(err)?.resolve_overlay(&title, &bag, how).map_err(err)
@@ -515,6 +524,17 @@ async fn compress(app: AppHandle, paths: Vec<String>) -> CmdResult<String> {
     .await
     .map_err(err)?
     .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Saved smart folders (`null` before the first save).
+#[tauri::command]
+fn smart_folders(s: State<'_, Smart>) -> serde_json::Value {
+    s.0.load()
+}
+
+#[tauri::command]
+fn save_smart_folders(s: State<'_, Smart>, list: serde_json::Value) -> CmdResult<()> {
+    s.0.save(&list).map_err(err)
 }
 
 /// Language of the core's messages ("de" or "en").
@@ -689,6 +709,7 @@ pub fn run() {
             app.manage(Projs(Mutex::new(projects::Projects::open(&dir, legacy)?)));
             app.manage(Index(Mutex::new(reg)));
             app.manage(Wikis(Mutex::new(tw::Store::open(&dir)?)));
+            app.manage(Smart(smart::SmartFolders::open(&dir)?));
             // Repair on start, then every 10 minutes (catches changes outside the watched folder).
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -734,6 +755,8 @@ pub fn run() {
             archive_conflicts,
             find_duplicates,
             set_lang,
+            smart_folders,
+            save_smart_folders,
             compress,
             web_open,
             web_place,
@@ -751,6 +774,7 @@ pub fn run() {
             tw_delete_recipe,
             tw_sync,
             tw_overlays,
+            tw_layers,
             tw_resolve_overlay,
             tw_plugins
         ])

@@ -4,8 +4,10 @@
   import { wikis } from '../state/wikis.svelte';
   import { drag } from '../state/drag.svelte';
   import { tagColor } from '../core/tags';
-  import { hasFilter, matches } from '../core/smart';
+  import { globalOnes, hasFilter, matches, ofProject } from '../core/smart';
+  import { store } from '../platform';
   import TreeNode from './TreeNode.svelte';
+  import SmartRow from './SmartRow.svelte';
   import Icon from './Icon.svelte';
   import Settings from './Settings.svelte';
   import { updates } from '../state/updates.svelte';
@@ -36,10 +38,23 @@
   let settingsOpen = $state(false);
   /** Smart folder being named (null: no input) or renamed. */
   let smartNaming = $state<string | null>(null);
-  let smartRenaming = $state<string | null>(null);
 
   const filtered = $derived(hasFilter(app.currentView));
   const smartOpen = $derived(app.smartFolders.find((f) => matches(f, app.currentView))?.id ?? null);
+  const globalSmart = $derived(globalOnes(app.smartFolders));
+
+  /** Projects shown expanded, with their smart folders underneath. */
+  let openProjects = $state<string[]>(store.get('openProjects', []));
+  function toggleProject(id: string, open = !openProjects.includes(id)) {
+    openProjects = open ? [...new Set([...openProjects, id])] : openProjects.filter((x) => x !== id);
+    store.set('openProjects', openProjects);
+  }
+
+  function saveSmart(name: string) {
+    const f = app.saveSmart(name);
+    // A folder saved inside a project shows under it: make sure it is visible.
+    if ('project' in f.scope) toggleProject(f.scope.project, true);
+  }
 
   function newSmart() {
     if (!filtered) {
@@ -125,6 +140,8 @@
   {/if}
   {#each app.projects as p (p.id)}
     {@const hit = drag.active && drag.hit?.kind === 'project' && drag.hit.key === p.id}
+    {@const kids = ofProject(app.smartFolders, p.id)}
+    {@const open = openProjects.includes(p.id)}
     {#if renaming === p.id}
       <!-- svelte-ignore a11y_autofocus -->
       <input
@@ -155,6 +172,17 @@
         ondblclick={() => (renaming = p.id)}
         onkeydown={(e) => e.key === 'Enter' && app.openProject(p.id)}
       >
+        {#if kids.length}
+          <button
+            class="twist"
+            class:open
+            title={open ? t('sidebar.collapse') : t('sidebar.expand')}
+            aria-expanded={open}
+            onclick={(e) => (e.stopPropagation(), toggleProject(p.id))}><Icon name="chevron" size={11} /></button
+          >
+        {:else}
+          <span class="twist"></span>
+        {/if}
         <Icon name="kanban" size={15} />
         <span class="pname">{p.name}</span>
         {#if deleting === p.id}
@@ -169,6 +197,11 @@
           >
         {/if}
       </div>
+    {/if}
+    {#if open}
+      {#each kids as k (k.folder.id)}
+        <SmartRow folder={k.folder} linked={k.linked} under={p.id} current={smartOpen === k.folder.id} {filtered} />
+      {/each}
     {/if}
   {:else}
     {#if naming === null}<p class="hint">{t('sidebar.projectsEmpty')}</p>{/if}
@@ -191,54 +224,15 @@
       onfocus={(e) => e.currentTarget.select()}
       onkeydown={(e) => {
         if (e.key === 'Enter') {
-          app.saveSmart(smartNaming ?? '');
+          saveSmart(smartNaming ?? '');
           smartNaming = null;
         } else if (e.key === 'Escape') smartNaming = null;
       }}
       onblur={() => (smartNaming = null)}
     />
   {/if}
-  {#each app.smartFolders as f (f.id)}
-    {#if smartRenaming === f.id}
-      <!-- svelte-ignore a11y_autofocus -->
-      <input
-        class="pinput"
-        value={f.name}
-        autofocus
-        onkeydown={(e) => {
-          if (e.key === 'Enter') {
-            app.renameSmart(f.id, e.currentTarget.value);
-            smartRenaming = null;
-          } else if (e.key === 'Escape') smartRenaming = null;
-        }}
-        onblur={() => (smartRenaming = null)}
-      />
-    {:else}
-      <div
-        class="place project"
-        class:current={smartOpen === f.id}
-        role="button"
-        tabindex="0"
-        title={app.smartSummary(f)}
-        onclick={() => app.openSmart(f.id)}
-        ondblclick={() => (smartRenaming = f.id)}
-        onkeydown={(e) => e.key === 'Enter' && app.openSmart(f.id)}
-      >
-        <Icon name="filter" size={15} />
-        <span class="pname">{f.name}</span>
-        {#if filtered && smartOpen !== f.id}
-          <button
-            class="rm"
-            title={t('sidebar.replaceSmart', { summary: app.smartSummary(app.currentView) })}
-            onclick={(e) => (e.stopPropagation(), app.updateSmart(f.id))}><Icon name="target" size={11} /></button
-          >
-        {/if}
-        <button class="rm" title={t('common.rename')} onclick={(e) => (e.stopPropagation(), (smartRenaming = f.id))}><Icon name="pencil" size={11} /></button>
-        <button class="rm" title={t('sidebar.removeSmart')} onclick={(e) => (e.stopPropagation(), app.removeSmart(f.id))}
-          ><Icon name="x" size={11} /></button
-        >
-      </div>
-    {/if}
+  {#each globalSmart as f (f.id)}
+    <SmartRow folder={f} current={smartOpen === f.id} {filtered} />
   {/each}
   {#if filtered && !smartOpen && smartNaming === null}
     <button class="place save" title={app.smartSummary(app.currentView)} onclick={newSmart}>
@@ -255,6 +249,9 @@
       <button class="ov" class:pending={wikis.pending} title={t('sidebar.overlays')} onclick={() => (wikis.overlaysOpen = true)}>
         <Icon name="layers" size={12} />{wikis.pending || ''}
       </button>
+    {/if}
+    {#if wikis.recipes.length}
+      <button class="ov" title={t('sidebar.overview')} onclick={() => wikis.openOverview()}><Icon name="grid" size={12} /></button>
     {/if}
     <button class="add" title={t('sidebar.newWiki')} onclick={() => wikis.open('')}>
       <Icon name="plus" size={13} />
@@ -454,6 +451,21 @@
   }
   .grow {
     flex: 1;
+  }
+  .twist {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 14px;
+    height: 18px;
+    margin-right: -4px;
+    color: var(--fg-faint);
+  }
+  .twist :global(svg) {
+    transition: transform 0.12s;
+  }
+  .twist.open :global(svg) {
+    transform: rotate(90deg);
   }
   .ov {
     display: inline-flex;

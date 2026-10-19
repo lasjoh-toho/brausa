@@ -10,7 +10,7 @@ import { inRange, type DateRange } from './dates';
 import { category, type Category } from './format';
 import { loc, t } from '../i18n/index.svelte';
 
-export type ViewMode = 'stream' | 'panes' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
+export type ViewMode = 'stream' | 'panes' | 'table' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
 export type GroupBy = 'none' | 'tag' | 'subfolder' | 'month';
 export type SortKey = 'name' | 'mtime' | 'ctime' | 'taken' | 'size' | 'ext';
 

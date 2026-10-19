@@ -25,6 +25,7 @@
   import ProjectBoard from './lib/components/ProjectBoard.svelte';
   import WikiEditor from './lib/components/WikiEditor.svelte';
   import OverlayTool from './lib/components/OverlayTool.svelte';
+  import BagOverview from './lib/components/BagOverview.svelte';
   import { wikis } from './lib/state/wikis.svelte';
   import { t } from './lib/i18n/index.svelte';
 
@@ -92,8 +93,8 @@
     } else if (e.key === 'Enter') {
       sel.forEach((x) => app.open(x));
     } else if (!mod && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-      // The list of the three-panel view walks with the arrow keys.
-      if (app.view !== 'panes') return;
+      // The lists of the three-panel and table view walk with the arrow keys.
+      if (app.view !== 'panes' && app.view !== 'table') return;
       app.step(e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
       e.preventDefault();
     } else if (e.key === 'Escape') {
@@ -126,6 +127,7 @@
   {#if tagSource && tagTargets.length}<TagBar targets={tagTargets} onclose={() => (tagSource = null)} />{/if}
   {#if wikis.editing !== null}<WikiEditor onclose={() => (wikis.editing = null)} />{/if}
   {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
+  {#if wikis.overviewOpen}<BagOverview onclose={() => (wikis.overviewOpen = false)} />{/if}
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
   {#if app.menu}<ContextMenu onTag={() => (tagSource = 'selection')} onPreview={openPreview} />{/if}
   {#if app.dialog}<Confirm />{/if}
