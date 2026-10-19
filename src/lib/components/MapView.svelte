@@ -34,7 +34,9 @@
     for (const e of located) {
       const pt = map.latLngToLayerPoint([e.geo!.lat, e.geo!.lon]);
       const k = `${Math.floor(pt.x / cell)}:${Math.floor(pt.y / cell)}`;
-      buckets.set(k, [...(buckets.get(k) ?? []), e]);
+      const b = buckets.get(k);
+      if (b) b.push(e);
+      else buckets.set(k, [e]);
     }
     for (const group of buckets.values()) {
       const lat = group.reduce((s, e) => s + e.geo!.lat, 0) / group.length;
@@ -68,20 +70,28 @@
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
     layer = L.layerGroup().addTo(map);
-    map.on('zoomend moveend', render);
+    map.on('zoomend moveend', schedule);
     render();
     return () => {
+      cancelAnimationFrame(frame);
       map?.remove();
       map = null;
     };
   });
+
+  // Draw at most once per frame: thumbnails arrive one by one.
+  let frame = 0;
+  function schedule() {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(render);
+  }
 
   // Re-render when data, thumbnails or the selection change.
   $effect(() => {
     void located;
     void app.thumbs.size;
     void app.selection.size;
-    render();
+    schedule();
   });
 </script>
 

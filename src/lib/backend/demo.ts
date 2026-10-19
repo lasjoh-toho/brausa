@@ -345,6 +345,12 @@ export class DemoBackend implements Backend {
     this.smart = structuredClone(list);
   }
 
+  async alive() {}
+
+  async stuckView() {
+    return null;
+  }
+
   /** Demo files have no content; equal size stands in for equal content. */
   async findDuplicates(paths: string[]): Promise<string[][]> {
     const by = new Map<number, string[]>();

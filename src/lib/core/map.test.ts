@@ -12,6 +12,7 @@ import {
   contentRect,
   newMap,
   normalizeMap,
+  ancestors,
   reparent,
   stackInsert,
   tidyStacks,
@@ -119,6 +120,13 @@ describe('map mutations', () => {
     expect(m.roots).toEqual(['a']);
     expect(m.cards.a.children).toEqual(['b']);
     expect(m.links).toEqual([]);
+  });
+
+  it('breaks cards nested in themselves', () => {
+    const card = (id: string, parent: string) => ({ id, title: '', text: '', x: 0, y: 0, w: 1, h: 1, parent, children: [] });
+    const m = normalizeMap({ id: 'm_c', title: 'c', cards: { a: card('a', 'b'), b: card('b', 'a'), c: card('c', 'a') } } as never);
+    expect(m.roots.length).toBeGreaterThan(0);
+    for (const id of Object.keys(m.cards)) expect(ancestors(m, id).length).toBeLessThan(3);
   });
 });
 

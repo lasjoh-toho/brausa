@@ -17,6 +17,7 @@
   import Preview from './lib/components/Preview.svelte';
   import GridEditor from './lib/components/GridEditor.svelte';
   import Toasts from './lib/components/Toasts.svelte';
+  import Busy from './lib/components/Busy.svelte';
   import ContextMenu from './lib/components/ContextMenu.svelte';
   import Confirm from './lib/components/Confirm.svelte';
   import BatchRename from './lib/components/BatchRename.svelte';
@@ -133,6 +134,7 @@
   {#if app.dialog}<Confirm />{/if}
   {#if app.batchRenaming}<BatchRename />{/if}
   <Toasts />
+  <Busy />
   <DragGhost />
 </div>
 
