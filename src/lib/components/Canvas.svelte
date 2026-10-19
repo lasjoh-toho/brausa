@@ -10,13 +10,15 @@
   import Tile from './Tile.svelte';
   import MapView from './MapView.svelte';
   import CalendarView from './CalendarView.svelte';
+  import FileList from './FileList.svelte';
+  import PreviewPane from './PreviewPane.svelte';
 
   let el: HTMLElement;
   let lasso = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
   /** Rubber-band selection on empty canvas space. */
   function down(e: PointerEvent) {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('.tile, button, input, .cal, .leaflet-container')) return;
+    if (e.button !== 0 || (e.target as HTMLElement).closest('.tile, button, input, .cal, .leaflet-container, .pv')) return;
     const additive = e.shiftKey || isToggleKey(e);
     const base = additive ? new Set(app.selection) : new Set<string>();
     if (!additive) app.selection.clear();
@@ -57,13 +59,14 @@
 <section
   class="canvas"
   class:hit={canvasHit}
+  class:panes={app.view === 'panes' && !app.dupes}
   bind:this={el}
   data-drop="canvas"
   data-autoscroll
   style:--tile="{app.tileSize}px"
   onpointerdown={down}
   oncontextmenu={(e) => {
-    if ((e.target as HTMLElement).closest('.tile, .cal, .leaflet-container')) return;
+    if ((e.target as HTMLElement).closest('.tile, .cal, .leaflet-container, .pv')) return;
     e.preventDefault();
     app.menu = { x: e.clientX, y: e.clientY, entry: null };
   }}
@@ -92,7 +95,10 @@
       <button class="btn" onclick={() => app.endDuplicates()}>Fertig</button>
     </div>
   {/if}
-  {#if app.view === 'kanban' && !app.dupes}
+  {#if app.view === 'panes' && !app.dupes}
+    <FileList />
+    <PreviewPane />
+  {:else if app.view === 'kanban' && !app.dupes}
     <div class="kanban">
       {#each app.groups as g (g.key)}
         {@const hit = drag.active && drag.hit?.kind === 'column' && drag.hit.key === g.key}
@@ -153,6 +159,12 @@
     padding: 14px 16px 104px;
     outline: none;
     transition: box-shadow 0.15s;
+  }
+  /* Three-panel view: list and preview scroll on their own. */
+  .canvas.panes {
+    display: flex;
+    padding: 0;
+    overflow: hidden;
   }
   .canvas.hit {
     box-shadow: inset 0 0 0 2px var(--accent);

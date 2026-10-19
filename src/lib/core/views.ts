@@ -9,9 +9,18 @@ import { matches, parsePattern } from './pattern';
 import { inRange, type DateRange } from './dates';
 import { category, type Category } from './format';
 
-export type ViewMode = 'stream' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
+export type ViewMode = 'stream' | 'panes' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
 export type GroupBy = 'none' | 'tag' | 'subfolder' | 'month';
-export type SortKey = 'name' | 'mtime' | 'size' | 'ext';
+export type SortKey = 'name' | 'mtime' | 'ctime' | 'taken' | 'size' | 'ext';
+
+export const SORT_KEYS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: 'Name' },
+  { key: 'mtime', label: 'Geändert' },
+  { key: 'ctime', label: 'Erstellt' },
+  { key: 'taken', label: 'Aufgenommen' },
+  { key: 'size', label: 'Größe' },
+  { key: 'ext', label: 'Art' }
+];
 
 export interface Group {
   key: string;
@@ -55,6 +64,9 @@ export function sortEntries(entries: Entry[], key: SortKey, desc = false): Entry
   const by: Record<SortKey, (a: Entry, b: Entry) => number> = {
     name: (a, b) => coll.compare(a.name, b.name),
     mtime: (a, b) => a.mtime - b.mtime,
+    ctime: (a, b) => (a.ctime || a.mtime) - (b.ctime || b.mtime),
+    // Files without EXIF date fall back to their modification date.
+    taken: (a, b) => (a.taken ?? a.mtime) - (b.taken ?? b.mtime),
     size: (a, b) => a.size - b.size,
     ext: (a, b) => coll.compare(a.ext, b.ext) || coll.compare(a.name, b.name)
   };

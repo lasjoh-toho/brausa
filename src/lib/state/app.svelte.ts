@@ -75,8 +75,10 @@ class AppState {
   view = $state<ViewMode>(store.get('view', 'stream'));
   kanbanBy = $state<Exclude<GroupBy, 'none' | 'month'>>(store.get('kanbanBy', 'tag'));
   tagDepth = $state(store.get('tagDepth', 1));
-  sort = $state<SortKey>('name');
-  desc = $state(false);
+  sort = $state<SortKey>(store.get('sort', 'name'));
+  desc = $state(store.get('desc', false));
+  /** Width of the preview column in the three-panel view. */
+  previewWidth = $state(store.get('previewWidth', 420));
   search = $state('');
   searchMode = $state<'filter' | 'select'>('filter');
   funnel = $state<string | null>(null);
@@ -518,7 +520,7 @@ class AppState {
       });
       this.learnTags(this.raw.flatMap((e) => e.tags));
       if (!quiet && !this.project) this.backend.watch(this.cwd, recursive).catch(() => {});
-      if (this.view === 'map' || (this.view === 'calendar' && this.dateField === 'taken')) void this.loadMediaInfo();
+      if (this.view === 'map' || (this.view === 'calendar' && this.dateField === 'taken') || this.sort === 'taken') void this.loadMediaInfo();
     } catch (e) {
       this.toast(String(e), true);
       this.raw = [];
@@ -532,6 +534,37 @@ class AppState {
     this.typeFilter = v;
     store.set('typeFilter', v);
     if (v && !this.recursive) this.setRecursive(true);
+  }
+
+  /** Sort every view; picking the current key again flips the direction. */
+  setSort(key: SortKey, desc?: boolean) {
+    this.desc = desc ?? (key === this.sort ? !this.desc : key !== 'name' && key !== 'ext');
+    this.sort = key;
+    store.set('sort', key);
+    store.set('desc', this.desc);
+    if (key === 'taken') void this.loadMediaInfo();
+  }
+
+  setPreviewWidth(w: number) {
+    this.previewWidth = Math.max(240, Math.min(1200, w));
+    store.set('previewWidth', this.previewWidth);
+  }
+
+  /** Last entry clicked or reached with the arrow keys; the three-panel view previews it. */
+  cursor = $state<string | null>(null);
+  current = $derived(
+    (this.cursor && this.selection.has(this.cursor) ? this.visible.find((e) => e.path === this.cursor) : undefined) ??
+      this.selectedEntries[0] ??
+      null
+  );
+
+  /** Arrow keys: next/previous entry in the list (Shift extends the selection). */
+  step(delta: number, extend = false) {
+    const list = this.visible;
+    if (!list.length) return;
+    const at = this.cursor ? list.findIndex((e) => e.path === this.cursor) : -1;
+    const next = list[Math.max(0, Math.min(list.length - 1, at < 0 ? 0 : at + delta))];
+    this.select(next.path, extend && this.anchor ? 'range' : 'replace');
   }
 
   setRecursive(v: boolean) {
@@ -666,6 +699,7 @@ class AppState {
   // ---------------------------------------------------------------- selection
 
   select(path: string, mode: 'replace' | 'toggle' | 'range'): void {
+    this.cursor = path;
     if (mode === 'replace') {
       this.selection.clear();
       this.selection.add(path);

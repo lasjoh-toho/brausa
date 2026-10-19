@@ -88,6 +88,11 @@
       e.preventDefault();
     } else if (e.key === 'Enter') {
       sel.forEach((x) => app.open(x));
+    } else if (!mod && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      // The list of the three-panel view walks with the arrow keys.
+      if (app.view !== 'panes') return;
+      app.step(e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
+      e.preventDefault();
     } else if (e.key === 'Escape') {
       if (app.funnel) app.setFunnel(null);
       else app.selection.clear();

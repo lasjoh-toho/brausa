@@ -429,3 +429,18 @@ describe('web library', () => {
     expect(shortUrl(p.url)).toBe('wikipedia.org/wiki/Brausa');
   });
 });
+
+describe('sorting', () => {
+  it('sorts by created and taken date, folders first', async () => {
+    const { sortEntries } = await import('./views');
+    const e = (name: string, mtime: number, extra: object = {}) => ({ path: '/' + name, name, ext: 'jpg', kind: 'file' as 'file' | 'dir', size: 1, mtime, ctime: 0, tags: [], ...extra });
+    const a = e('a.jpg', 30, { taken: 10, ctime: 5 });
+    const b = e('b.jpg', 20, { ctime: 50 });
+    const c = e('c.jpg', 25, { taken: 40 });
+    const d = { ...e('Ordner', 99), kind: 'dir' as const };
+    expect(sortEntries([a, b, c, d], 'taken').map((x) => x.name)).toEqual(['Ordner', 'a.jpg', 'b.jpg', 'c.jpg']);
+    expect(sortEntries([a, b, c, d], 'taken', true).map((x) => x.name)).toEqual(['Ordner', 'c.jpg', 'b.jpg', 'a.jpg']);
+    // Without a creation date the modification date counts.
+    expect(sortEntries([a, b, c], 'ctime').map((x) => x.name)).toEqual(['a.jpg', 'c.jpg', 'b.jpg']);
+  });
+});

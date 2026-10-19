@@ -3,7 +3,7 @@
   import { drag } from '../state/drag.svelte';
   import { crumbs, relativeTo } from '../core/paths';
   import { formatRange } from '../core/dates';
-  import type { ViewMode } from '../core/views';
+  import { SORT_KEYS, type ViewMode } from '../core/views';
   import { modLabel } from '../platform';
   import Icon from './Icon.svelte';
   import { CATEGORIES } from '../core/format';
@@ -12,8 +12,12 @@
   let { accent = null }: { accent?: { color: string; light: boolean } | null } = $props();
 
   const path = $derived(crumbs(app.cwd, app.home));
+  const typeLabel = $derived(
+    !app.typeFilter ? 'Alle Arten' : app.typeFilter === 'medien' ? 'Medien' : (CATEGORIES.find((c) => c.key === app.typeFilter)?.label ?? app.typeFilter)
+  );
   const views: { id: ViewMode; icon: string; label: string }[] = [
-    { id: 'stream', icon: 'grid', label: 'Stream' },
+    { id: 'stream', icon: 'grid', label: 'Kacheln' },
+    { id: 'panes', icon: 'columns', label: 'Liste mit Vorschau (drei Spalten)' },
     { id: 'kanban', icon: 'kanban', label: 'Kanban' },
     { id: 'timeline', icon: 'timeline', label: 'Zeitachse' },
     { id: 'calendar', icon: 'calendar', label: 'Kalender' },
@@ -120,6 +124,7 @@
       <Icon name="stream" size={15} /> Stream
     </button>
     <label class="btn types" class:on={!!app.typeFilter} title="Nur Dateien dieser Art zeigen (auch aus Unterordnern)">
+      <span>{typeLabel}</span>
       <select value={app.typeFilter ?? ''} onchange={(ev) => app.setTypeFilter(ev.currentTarget.value || null)}>
         <option value="">Alle Arten</option>
         <option value="medien">Medien</option>
@@ -128,6 +133,23 @@
       <Icon name="chevronDown" size={12} />
     </label>
 
+    <div class="sortbox">
+      <label class="btn types" title="Sortieren nach">
+        <span>{SORT_KEYS.find((k) => k.key === app.sort)?.label ?? 'Name'}</span>
+        <select value={app.sort} onchange={(ev) => app.setSort(ev.currentTarget.value as typeof app.sort, app.desc)}>
+          {#each SORT_KEYS as k (k.key)}<option value={k.key}>{k.label}</option>{/each}
+        </select>
+        <Icon name="chevronDown" size={12} />
+      </label>
+      <button
+        class="btn icon"
+        onclick={() => app.setSort(app.sort, !app.desc)}
+        title={app.desc ? 'Absteigend (klicken: aufsteigend)' : 'Aufsteigend (klicken: absteigend)'}
+        aria-label="Sortierrichtung"><Icon name={app.desc ? 'sortDown' : 'sortUp'} size={14} /></button
+      >
+    </div>
+
+    {#if app.view !== 'panes'}
     <input
       class="zoom"
       type="range"
@@ -138,6 +160,7 @@
       oninput={(e) => app.setTileSize(Number(e.currentTarget.value))}
       aria-label="Kachelgröße"
     />
+    {/if}
   {/if}
 
   <button class="btn icon" class:on={web.open} onclick={() => web.toggle()} title="Web-Fenster: Seiten aus dem Internet und lokale Webseiten, abgeschottet" aria-label="Web-Fenster">
@@ -164,20 +187,21 @@
     align-items: center;
     gap: 5px;
   }
+  .sortbox {
+    display: flex;
+    align-items: center;
+  }
   .types {
     position: relative;
     cursor: pointer;
   }
+  /* The select is invisible over its label, so the button is only as wide as the chosen option. */
   .types select {
-    appearance: none;
-    -webkit-appearance: none;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    padding-right: 4px;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
     cursor: pointer;
-    outline: none;
   }
   .types select option {
     color: initial;
@@ -281,7 +305,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    width: 260px;
+    flex: 0 1 260px;
+    min-width: 150px;
     height: 30px;
     padding: 0 8px;
     border-radius: 8px;
