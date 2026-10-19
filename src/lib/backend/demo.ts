@@ -7,6 +7,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
 import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiLayer, WikiOverlay, WikiRecipe } from './types';
+import { WALK_LIMIT } from './types';
 import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 import { t } from '../i18n/index.svelte';
@@ -193,13 +194,14 @@ export class DemoBackend implements Backend {
   async walk(root: string, opts: WalkOptions = {}): Promise<Entry[]> {
     const out: Entry[] = [];
     const max = opts.maxDepth ?? 32;
-    const limit = opts.limit ?? 20000;
+    const limit = opts.limit ?? WALK_LIMIT;
+    const exts = opts.exts ? new Set(opts.exts) : null;
     const rec = (n: Node, depth: number) => {
       for (const c of n.children?.values() ?? []) {
         if (out.length >= limit) return;
         if (c.children) {
           if (depth < max) rec(c, depth + 1);
-        } else out.push({ ...this.decorate(c.entry), relDir: relativeTo(dirname(c.entry.path), root) });
+        } else if (!exts || exts.has(c.entry.ext)) out.push({ ...this.decorate(c.entry), relDir: relativeTo(dirname(c.entry.path), root) });
       }
     };
     const n = this.find(root);

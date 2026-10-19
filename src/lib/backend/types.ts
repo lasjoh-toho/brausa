@@ -2,11 +2,16 @@ import type { SmartFolder } from '../core/smart';
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
 import type { ProjectMap } from '../core/map';
 
+/** Stream reads at most this many files. */
+export const WALK_LIMIT = 20000;
+
 export interface WalkOptions {
   maxDepth?: number;
   includeHidden?: boolean;
   /** Stop after this many files (protects against walking $HOME by accident). */
   limit?: number;
+  /** Only files with these extensions (lower case). */
+  exts?: string[];
 }
 
 export interface MediaInfo {

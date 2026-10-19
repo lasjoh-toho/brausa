@@ -107,11 +107,18 @@ async fn list_dir(state: State<'_, Index>, path: String, include_hidden: bool) -
 }
 
 #[tauri::command]
-async fn walk(state: State<'_, Index>, root: String, max_depth: usize, include_hidden: bool, limit: usize) -> CmdResult<Vec<Entry>> {
+async fn walk(
+    state: State<'_, Index>,
+    root: String,
+    max_depth: usize,
+    include_hidden: bool,
+    limit: usize,
+    exts: Option<Vec<String>>,
+) -> CmdResult<Vec<Entry>> {
     if let Some((archive, inner)) = archive::split(&root) {
         return archive::walk(&archive, &inner, limit).map_err(err);
     }
-    let entries = fsops::walk(Path::new(&root), max_depth, include_hidden, limit);
+    let entries = fsops::walk(Path::new(&root), max_depth, include_hidden, limit, exts.as_deref());
     {
         let mut reg = state.0.lock().map_err(err)?;
         let dirs: std::collections::BTreeSet<&Path> = entries.iter().filter_map(|e| Path::new(&e.path).parent()).collect();
@@ -339,7 +346,7 @@ async fn project_entries(state: State<'_, Index>, projs: State<'_, Projs>, id: S
         }
     }
     for d in &p.folders {
-        out.extend(fsops::walk(Path::new(d), 12, false, 20_000));
+        out.extend(fsops::walk(Path::new(d), 12, false, 20_000, None));
     }
     let mut seen = std::collections::HashSet::new();
     out.retain(|e| seen.insert(e.path.clone()));
@@ -704,7 +711,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_dialog::init())
         .manage(Watcher::default())
         .manage(web::Web::default())
         .setup(|app| {

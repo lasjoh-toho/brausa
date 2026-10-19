@@ -53,6 +53,21 @@ export const CATEGORIES: { key: Category; label: string }[] = (['image', 'video'
   }
 }));
 
+const CATEGORY_EXT: Record<Category, Set<string>> = {
+  image: IMAGE_EXT,
+  video: VIDEO_EXT,
+  audio: AUDIO_EXT,
+  pdf: new Set(['pdf']),
+  web: WEB_EXT,
+  text: TEXT_EXT,
+  office: OFFICE_EXT
+};
+
+/** Every extension of these categories (Stream then reads only such files). */
+export function extsOf(cats: Category[]): string[] {
+  return [...new Set(cats.flatMap((c) => [...CATEGORY_EXT[c]]))];
+}
+
 export function category(ext: string): Category | null {
   if (IMAGE_EXT.has(ext)) return 'image';
   if (VIDEO_EXT.has(ext)) return 'video';

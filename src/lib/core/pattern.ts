@@ -228,7 +228,8 @@ export function matchTerm(e: Entry, t: Term, now: number): boolean {
       return (!!c && t.cats.includes(c)) !== t.neg;
     }
     case 'text':
-      return e.name.toLowerCase().includes(t.text) !== t.neg;
+      // In Stream, the subfolder counts too: "urlaub" finds the photos in …/Urlaub/.
+      return (e.name.toLowerCase().includes(t.text) || !!e.relDir?.toLowerCase().includes(t.text)) !== t.neg;
   }
 }
 

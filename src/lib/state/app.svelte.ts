@@ -5,8 +5,18 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
-import type { IndexReport, LibraryInfo, MediaInfo } from '../backend/types';
+import { WALK_LIMIT, type IndexReport, type LibraryInfo, type MediaInfo } from '../backend/types';
 import { createBackend } from '../backend';
+
+/** What the interface showed when it last reported to the watchdog. */
+export interface Stuck {
+  cwd: string;
+  project: string | null;
+  view: ViewMode;
+  recursive: boolean;
+  search: string;
+  typeFilter: string | null;
+}
 import { parseCategories } from '../core/pattern';
 import { archiveName, archiveRoot, inArchive, isArchive } from '../core/archive';
 import type { ProjectInfo } from '../backend/types';
@@ -15,7 +25,10 @@ import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
-import { family, formatSize } from '../core/format';
+import { extsOf, family, formatSize } from '../core/format';
+
+/** Files that can carry EXIF date and location. */
+const MEDIA_EXT = ['jpg', 'jpeg', 'tif', 'tiff', 'heic', 'png', 'webp'];
 import { extras, keeper } from '../core/dupes';
 import { renameOrder, type RenameStep } from '../core/rename';
 import { store } from '../platform';
@@ -158,6 +171,11 @@ class AppState {
   dupes = $state<string[][] | null>(null);
   dupeBusy = $state(false);
 
+  /** Changes when another place, view or filter is shown (views then start at the top again). */
+  viewKey = $derived(
+    JSON.stringify([this.cwd, this.project, this.view, this.recursive, this.searchMode === 'filter' ? this.search : '', this.typeFilter, this.dateFilter, this.funnel, this.sort, this.desc, !!this.dupes])
+  );
+
   /** What the canvas shows. */
   visible = $derived.by(() => {
     const dated = this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated;
@@ -222,15 +240,31 @@ class AppState {
   /** Tell the core's watchdog that the interface responds, and what it shows. */
   private heartbeat() {
     const beat = () => {
-      const where = this.currentProject?.name ?? basename(this.cwd);
-      void this.backend.alive(`${t('toolbar.view.' + this.view)}${where ? ' · ' + where : ''}`).catch(() => {});
+      const s: Stuck = {
+        cwd: this.cwd,
+        project: this.project,
+        view: this.view,
+        recursive: this.recursive,
+        search: this.searchMode === 'filter' ? this.search : '',
+        typeFilter: this.typeFilter
+      };
+      void this.backend.alive(JSON.stringify(s)).catch(() => {});
     };
     beat();
     setInterval(beat, 2000);
   }
 
-  /** Plain tiles of the home folder, without Stream and filters. */
-  private startPlain(stuck: string) {
+  /** Where brausa hung last time; the canvas offers to go on there without subfolders. */
+  stuck = $state<Stuck | null>(null);
+
+  /** After a hang: plain tiles of the home folder, without Stream, filters and project. */
+  private startPlain(raw: string) {
+    try {
+      const s = JSON.parse(raw) as Stuck;
+      if (typeof s.cwd === 'string') this.stuck = s;
+    } catch {
+      // A report from an older version: nothing to go on with.
+    }
     this.view = 'stream';
     store.set('view', 'stream');
     this.recursive = false;
@@ -239,7 +273,28 @@ class AppState {
     store.set('typeFilter', null);
     this.setProject(null);
     store.set('cwd', '');
-    this.toast(t('app.startedPlain', { view: stuck }), true);
+  }
+
+  /** Go on where brausa hung: the same view and filters, but only that folder, without subfolders. */
+  async resumeStuck() {
+    const s = this.stuck;
+    if (!s) return;
+    this.stuck = null;
+    this.view = s.view;
+    store.set('view', s.view);
+    this.typeFilter = s.typeFilter;
+    store.set('typeFilter', s.typeFilter);
+    this.searchMode = 'filter';
+    this.search = s.search;
+    this.recursive = false;
+    store.set('recursive', false);
+    if (s.project && this.projects.some((p) => p.id === s.project)) await this.openProject(s.project);
+    else await this.navigate(s.cwd || this.home);
+  }
+
+  /** Name of the place brausa hung in. */
+  stuckPlace(s: Stuck) {
+    return (s.project && this.projects.find((p) => p.id === s.project)?.name) || basename(s.cwd) || s.cwd;
   }
 
   // ---------------------------------------------------------------- projects
@@ -563,11 +618,15 @@ class AppState {
     try {
       const forceRecursive = this.view === 'kanban' && this.kanbanBy === 'subfolder';
       const recursive = this.recursive || forceRecursive;
+      // Stream reads only what the view can show: the photo map only photos, a kind filter only that kind.
+      const cats = this.typeFilter ? parseCategories(this.typeFilter) : null;
+      const exts = this.view === 'map' ? MEDIA_EXT : cats ? extsOf(cats) : undefined;
       const fresh = this.project
         ? await this.backend.projectEntries(this.project)
         : recursive
-          ? await this.backend.walk(this.cwd, { maxDepth: 12 })
+          ? await this.backend.walk(this.cwd, { maxDepth: 12, exts })
           : await this.backend.listDir(this.cwd);
+      this.truncated = recursive && !this.project && fresh.length >= WALK_LIMIT;
       // Keep lazily loaded EXIF data across refreshes.
       const prev = new Map(this.raw.map((e) => [e.path, e]));
       this.raw = fresh.map((e) => {
@@ -590,6 +649,8 @@ class AppState {
     this.typeFilter = v;
     store.set('typeFilter', v);
     if (v && !this.recursive) this.setRecursive(true);
+    // Stream reads only the chosen kind, so read again.
+    else if (this.recursive && !this.project) void this.refresh();
   }
 
   /** Sort every view; picking the current key again flips the direction. */
@@ -692,10 +753,13 @@ class AppState {
   mediaProgress = $state<{ done: number; total: number } | null>(null);
   private mediaRun = 0;
 
+  /** Stream stopped at WALK_LIMIT files: there are more below this folder. */
+  truncated = $state(false);
+
   async loadMediaInfo() {
     const run = ++this.mediaRun;
     const todo = this.raw.filter(
-      (e) => e.kind === 'file' && ['jpg', 'jpeg', 'tif', 'tiff', 'heic', 'png', 'webp'].includes(e.ext) && !this.mediaLoaded.has(this.thumbKey(e))
+      (e) => e.kind === 'file' && MEDIA_EXT.includes(e.ext) && !this.mediaLoaded.has(this.thumbKey(e))
     );
     if (!todo.length) return;
     const started = Date.now();

@@ -1,20 +1,20 @@
 //! Notices when brausa's interface stops responding (a view stuck in a long
-//! computation) and offers to restart it in a plain view.
+//! computation) and restarts it.
 //!
-//! The interface reports every two seconds (`alive`). When the window is in
-//! front and nothing came for a while, brausa asks whether to wait or to restart.
-//! A marker file remembers the stuck view, so the next start (also after the
-//! app was killed) opens a plain view instead of the same one again.
+//! The interface reports every two seconds (`alive`) with what it shows (opaque
+//! to the core). When the window is in front and nothing came for 10 seconds,
+//! brausa restarts. A marker file keeps the last report, so the next start (also
+//! after the app was killed) opens without the stuck folder and offers to go on
+//! with a narrower view.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 /// No report for this long while the window is in front: the interface hangs.
-const STUCK: Duration = Duration::from_secs(12);
+const STUCK: Duration = Duration::from_secs(10);
 
 pub struct Watchdog {
     marker: PathBuf,
@@ -84,32 +84,10 @@ impl Watchdog {
                         _ => continue,
                     }
                 };
+                // The interface cannot be freed from outside: restart, and let the next
+                // start know where it got stuck (it then opens without that folder).
                 let _ = fs::write(&dog.marker, &view);
-                let restart = app
-                    .dialog()
-                    .message(crate::tr!(
-                        format!("Die Ansicht „{view}“ rechnet seit über {} Sekunden und reagiert nicht.\n\nbrausa kann in der einfachen Kachelansicht neu starten. Beim Warten fragt brausa später noch einmal.", STUCK.as_secs()),
-                        format!("The view “{view}” has been busy for more than {} seconds and does not respond.\n\nbrausa can restart in the plain tile view. If you wait, brausa asks again later.", STUCK.as_secs())
-                    ))
-                    .title(crate::tr!("brausa reagiert nicht", "brausa is not responding"))
-                    .kind(MessageDialogKind::Warning)
-                    .buttons(MessageDialogButtons::OkCancelCustom(
-                        crate::tr!("Neu starten", "Restart").to_string(),
-                        crate::tr!("Warten", "Wait").to_string(),
-                    ))
-                    .blocking_show();
-                if restart {
-                    app.restart();
-                }
-                // Waiting: give it another round before asking again.
-                let mut s = match dog.state.lock() {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                if s.stuck {
-                    s.stuck = false;
-                    s.last = Some(Instant::now());
-                }
+                app.restart();
             }
         });
     }

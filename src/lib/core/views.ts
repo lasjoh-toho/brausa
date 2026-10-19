@@ -27,6 +27,18 @@ export interface Group {
   entries: Entry[];
 }
 
+/** The first `limit` entries across groups (a view draws no more at once; scrolling shows more). */
+export function within(groups: Group[], limit: number): Group[] {
+  const out: Group[] = [];
+  let left = limit;
+  for (const g of groups) {
+    if (left <= 0) break;
+    out.push(g.entries.length > left ? { ...g, entries: g.entries.slice(0, left) } : g);
+    left -= g.entries.length;
+  }
+  return out;
+}
+
 export interface ViewQuery {
   /** Free-text search / pattern (same language as select-by-pattern). */
   search?: string;

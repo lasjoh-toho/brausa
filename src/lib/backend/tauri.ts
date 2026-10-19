@@ -5,6 +5,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
 import { t } from '../i18n/index.svelte';
 import type { ProjectMap } from '../core/map';
+import { WALK_LIMIT } from './types';
 import type {
   Backend,
   IndexReport,
@@ -52,7 +53,8 @@ export class TauriBackend implements Backend {
       root,
       maxDepth: opts.maxDepth ?? 32,
       includeHidden: opts.includeHidden ?? false,
-      limit: opts.limit ?? 20000
+      limit: opts.limit ?? WALK_LIMIT,
+      exts: opts.exts ?? null
     });
     return r.map(withThumb);
   }
