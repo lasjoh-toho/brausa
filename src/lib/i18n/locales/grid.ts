@@ -10,7 +10,7 @@ export const de = {
 
 export const en: typeof de = {
   title: 'Drop zones',
-  hint: 'Drag files onto “Tray” in the toolbar to open this grid.',
+  hint: 'Drag files onto “Drop zones” in the toolbar to open this grid.',
   cols: 'Columns',
   rows: 'Rows',
   tag: 'Tag: {tag}',
