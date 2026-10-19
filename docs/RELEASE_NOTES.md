@@ -14,6 +14,16 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.9
+
+- **No more hanging on system files.** Listings hide system files (AppData, Thumbs.db, recycle bin, everything Windows marks hidden or system). Stream and the live update leave program folders alone (node_modules, Program Files, Library on macOS, app bundles, photo libraries), so caches no longer cause constant reloading.
+- **Watchdog.** If a view stops responding for 12 seconds, brausa offers to restart; the next start then opens plain tiles instead of the same view.
+- **Photo data** (date taken, location) loads in the background with progress and a cancel button; the photo map stays fast with many photos.
+- **Table view** with selectable, resizable columns.
+- **Empty view because of a filter:** the filter is named and can be removed with one click.
+- **Smart folders** are stored by brausa itself; projects in the sidebar open to show their own and linked smart folders.
+- **Wikis:** bag "lokal" for file links and notes tagged lokal/privat; overview of the bags as matrix, graph and stacked layers; TiddlyVisuals 1.16.0 and Relink built in.
+
 ### New in 0.8
 
 - **English interface.** brausa follows the desktop language (German or English, otherwise English); Settings (gear icon at the top of the sidebar) → Language changes it.
@@ -41,6 +51,15 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.9: kein Hängen mehr an Systemdateien, Tabelle, Bag-Übersicht**
+- **Systemdateien werden übersprungen:** Listen blenden Systemdateien aus (AppData, Thumbs.db, Papierkorb, alles, was Windows als versteckt oder System markiert). Stream und die Live-Aktualisierung lassen Programmordner aus (node_modules, Programme, unter macOS Library, App-Pakete, Fotomediatheken), Caches lösen kein ständiges Neuladen mehr aus.
+- **Wachhund:** Reagiert eine Ansicht 12 Sekunden lang nicht, bietet brausa einen Neustart an; der nächste Start öffnet dann einfache Kacheln statt derselben Ansicht.
+- **Aufnahmedaten** (Datum, Ort) werden im Hintergrund gelesen, mit Fortschritt und „Abbrechen“; die Foto-Karte bleibt auch mit vielen Fotos schnell.
+- **Tabellenansicht** mit wählbaren, verschiebbaren Spalten.
+- **Leere Ansicht durch Filter:** der Filter wird genannt und lässt sich mit einem Klick entfernen.
+- **Intelligente Ordner** speichert brausa jetzt selbst; Projekte in der Seitenleiste klappen auf und zeigen ihre eigenen und verknüpften intelligenten Ordner.
+- **Wikis:** Bag „lokal“ für Dateiverweise und als lokal/privat getaggte Notizen; Übersicht der Bags als Matrix, Graph und gestapelte Ebenen; TiddlyVisuals 1.16.0 und Relink eingebaut.
 
 **Neu in 0.8: Englisch, Updates, Liste mit Vorschau**
 - **Englische Oberfläche:** brausa folgt der Sprache des Systems (Deutsch oder Englisch, sonst Englisch); Einstellungen (Zahnrad oben in der Seitenleiste) → Sprache stellt sie um.
