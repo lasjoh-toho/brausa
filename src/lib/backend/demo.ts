@@ -333,6 +333,16 @@ export class DemoBackend implements Backend {
     throw new Error('Komprimieren geht nur in der App');
   }
 
+  /** Demo files have no content; equal size stands in for equal content. */
+  async findDuplicates(paths: string[]): Promise<string[][]> {
+    const by = new Map<number, string[]>();
+    for (const p of paths) {
+      const e = this.find(p)?.entry;
+      if (e && e.kind === 'file' && e.size > 0) by.set(e.size, [...(by.get(e.size) ?? []), p]);
+    }
+    return [...by.values()].filter((g) => g.length > 1);
+  }
+
   async archiveConflicts(): Promise<string[]> {
     return [];
   }

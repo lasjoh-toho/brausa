@@ -15,7 +15,8 @@ import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
-import { family } from '../core/format';
+import { family, formatSize } from '../core/format';
+import { extras, keeper } from '../core/dupes';
 import { store } from '../platform';
 import { describe, followMoves, placeName, suggestName, type SmartFolder, type SmartView } from '../core/smart';
 
@@ -143,10 +144,35 @@ class AppState {
     this.currentProject ?? this.projectOf(this.cwd) ?? this.projects.find((p) => p.id === this.lastProject) ?? null
   );
 
+  /** Duplicate search result (groups of paths with equal content); null: not looking for duplicates. */
+  dupes = $state<string[][] | null>(null);
+  dupeBusy = $state(false);
+
   /** What the canvas shows. */
-  visible = $derived(this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated);
+  visible = $derived.by(() => {
+    const dated = this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated;
+    if (!this.dupes) return dated;
+    const keep = new Set(this.dupes.flat());
+    return dated.filter((e) => keep.has(e.path));
+  });
+
+  /** Duplicate groups as entries, still present and visible (groups of one drop out after deleting). */
+  dupeGroups = $derived.by(() => {
+    if (!this.dupes) return [];
+    const by = new Map(this.visible.map((e) => [e.path, e]));
+    return this.dupes
+      .map((g) => g.flatMap((p) => by.get(p) ?? []))
+      .filter((g) => g.length > 1)
+      .map((g) => {
+        // The copy that stays comes first.
+        const k = keeper(g);
+        return [k, ...g.filter((e) => e !== k)];
+      });
+  });
 
   groups = $derived.by(() => {
+    if (this.dupes)
+      return this.dupeGroups.map((g) => ({ key: g[0].path, label: `${g[0].name} · je ${formatSize(g[0].size)}`, entries: g }));
     if (this.view === 'kanban') return groupEntries(this.visible, this.kanbanBy, { depth: this.tagDepth });
     if (this.view === 'timeline') return groupEntries(this.visible.filter((e) => e.kind === 'file'), 'month');
     return groupEntries(this.visible, 'none');
@@ -207,6 +233,7 @@ class AppState {
       this.future = [];
     }
     this.setProject(id);
+    this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;
     this.selection.clear();
@@ -270,6 +297,47 @@ class AppState {
   }
 
   // ---------------------------------------------------------------- projects / index
+
+  // ---------------------------------------------------------------- duplicates
+
+  /** Look for files with equal content among the files shown (with subfolders). */
+  async findDuplicates() {
+    if (this.dupeBusy) return;
+    this.dupes = null;
+    if (!this.recursive && !this.project) {
+      this.recursive = true;
+      store.set('recursive', true);
+      await this.refresh();
+    }
+    const files = this.visible.filter((e) => e.kind === 'file' && !inArchive(e.path));
+    if (files.length < 2) {
+      this.toast('Hier gibt es nichts zu vergleichen.');
+      return;
+    }
+    this.dupeBusy = true;
+    try {
+      const groups = await this.backend.findDuplicates(files.map((e) => e.path));
+      if (!groups.length) this.toast(`Keine doppelten Dateien unter ${files.length} Dateien`);
+      else {
+        this.selection.clear();
+        this.dupes = groups;
+      }
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    } finally {
+      this.dupeBusy = false;
+    }
+  }
+
+  endDuplicates() {
+    this.dupes = null;
+    this.selection.clear();
+  }
+
+  /** Select every copy but one per group, ready for the trash. */
+  selectExtras() {
+    this.setSelection(extras(this.dupeGroups).map((e) => e.path));
+  }
 
   // ---------------------------------------------------------------- smart folders
 
@@ -399,6 +467,7 @@ class AppState {
     }
     this.cwd = path;
     this.setProject(null);
+    this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;
     this.selection.clear();

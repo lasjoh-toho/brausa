@@ -36,6 +36,9 @@
           ...(app.currentProject
             ? [{ label: `Aus „${app.currentProject.name}“ entfernen`, icon: 'x', key: isMac ? '⌘⌫' : 'Entf', run: () => app.removeFromProject(targets) }]
             : []),
+          ...(one?.kind === 'dir' && !packed
+            ? [{ label: `Duplikate in „${one.name}“ finden`, icon: 'copy', run: () => void app.navigate(one.path).then(() => app.findDuplicates()) }]
+            : []),
           { label: targets.length === 1 ? `„${targets[0].name}“ komprimieren` : `${targets.length} Objekte komprimieren`, icon: 'archive', run: () => app.compress(targets) },
           null,
           {
@@ -48,7 +51,11 @@
         ]
       : [
           { label: 'Neuer Ordner', icon: 'folderPlus', key: `${modLabel}⇧N`, run: () => app.newFolder() },
-          { label: 'Alles auswählen', icon: 'select', key: `${modLabel}A`, run: () => app.selectAll() }
+          { label: 'Alles auswählen', icon: 'select', key: `${modLabel}A`, run: () => app.selectAll() },
+          null,
+          app.dupes
+            ? { label: 'Duplikat-Suche beenden', icon: 'x', run: () => app.endDuplicates() }
+            : { label: 'Duplikate finden', icon: 'copy', run: () => void app.findDuplicates() }
         ]
   );
 

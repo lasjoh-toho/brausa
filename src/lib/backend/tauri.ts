@@ -115,6 +115,10 @@ export class TauriBackend implements Backend {
     return invoke<string>('compress', { paths });
   }
 
+  findDuplicates(paths: string[]) {
+    return invoke<string[][]>('find_duplicates', { paths });
+  }
+
   archiveConflicts(dir: string, names: string[]) {
     return invoke<string[]>('archive_conflicts', { dir, names });
   }

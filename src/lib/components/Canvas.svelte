@@ -4,6 +4,9 @@
   import { tagColor } from '../core/tags';
   import { UNTAGGED } from '../core/views';
   import { isToggleKey } from '../platform';
+  import { extras, waste } from '../core/dupes';
+  import { formatSize } from '../core/format';
+  import Icon from './Icon.svelte';
   import Tile from './Tile.svelte';
   import MapView from './MapView.svelte';
   import CalendarView from './CalendarView.svelte';
@@ -47,6 +50,7 @@
     window.addEventListener('pointerup', up);
   }
 
+  const extraCount = $derived(app.dupes ? extras(app.dupeGroups).length : 0);
   const canvasHit = $derived(drag.active && drag.hit?.kind === 'canvas' && drag.source !== 'canvas');
 </script>
 
@@ -67,7 +71,28 @@
   aria-multiselectable="true"
   tabindex="-1"
 >
-  {#if app.view === 'kanban'}
+  {#if app.dupes}
+    <div class="dupebar">
+      <Icon name="copy" size={15} />
+      {#if app.dupeGroups.length}
+        <span
+          ><b>{extraCount} überzählige {extraCount === 1 ? 'Kopie' : 'Kopien'}</b> in {app.dupeGroups.length}
+          {app.dupeGroups.length === 1 ? 'Gruppe' : 'Gruppen'} · {formatSize(waste(app.dupeGroups))} frei zu machen</span
+        >
+        <span class="grow"></span>
+        <button
+          class="btn"
+          title="Je Gruppe bleibt eine Datei stehen: nicht wie eine Kopie benannt, sonst die älteste. Danach Entf legt die Auswahl in den Papierkorb."
+          onclick={() => app.selectExtras()}>Überzählige auswählen</button
+        >
+      {:else}
+        <span>Keine Duplikate mehr.</span>
+        <span class="grow"></span>
+      {/if}
+      <button class="btn" onclick={() => app.endDuplicates()}>Fertig</button>
+    </div>
+  {/if}
+  {#if app.view === 'kanban' && !app.dupes}
     <div class="kanban">
       {#each app.groups as g (g.key)}
         {@const hit = drag.active && drag.hit?.kind === 'column' && drag.hit.key === g.key}
@@ -88,11 +113,11 @@
       {/each}
     </div>
   {:else}
-    {#if app.view === 'calendar'}<CalendarView />{/if}
-    {#if app.view === 'map'}<MapView />{/if}
+    {#if app.view === 'calendar' && !app.dupes}<CalendarView />{/if}
+    {#if app.view === 'map' && !app.dupes}<MapView />{/if}
     {#each app.groups as g (g.key)}
-      {#if app.view === 'timeline'}
-        <h3 class="group-head"><span>{g.label}</span><span class="count">{g.entries.length}</span></h3>
+      {#if app.view === 'timeline' || app.dupes}
+        <h3 class="group-head" class:plain={!!app.dupes}><span>{g.label}</span><span class="count">{g.entries.length}</span></h3>
       {/if}
       <div class="grid">
         {#each g.entries as e (e.path)}
@@ -133,10 +158,36 @@
     box-shadow: inset 0 0 0 2px var(--accent);
     background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
   }
+  .dupebar {
+    position: sticky;
+    top: -14px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: -14px -16px 12px;
+    padding: 9px 16px;
+    font-size: 13px;
+    color: var(--fg-muted);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .dupebar b {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .grow {
+    flex: 1;
+  }
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr));
     gap: 4px;
+  }
+  .group-head.plain {
+    position: static;
   }
   .group-head {
     position: sticky;

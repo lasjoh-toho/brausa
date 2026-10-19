@@ -1,4 +1,5 @@
 mod archive;
+mod dupes;
 mod fsops;
 mod library;
 mod maps;
@@ -515,6 +516,17 @@ async fn compress(app: AppHandle, paths: Vec<String>) -> CmdResult<String> {
     .map(|p| p.to_string_lossy().to_string())
 }
 
+/// Groups of files with identical content among `paths` (files inside archives are skipped).
+#[tauri::command]
+async fn find_duplicates(paths: Vec<String>) -> CmdResult<Vec<Vec<String>>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let files: Vec<PathBuf> = paths.iter().filter(|p| archive::split(p).is_none()).map(PathBuf::from).collect();
+        dupes::find(&files).into_iter().map(|g| g.into_iter().map(|p| p.to_string_lossy().to_string()).collect()).collect()
+    })
+    .await
+    .map_err(err)
+}
+
 /// Names in an archive folder that dropping `names` there would replace.
 #[tauri::command]
 async fn archive_conflicts(dir: String, names: Vec<String>) -> CmdResult<Vec<String>> {
@@ -711,6 +723,7 @@ pub fn run() {
             project_entries,
             archive_extract,
             archive_conflicts,
+            find_duplicates,
             compress,
             web_open,
             web_place,

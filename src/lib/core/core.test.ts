@@ -325,3 +325,26 @@ describe('smart folders', () => {
     expect(followMoves([{ id: 'w', name: 'w', ...base, scope: { folder: 'C:\\a\\b\\c' } }], { 'C:\\a\\b': 'D:\\z' })![0].scope).toEqual({ folder: 'D:\\z\\c' });
   });
 });
+
+describe('duplicates', () => {
+  const f = (path: string, mtime: number, size = 100) => ({ path, name: path.split('/').pop()!, ext: 'jpg', kind: 'file' as const, size, mtime, ctime: 0, tags: [] });
+
+  it('recognises copy names', async () => {
+    const { looksLikeCopy } = await import('./dupes');
+    for (const n of ['Foto 2.jpg', 'Foto (1).jpg', 'Foto Kopie.jpg', 'Foto-copy.jpg', 'Copy of Foto.jpg', 'Kopie von Foto.jpg', 'Foto copy 3.jpg']) expect(looksLikeCopy(n), n).toBe(true);
+    for (const n of ['Foto.jpg', 'Urlaub 2026.jpg', 'Kopierer.pdf']) expect(looksLikeCopy(n), n).toBe(false);
+  });
+
+  it('keeps the original and counts the extras', async () => {
+    const { keeper, extras, waste } = await import('./dupes');
+    const a = f('/x/Foto.jpg', 300);
+    const b = f('/x/Foto 2.jpg', 100);
+    const c = f('/y/z/Foto.jpg', 200);
+    expect(keeper([b, c, a]).path).toBe('/y/z/Foto.jpg');
+    const d = f('/a.pdf', 5, 1000);
+    const e = f('/b/a.pdf', 5, 1000);
+    expect(keeper([e, d]).path).toBe('/a.pdf');
+    expect(extras([[a, b, c], [d, e]]).map((x) => x.path)).toEqual(['/x/Foto.jpg', '/x/Foto 2.jpg', '/b/a.pdf']);
+    expect(waste([[a, b, c], [d, e]])).toBe(1200);
+  });
+});

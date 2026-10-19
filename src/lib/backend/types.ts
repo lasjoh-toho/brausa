@@ -154,6 +154,8 @@ export interface Backend {
   rename(path: string, newName: string): Promise<Entry>;
   /** Packs files and folders into a new ZIP next to the first one; returns its path. */
   compress(paths: string[]): Promise<string>;
+  /** Groups of files with identical content among `paths`, largest waste first. */
+  findDuplicates(paths: string[]): Promise<string[][]>;
   /** Names in an archive folder that dropping `names` there would replace. */
   archiveConflicts(dir: string, names: string[]): Promise<string[]>;
   /** Move to the system trash (inside an archive: remove from it). `moved` lists the removed paths. */
