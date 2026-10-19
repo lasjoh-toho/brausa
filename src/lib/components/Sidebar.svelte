@@ -4,6 +4,7 @@
   import { wikis } from '../state/wikis.svelte';
   import { drag } from '../state/drag.svelte';
   import { tagColor } from '../core/tags';
+  import { hasFilter, matches } from '../core/smart';
   import TreeNode from './TreeNode.svelte';
   import Icon from './Icon.svelte';
 
@@ -29,6 +30,20 @@
   let naming = $state<string | null>(null);
   let renaming = $state<string | null>(null);
   let deleting = $state<string | null>(null);
+  /** Smart folder being named (null: no input) or renamed. */
+  let smartNaming = $state<string | null>(null);
+  let smartRenaming = $state<string | null>(null);
+
+  const filtered = $derived(hasFilter(app.currentView));
+  const smartOpen = $derived(app.smartFolders.find((f) => matches(f, app.currentView))?.id ?? null);
+
+  function newSmart() {
+    if (!filtered) {
+      app.toast('Erst suchen, nach Art filtern oder im Kalender einen Zeitraum wählen, dann hier speichern.');
+      return;
+    }
+    smartNaming = app.suggestSmartName();
+  }
 
   // Map bags list the projects' maps, so reload when projects change.
   $effect(() => {
@@ -147,6 +162,80 @@
   {/each}
 
   <div class="section with-action">
+    Intelligente Ordner
+    <button class="add" title="Aktuelle Suche und Filter als intelligenten Ordner speichern" onclick={newSmart}>
+      <Icon name="plus" size={13} />
+    </button>
+  </div>
+  {#if smartNaming !== null}
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      class="pinput"
+      bind:value={smartNaming}
+      placeholder="Name"
+      title={app.smartSummary(app.currentView)}
+      autofocus
+      onfocus={(e) => e.currentTarget.select()}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') {
+          app.saveSmart(smartNaming ?? '');
+          smartNaming = null;
+        } else if (e.key === 'Escape') smartNaming = null;
+      }}
+      onblur={() => (smartNaming = null)}
+    />
+  {/if}
+  {#each app.smartFolders as f (f.id)}
+    {#if smartRenaming === f.id}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="pinput"
+        value={f.name}
+        autofocus
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            app.renameSmart(f.id, e.currentTarget.value);
+            smartRenaming = null;
+          } else if (e.key === 'Escape') smartRenaming = null;
+        }}
+        onblur={() => (smartRenaming = null)}
+      />
+    {:else}
+      <div
+        class="place project"
+        class:current={smartOpen === f.id}
+        role="button"
+        tabindex="0"
+        title={app.smartSummary(f)}
+        onclick={() => app.openSmart(f.id)}
+        ondblclick={() => (smartRenaming = f.id)}
+        onkeydown={(e) => e.key === 'Enter' && app.openSmart(f.id)}
+      >
+        <Icon name="filter" size={15} />
+        <span class="pname">{f.name}</span>
+        {#if filtered && smartOpen !== f.id}
+          <button
+            class="rm"
+            title="Durch die aktuelle Ansicht ersetzen ({app.smartSummary(app.currentView)})"
+            onclick={(e) => (e.stopPropagation(), app.updateSmart(f.id))}><Icon name="target" size={11} /></button
+          >
+        {/if}
+        <button class="rm" title="Umbenennen" onclick={(e) => (e.stopPropagation(), (smartRenaming = f.id))}><Icon name="pencil" size={11} /></button>
+        <button class="rm" title="Entfernen (die Dateien bleiben unberührt)" onclick={(e) => (e.stopPropagation(), app.removeSmart(f.id))}
+          ><Icon name="x" size={11} /></button
+        >
+      </div>
+    {/if}
+  {/each}
+  {#if filtered && !smartOpen && smartNaming === null}
+    <button class="place save" title={app.smartSummary(app.currentView)} onclick={newSmart}>
+      <Icon name="plus" size={13} />Aktuelle Ansicht speichern
+    </button>
+  {:else if !app.smartFolders.length && smartNaming === null}
+    <p class="hint">Suche, Art-Filter oder Kalender-Rahmen setzen und mit + speichern.</p>
+  {/if}
+
+  <div class="section with-action">
     Wikis
     <span class="grow"></span>
     {#if wikis.overlays.length}
@@ -261,6 +350,16 @@
     background: var(--accent-soft);
     box-shadow: inset 0 0 0 1.5px var(--accent);
     color: var(--fg);
+  }
+  .save {
+    width: 100%;
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg-faint);
+    text-align: left;
+  }
+  .save:hover {
+    color: var(--accent);
   }
   .tree {
     flex: none;

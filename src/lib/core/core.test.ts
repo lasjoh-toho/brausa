@@ -281,3 +281,47 @@ describe('archives', () => {
     expect(archiveName('/a/c.txt')).toBe('/a/c.txt');
   });
 });
+
+describe('smart folders', () => {
+  const base = {
+    scope: { folder: '/h/Fotos' },
+    search: '#urlaub',
+    typeFilter: 'image',
+    recursive: true,
+    date: { field: 'taken' as const, from: new Date(2026, 6, 1).getTime(), to: new Date(2026, 10, 1).getTime(), weekdays: [0] }
+  };
+
+  it('knows when a view is worth saving and describes it', async () => {
+    const { hasFilter, describe, suggestName } = await import('./smart');
+    expect(hasFilter(base)).toBe(true);
+    expect(hasFilter({ ...base, search: '  ', typeFilter: null, date: null })).toBe(false);
+    expect(describe(base, 'Fotos')).toBe('Fotos · #urlaub · Bilder · 1.7.2026 – 31.10.2026 (Mo)');
+    expect(suggestName(base, 'Fotos')).toBe('#urlaub Bilder in Fotos');
+  });
+
+  it('matches the current view', async () => {
+    const { matches } = await import('./smart');
+    const f = { id: 'a', name: 'x', ...base };
+    expect(matches(f, { ...base, date: { ...base.date } })).toBe(true);
+    expect(matches(f, { ...base, search: '#arbeit' })).toBe(false);
+    expect(matches(f, { ...base, date: { ...base.date, weekdays: [0, 1] } })).toBe(false);
+    expect(matches(f, { ...base, scope: { project: 'p' } })).toBe(false);
+    // Stream does not matter for projects.
+    const p = { ...f, scope: { project: 'p' } };
+    expect(matches(p, { ...base, scope: { project: 'p' }, recursive: false })).toBe(true);
+  });
+
+  it('follows renamed and moved folders', async () => {
+    const { followMoves } = await import('./smart');
+    const fs = [
+      { id: 'a', name: 'a', ...base },
+      { id: 'b', name: 'b', ...base, scope: { folder: '/h/Fotos/2026' } },
+      { id: 'c', name: 'c', ...base, scope: { folder: '/h/Fotosammlung' } },
+      { id: 'd', name: 'd', ...base, scope: { project: 'p' } }
+    ];
+    const out = followMoves(fs, { '/h/Fotos': '/h/Bilder' })!;
+    expect(out.map((f) => ('folder' in f.scope ? f.scope.folder : f.scope.project))).toEqual(['/h/Bilder', '/h/Bilder/2026', '/h/Fotosammlung', 'p']);
+    expect(followMoves(fs, { '/h/Anderes': '/h/X' })).toBeNull();
+    expect(followMoves([{ id: 'w', name: 'w', ...base, scope: { folder: 'C:\\a\\b\\c' } }], { 'C:\\a\\b': 'D:\\z' })![0].scope).toEqual({ folder: 'D:\\z\\c' });
+  });
+});

@@ -17,6 +17,7 @@ import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
 import { family } from '../core/format';
 import { store } from '../platform';
+import { describe, followMoves, placeName, suggestName, type SmartFolder, type SmartView } from '../core/smart';
 
 export interface DropCell {
   label: string;
@@ -112,6 +113,18 @@ class AppState {
   menu = $state<{ x: number; y: number; entry: Entry | null } | null>(null);
   /** Open confirmation dialog (see ask()). */
   dialog = $state<{ title: string; text: string; ok: string; danger?: boolean; resolve: (yes: boolean) => void } | null>(null);
+
+  /** Saved searches/filters (intelligente Ordner). */
+  smartFolders = $state<SmartFolder[]>(store.get('smartFolders', []));
+
+  /** The current place and filters, as a smart folder would store them. */
+  currentView = $derived<SmartView>({
+    scope: this.project ? { project: this.project } : { folder: this.cwd },
+    search: this.searchMode === 'filter' ? this.search : '',
+    typeFilter: this.typeFilter,
+    recursive: this.recursive,
+    date: this.dateFilter
+  });
 
   /** Entries after all filters except the date range (the calendar shows these). */
   undated = $derived(
@@ -257,6 +270,95 @@ class AppState {
   }
 
   // ---------------------------------------------------------------- projects / index
+
+  // ---------------------------------------------------------------- smart folders
+
+  smartPlace(f: SmartView) {
+    return placeName(f.scope, (id) => this.projects.find((p) => p.id === id)?.name);
+  }
+
+  smartSummary(f: SmartView) {
+    return describe(f, this.smartPlace(f));
+  }
+
+  suggestSmartName() {
+    return suggestName(this.currentView, this.smartPlace(this.currentView));
+  }
+
+  private saveSmartFolders() {
+    store.set('smartFolders', $state.snapshot(this.smartFolders));
+  }
+
+  /** Save the current place and filters under a name. */
+  saveSmart(name: string) {
+    const v = $state.snapshot(this.currentView) as SmartView;
+    const f: SmartFolder = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: name.trim() || this.suggestSmartName(), ...v };
+    this.smartFolders = [...this.smartFolders, f];
+    this.saveSmartFolders();
+    this.toast(`„${f.name}“ gespeichert`);
+    return f;
+  }
+
+  /** Open the place and restore every filter of a smart folder. */
+  async openSmart(id: string) {
+    const f = this.smartFolders.find((x) => x.id === id);
+    if (!f) return;
+    if ('project' in f.scope && !this.projects.some((p) => 'project' in f.scope && p.id === f.scope.project)) {
+      this.toast(`Das Projekt von „${f.name}“ gibt es nicht mehr`, true);
+      return;
+    }
+    // Set the filters before loading, so the place is read only once.
+    this.typeFilter = f.typeFilter;
+    store.set('typeFilter', f.typeFilter);
+    this.searchMode = 'filter';
+    this.search = f.search;
+    if ('project' in f.scope) await this.openProject(f.scope.project);
+    else {
+      this.recursive = f.recursive;
+      store.set('recursive', f.recursive);
+      await this.navigate(f.scope.folder);
+    }
+    if (f.date) {
+      this.dateField = f.date.field;
+      store.set('dateField', f.date.field);
+      if (f.date.field === 'taken') void this.loadMediaInfo();
+    }
+    this.dateFilter = f.date;
+  }
+
+  renameSmart(id: string, name: string) {
+    if (!name.trim()) return;
+    this.smartFolders = this.smartFolders.map((f) => (f.id === id ? { ...f, name: name.trim() } : f));
+    this.saveSmartFolders();
+  }
+
+  /** Replace a smart folder's filters with the current ones. */
+  updateSmart(id: string) {
+    const v = $state.snapshot(this.currentView) as SmartView;
+    this.smartFolders = this.smartFolders.map((f) => (f.id === id ? { ...f, ...v } : f));
+    this.saveSmartFolders();
+  }
+
+  /** Keep smart folders pointing at folders that were moved or renamed. */
+  private followSmart(moved: Record<string, string>) {
+    const next = followMoves(this.smartFolders, moved);
+    if (next) {
+      this.smartFolders = next;
+      this.saveSmartFolders();
+    }
+  }
+
+  removeSmart(id: string) {
+    const f = this.smartFolders.find((x) => x.id === id);
+    if (!f) return;
+    const at = this.smartFolders.indexOf(f);
+    this.smartFolders = this.smartFolders.filter((x) => x.id !== id);
+    this.saveSmartFolders();
+    this.toast(`„${f.name}“ entfernt`, false, async () => {
+      this.smartFolders = [...this.smartFolders.slice(0, at), f, ...this.smartFolders.slice(at)];
+      this.saveSmartFolders();
+    });
+  }
 
   async loadLibraries() {
     this.libraries = (await this.backend.libraries()).sort((a, b) => a.name.localeCompare(b.name));
@@ -649,6 +751,7 @@ class AppState {
     if (mode === 'move' && n) {
       this.staging = this.staging.map((e) => (res.moved[e.path] ? { ...e, path: res.moved[e.path] } : e));
       this.persistStaging();
+      this.followSmart(res.moved);
     }
     await this.afterFsChange();
   }
@@ -722,6 +825,7 @@ class AppState {
     try {
       const e = await this.backend.rename(path, newName);
       this.staging = this.staging.map((s) => (s.path === path ? { ...s, path: e.path, name: e.name } : s));
+      this.followSmart({ [path]: e.path });
       await this.afterFsChange();
       this.select(e.path, 'replace');
     } catch (err) {
