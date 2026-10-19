@@ -111,6 +111,14 @@ export class TauriBackend implements Backend {
     return withThumb(await invoke<Entry>('rename', { path, newName }));
   }
 
+  compress(paths: string[]) {
+    return invoke<string>('compress', { paths });
+  }
+
+  archiveConflicts(dir: string, names: string[]) {
+    return invoke<string[]>('archive_conflicts', { dir, names });
+  }
+
   trash(paths: string[]) {
     return invoke<TransferResult>('trash', { paths });
   }

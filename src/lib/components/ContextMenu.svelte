@@ -3,6 +3,7 @@
   import { app } from '../state/app.svelte';
   import { isMac, modLabel } from '../platform';
   import Icon from './Icon.svelte';
+  import { inArchive } from '../core/archive';
 
   let { onTag, onPreview }: { onTag: () => void; onPreview: () => void } = $props();
 
@@ -11,6 +12,7 @@
   const targets = $derived(m.entry ? (app.selection.has(m.entry.path) ? app.selectedEntries : [m.entry]) : []);
   const one = $derived(targets.length === 1 ? targets[0] : null);
   const files = $derived(targets.filter((t) => t.kind === 'file'));
+  const packed = $derived(targets.some((t) => inArchive(t.path)));
 
   type Item = { label: string; icon: string; key?: string; run: () => void; danger?: boolean } | null;
 
@@ -34,9 +36,10 @@
           ...(app.currentProject
             ? [{ label: `Aus „${app.currentProject.name}“ entfernen`, icon: 'x', key: isMac ? '⌘⌫' : 'Entf', run: () => app.removeFromProject(targets) }]
             : []),
+          { label: targets.length === 1 ? `„${targets[0].name}“ komprimieren` : `${targets.length} Objekte komprimieren`, icon: 'archive', run: () => app.compress(targets) },
           null,
           {
-            label: 'In den Papierkorb',
+            label: packed ? 'Aus dem Archiv löschen …' : 'In den Papierkorb',
             icon: 'trash',
             key: app.project ? undefined : isMac ? '⌘⌫' : 'Entf',
             danger: true,

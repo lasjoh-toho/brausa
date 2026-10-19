@@ -329,6 +329,14 @@ export class DemoBackend implements Backend {
     return this.decorate(node.entry);
   }
 
+  async compress(): Promise<string> {
+    throw new Error('Komprimieren geht nur in der App');
+  }
+
+  async archiveConflicts(): Promise<string[]> {
+    return [];
+  }
+
   async trash(paths: string[]): Promise<TransferResult> {
     const res: TransferResult = { moved: {}, errors: [] };
     for (const p of paths) {

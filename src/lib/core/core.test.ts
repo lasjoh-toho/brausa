@@ -267,7 +267,7 @@ describe('web panel addresses', () => {
 
 describe('archives', () => {
   it('knows archives and paths inside them', async () => {
-    const { isArchive, inArchive, archiveRoot } = await import('./archive');
+    const { isArchive, inArchive, archiveRoot, archiveName } = await import('./archive');
     expect(isArchive('/a/Fotos.ZIP')).toBe(true);
     expect(isArchive('/a/x.tar.gz')).toBe(true);
     expect(isArchive('/a/x.gz')).toBe(false);
@@ -276,5 +276,8 @@ describe('archives', () => {
     expect(inArchive('C:\\a\\b.zip!\\c')).toBe(true);
     expect(inArchive('/a/b.zip')).toBe(false);
     expect(archiveRoot('/a/b.zip')).toBe('/a/b.zip!');
+    expect(archiveName('/a/b.zip!/c/d.txt')).toBe('/a/b.zip');
+    expect(archiveName('/a/b.tar.gz!')).toBe('/a/b.tar.gz');
+    expect(archiveName('/a/c.txt')).toBe('/a/c.txt');
   });
 });

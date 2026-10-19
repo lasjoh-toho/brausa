@@ -6,13 +6,17 @@
   import { tagColor, leaf } from '../core/tags';
   import { isToggleKey } from '../platform';
   import Icon from './Icon.svelte';
+  import { archiveRoot, inArchive, isArchive } from '../core/archive';
 
   let { entry, source = 'canvas', compact = false }: { entry: Entry; source?: string; compact?: boolean } = $props();
 
   const selected = $derived(app.selection.has(entry.path));
   const fam = $derived(family(entry.ext, entry.kind));
   const staged = $derived(app.staging.some((s) => s.path === entry.path));
-  const isHit = $derived(drag.active && drag.hit?.kind === 'folder' && drag.hit.path === entry.path);
+  // A closed archive takes drops too: they are packed into it.
+  const packable = $derived(entry.kind === 'file' && isArchive(entry.path) && !inArchive(entry.path));
+  const dropPath = $derived(packable ? archiveRoot(entry.path) : entry.path);
+  const isHit = $derived(drag.active && drag.hit?.kind === 'folder' && drag.hit.path === dropPath);
   const dragging = $derived(drag.active && drag.items.some((i) => i.path === entry.path));
 
   const src = $derived(app.thumbOf(entry));
@@ -81,7 +85,8 @@
   class:hit-move={isHit && drag.hit?.zone === 'move'}
   class:hit-attr={isHit && drag.hit?.zone === 'attr'}
   data-path={entry.path}
-  data-drop={entry.kind === 'dir' ? 'folder' : undefined}
+  data-drop={entry.kind === 'dir' || packable ? 'folder' : undefined}
+  data-target={packable ? dropPath : undefined}
   data-zones={entry.kind === 'dir' ? 'dual' : undefined}
   role="option"
   aria-selected={selected}
@@ -103,7 +108,7 @@
       <span class="path" title={entry.relDir}>{entry.relDir}</span>
     {/if}
     {#if staged}<span class="staged" title="In der Ablage"><Icon name="tray" size={11} /></span>{/if}
-    {#if isHit}
+    {#if isHit && !packable}
       <div class="zones" aria-hidden="true">
         <span class="z" class:on={drag.hit?.zone === 'move'}>{drag.copy ? 'Kopieren' : 'Verschieben'}</span>
         <span class="z attr" class:on={drag.hit?.zone === 'attr'}>Taggen</span>

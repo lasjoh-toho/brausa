@@ -11,6 +11,7 @@
   import { family, formatDate, formatSize } from '../core/format';
   import { isToggleKey, store } from '../platform';
   import Icon from './Icon.svelte';
+  import { archiveRoot, inArchive, isArchive } from '../core/archive';
 
   const path = $derived(app.pane!);
   let entries = $state<Entry[]>([]);
@@ -130,12 +131,13 @@
     {#each entries as e (e.path)}
       {@const t = app.thumbOf(e)}
       {@const fam = family(e.ext, e.kind)}
+      {@const target = e.kind === 'dir' ? e.path : isArchive(e.path) && !inArchive(e.path) ? archiveRoot(e.path) : undefined}
       <div
         class="row"
         class:sel={sel.has(e.path)}
-        class:hit={drag.active && e.kind === 'dir' && drag.hit?.kind === 'folder' && drag.hit.path === e.path}
-        data-drop={e.kind === 'dir' ? 'folder' : undefined}
-        data-path={e.kind === 'dir' ? e.path : undefined}
+        class:hit={drag.active && !!target && drag.hit?.kind === 'folder' && drag.hit.path === target}
+        data-drop={target ? 'folder' : undefined}
+        data-path={target}
         role="button"
         tabindex="-1"
         onpointerdown={(ev) => drag.begin(ev, () => dragItems(e), 'pane', (pe) => click(e, pe))}

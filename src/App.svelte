@@ -18,6 +18,7 @@
   import GridEditor from './lib/components/GridEditor.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import ContextMenu from './lib/components/ContextMenu.svelte';
+  import Confirm from './lib/components/Confirm.svelte';
   import ProjectBoard from './lib/components/ProjectBoard.svelte';
   import WikiEditor from './lib/components/WikiEditor.svelte';
   import OverlayTool from './lib/components/OverlayTool.svelte';
@@ -51,7 +52,7 @@
       e.preventDefault();
       return;
     }
-    if (wikis.editing !== null || wikis.overlaysOpen || app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.renaming) return;
+    if (wikis.editing !== null || wikis.overlaysOpen || app.view === 'board' || typing(e) || drag.active || tagSource || app.preview || app.menu || app.dialog || app.renaming) return;
 
     const sel = app.selectedEntries;
     const k = e.key.toLowerCase();
@@ -116,6 +117,7 @@
   {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
   {#if app.menu}<ContextMenu onTag={() => (tagSource = 'selection')} onPreview={openPreview} />{/if}
+  {#if app.dialog}<Confirm />{/if}
   <Toasts />
   <DragGhost />
 </div>

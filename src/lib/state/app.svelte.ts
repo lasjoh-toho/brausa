@@ -8,7 +8,7 @@ import type { Backend } from '../backend';
 import type { IndexReport, LibraryInfo } from '../backend/types';
 import { createBackend } from '../backend';
 import { parseCategories } from '../core/pattern';
-import { archiveRoot, inArchive, isArchive } from '../core/archive';
+import { archiveName, archiveRoot, inArchive, isArchive } from '../core/archive';
 import type { ProjectInfo } from '../backend/types';
 import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
 import { basename, dirname, isWithin } from '../core/paths';
@@ -110,6 +110,8 @@ class AppState {
   thumbs = new SvelteMap<string, string | null>();
   renaming = $state<string | null>(null);
   menu = $state<{ x: number; y: number; entry: Entry | null } | null>(null);
+  /** Open confirmation dialog (see ask()). */
+  dialog = $state<{ title: string; text: string; ok: string; danger?: boolean; resolve: (yes: boolean) => void } | null>(null);
 
   /** Entries after all filters except the date range (the calendar shows these). */
   undated = $derived(
@@ -554,7 +556,72 @@ class AppState {
 
   // ---------------------------------------------------------------- operations
 
+  /** Asks before something that cannot simply be undone; resolves to the answer. */
+  ask(o: { title: string; text: string; ok: string; danger?: boolean }): Promise<boolean> {
+    this.dialog?.resolve(false);
+    return new Promise((resolve) => {
+      this.dialog = {
+        ...o,
+        resolve: (yes) => {
+          this.dialog = null;
+          resolve(yes);
+        }
+      };
+    });
+  }
+
+  /** Into an archive: always a copy, after asking (and naming what gets replaced). */
+  private async packInto(entries: Entry[], targetDir: string) {
+    const name = archiveName(targetDir);
+    if (entries.some((e) => archiveName(e.path) === name && inArchive(e.path))) {
+      this.toast('Innerhalb eines Archivs kann brausa nichts verschieben', true);
+      return;
+    }
+    let replaced: string[] = [];
+    try {
+      replaced = await this.backend.archiveConflicts(targetDir, entries.map((e) => basename(e.path)));
+    } catch {
+      /* the archive itself will report the problem */
+    }
+    const n = entries.length;
+    const ok = await this.ask({
+      title: `In „${basename(name)}“ einpacken?`,
+      text:
+        `${n === 1 ? `„${entries[0].name}“ wird` : `${n} Objekte werden`} als Kopie in das Archiv gelegt, die Originale bleiben, wo sie sind.` +
+        (replaced.length ? ` Ersetzt wird: ${replaced.map((r) => `„${r}“`).join(', ')}.` : '') +
+        ' Die bisherige Fassung des Archivs kommt zur Sicherheit in den Papierkorb.',
+      ok: 'Einpacken',
+      danger: replaced.length > 0
+    });
+    if (!ok) return;
+    try {
+      const res = await this.backend.transfer(
+        entries.map((e) => e.path),
+        targetDir,
+        'copy'
+      );
+      const k = Object.keys(res.moved).length;
+      this.toast(`${k} ${k === 1 ? 'Objekt' : 'Objekte'} eingepackt → ${basename(name)}`);
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    }
+    await this.afterFsChange();
+  }
+
+  async compress(entries: Entry[]) {
+    if (!entries.length) return;
+    try {
+      const p = await this.backend.compress(entries.map((e) => e.path));
+      await this.afterFsChange();
+      if (!inArchive(entries[0].path)) this.select(p, 'replace');
+      this.toast(`„${basename(p)}“ angelegt`);
+    } catch (e) {
+      this.toast(String(e).replace(/^Error: /, ''), true);
+    }
+  }
+
   async transfer(entries: Entry[], targetDir: string, mode: TransferMode) {
+    if (inArchive(targetDir)) return this.packInto(entries, targetDir);
     // Out of an archive is always a copy: the archive stays as it is.
     if (entries.some((e) => inArchive(e.path))) mode = 'copy';
     const paths = entries.map((e) => e.path).filter((p) => !(mode === 'move' && dirname(p) === targetDir));
@@ -664,10 +731,22 @@ class AppState {
 
   async trash(entries: Entry[]) {
     if (!entries.length) return;
+    const packed = entries.filter((e) => inArchive(e.path));
+    if (packed.length) {
+      const archives = [...new Set(packed.map((e) => basename(archiveName(e.path))))];
+      const n = packed.length;
+      const ok = await this.ask({
+        title: `Aus ${archives.map((a) => `„${a}“`).join(', ')} löschen?`,
+        text: `${n === 1 ? `„${packed[0].name}“ wird` : `${n} Objekte werden`} aus dem Archiv entfernt. Das lässt sich nicht rückgängig machen, aber die bisherige Fassung des Archivs kommt zur Sicherheit in den Papierkorb.`,
+        ok: 'Löschen',
+        danger: true
+      });
+      if (!ok) return;
+    }
     const res = await this.backend.trash(entries.map((e) => e.path));
     const n = Object.keys(res.moved).length;
     if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
-    if (n) this.toast(`${n} ${n === 1 ? 'Objekt' : 'Objekte'} in den Papierkorb gelegt`);
+    if (n) this.toast(`${n} ${n === 1 ? 'Objekt' : 'Objekte'} ${entries.some((e) => inArchive(e.path)) ? 'aus dem Archiv gelöscht' : 'in den Papierkorb gelegt'}`);
     this.unstage(Object.keys(res.moved));
     await this.afterFsChange();
   }

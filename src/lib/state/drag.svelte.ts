@@ -14,7 +14,7 @@ import type { Entry } from '../core/types';
 import { isWithin, basename } from '../core/paths';
 import { UNTAGGED } from '../core/views';
 import { isCopyKey } from '../platform';
-import { inArchive } from '../core/archive';
+import { archiveRoot, inArchive } from '../core/archive';
 import { app } from './app.svelte';
 
 export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board' | 'project';
@@ -68,12 +68,12 @@ class DragController {
   label = $derived.by(() => {
     const h = this.hit;
     if (!h) return '';
-    const name = h.path ? basename(h.path) : '';
+    const name = h.path ? basename(h.path).replace(/!$/, '') : '';
     switch (h.kind) {
       case 'folder':
-        return h.zone === 'attr' ? `Attribute von „${name}“ zuweisen` : `${this.verb()} nach „${name}“`;
+        return h.zone === 'attr' ? `Attribute von „${name}“ zuweisen` : `${this.verb()} ${this.hit?.path && inArchive(this.hit.path) ? 'in' : 'nach'} „${name}“`;
       case 'crumb':
-        return `${this.verb()} nach „${name}“`;
+        return `${this.verb()} ${this.hit?.path && inArchive(this.hit.path) ? 'in' : 'nach'} „${name}“`;
       case 'tray':
         return 'In die Ablage legen';
       case 'project':
@@ -188,13 +188,13 @@ class DragController {
       this.spring(null);
       return;
     }
-    const hit: DropHit = { kind, path: t.dataset.path, key: t.dataset.key };
+    const hit: DropHit = { kind, path: t.dataset.target ?? t.dataset.path, key: t.dataset.key };
     if (kind === 'grid-cell') hit.cell = Number(t.dataset.cell);
     if (kind === 'folder') {
       const r = t.getBoundingClientRect();
       hit.zone = t.dataset.zones === 'dual' && x > r.left + r.width / 2 ? 'attr' : 'move';
       // Never offer dropping a folder into itself.
-      if (this.items.some((i) => i.kind === 'dir' && isWithin(hit.path!, i.path))) {
+      if (this.items.some((i) => (i.kind === 'dir' && isWithin(hit.path!, i.path)) || hit.path === archiveRoot(i.path))) {
         this.hit = null;
         return;
       }
@@ -229,6 +229,7 @@ class DragController {
 
   /** Out of an archive is unpacking; otherwise ⌥/Ctrl decides between copy and move. */
   private verb() {
+    if (this.hit?.path && inArchive(this.hit.path)) return 'Einpacken';
     return this.items.some((i) => inArchive(i.path)) ? 'Auspacken' : this.copy ? 'Kopieren' : 'Verschieben';
   }
 

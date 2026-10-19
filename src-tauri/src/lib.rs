@@ -118,13 +118,18 @@ async fn walk(state: State<'_, Index>, root: String, max_depth: usize, include_h
 }
 
 #[tauri::command]
-async fn transfer(state: State<'_, Index>, projs: State<'_, Projs>, paths: Vec<String>, target_dir: String, mode: String) -> CmdResult<TransferResult> {
+async fn transfer(app: AppHandle, state: State<'_, Index>, projs: State<'_, Projs>, paths: Vec<String>, target_dir: String, mode: String) -> CmdResult<TransferResult> {
     let mode = match mode.as_str() {
         "move" => Mode::Move,
         "copy" => Mode::Copy,
         m => return Err(format!("Unbekannter Modus: {m}")),
     };
-    read_only(&target_dir)?;
+    // Into an archive means packing a copy; the originals stay where they are.
+    if let Some((arch, dir)) = archive::split(&target_dir) {
+        let sources = paths.iter().map(|p| real_path(&app, p)).collect::<CmdResult<Vec<_>>>()?;
+        let added = archive::add(&arch, &dir, &sources, &|old| retire(&app, old)).map_err(err)?;
+        return Ok(TransferResult { moved: paths.into_iter().zip(added).collect(), errors: vec![] });
+    }
     // Out of an archive means unpacking: the archive itself stays unchanged.
     let (inside, paths): (Vec<String>, Vec<String>) = paths.into_iter().partition(|p| archive::split(p).is_some());
     let mut res = fsops::transfer(&paths, Path::new(&target_dir), mode);
@@ -482,6 +487,41 @@ fn read_only(path: &str) -> CmdResult<()> {
     }
 }
 
+/// Before brausa changes an archive, a copy of the old version goes to the trash.
+fn retire(app: &AppHandle, old: &Path) -> std::io::Result<()> {
+    let dir = app.path().app_cache_dir().map_err(std::io::Error::other)?.join("retired").join(format!("{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
+    std::fs::create_dir_all(&dir)?;
+    let copy = dir.join(old.file_name().unwrap_or_default());
+    std::fs::copy(old, &copy)?;
+    let r = ::trash::delete(&copy).map_err(|e| std::io::Error::other(format!("Sicherung in den Papierkorb fehlgeschlagen: {e}")));
+    let _ = std::fs::remove_dir_all(&dir);
+    r
+}
+
+/// Packs files and folders into a new ZIP next to the first one; returns its path.
+#[tauri::command]
+async fn compress(app: AppHandle, paths: Vec<String>) -> CmdResult<String> {
+    let first = paths.first().ok_or("Nichts ausgewählt")?;
+    let dir = match archive::split(first) {
+        Some((a, _)) => a.parent().map(Path::to_path_buf).ok_or("Kein Ordner")?,
+        None => Path::new(first).parent().map(Path::to_path_buf).ok_or("Kein Ordner")?,
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let sources = paths.iter().map(|p| real_path(&app, p)).collect::<CmdResult<Vec<_>>>()?;
+        archive::compress(&sources, &dir).map_err(err)
+    })
+    .await
+    .map_err(err)?
+    .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Names in an archive folder that dropping `names` there would replace.
+#[tauri::command]
+async fn archive_conflicts(dir: String, names: Vec<String>) -> CmdResult<Vec<String>> {
+    let (a, inner) = archive::split(&dir).ok_or("Kein Archiv")?;
+    archive::conflicts(&a, &inner, &names).map_err(err)
+}
+
 /// Unpacks a file from an archive (cached) and returns the real path, for the preview and reader.
 #[tauri::command]
 async fn archive_extract(app: AppHandle, path: String) -> CmdResult<String> {
@@ -521,9 +561,31 @@ async fn rename(state: State<'_, Index>, projs: State<'_, Projs>, path: String, 
 }
 
 #[tauri::command]
-async fn trash(state: State<'_, Index>, paths: Vec<String>) -> CmdResult<TransferResult> {
-    paths.iter().try_for_each(|p| read_only(p))?;
-    let res = fsops::trash(&paths);
+async fn trash(app: AppHandle, state: State<'_, Index>, paths: Vec<String>) -> CmdResult<TransferResult> {
+    // Inside an archive: rewrite each archive once without those entries.
+    let (inside, paths): (Vec<String>, Vec<String>) = paths.into_iter().partition(|p| archive::split(p).is_some());
+    let mut by_archive: std::collections::BTreeMap<PathBuf, Vec<String>> = Default::default();
+    for p in &inside {
+        let (a, i) = archive::split(p).unwrap();
+        by_archive.entry(a).or_default().push(i);
+    }
+    let mut res = fsops::trash(&paths);
+    for (a, inners) in by_archive {
+        let r = if inners.iter().any(String::is_empty) {
+            Err("Das ganze Archiv bitte von außen löschen".to_string())
+        } else {
+            archive::remove(&a, &inners, &|old| retire(&app, old)).map_err(err)
+        };
+        for i in inners {
+            let p = archive::join(&a, &i);
+            match &r {
+                Ok(()) => {
+                    res.moved.insert(p, String::new());
+                }
+                Err(e) => res.errors.push(fsops::TransferError { path: p, message: e.clone() }),
+            }
+        }
+    }
     let mut reg = state.0.lock().map_err(err)?;
     for p in res.moved.keys() {
         reg.trashed(Path::new(p)).map_err(err)?;
@@ -648,6 +710,8 @@ pub fn run() {
             project_remove,
             project_entries,
             archive_extract,
+            archive_conflicts,
+            compress,
             web_open,
             web_place,
             web_close,
