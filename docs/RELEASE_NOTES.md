@@ -1,6 +1,36 @@
-> **Experimentelle Software.** brausa ist eine frühe Vorab-Version und wurde nach bestem Wissen und Gewissen erstellt. Trotzdem kann sie Fehler enthalten und arbeitet direkt mit Ihren Dateien. Die Nutzung erfolgt auf eigene Gefahr; soweit gesetzlich zulässig, wird keine Verantwortung oder Haftung übernommen. Bitte vorher eine Datensicherung anlegen und zuerst mit Testordnern ausprobieren.
+> **Experimental software.** brausa is an early preview, built to the best of our knowledge. It may still contain bugs and works directly with your files. Use at your own risk; to the extent permitted by law, no responsibility or liability is accepted. Please make a backup first and try it with test folders.
 
-## Installation
+[English](#english) · [Deutsch](#deutsch)
+
+## English
+
+### Install
+
+brausa is not signed by Apple or Microsoft, so the first start has to be allowed. The steps are in **README-macOS.txt** and **README-Windows.txt** (attached below, also inside the DMG and the Windows installer).
+
+| System | File | Allow |
+|---|---|---|
+| macOS (Apple silicon and Intel) | `brausa_*_universal.dmg` | macOS 15+: start, "Done", then System Settings → Privacy & Security → **Open Anyway**. macOS 14 and earlier: Control-click → **Open** |
+| Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
+| Linux | `.AppImage` (make executable) or `.deb` | – |
+
+### New in 0.8
+
+- **English interface.** brausa follows the desktop language (German or English, otherwise English); Settings (gear icon at the top of the sidebar) → Language changes it.
+- **Automatic updates.** brausa looks for a new version shortly after starting and installs it on request (can be switched off in the settings). Updates are signed. *The first signed update will come with the next release; from 0.8 on, installed copies update themselves.*
+- **List with preview** (three-column view): folder tree, a detail list with sortable columns, and a preview of the selected file. ↑/↓ browse.
+- **Sort menu** in the toolbar: name, modified, created, taken (EXIF), size or kind, with a direction button.
+- **Smart folders:** save search, kind filter and calendar frame with the folder or project, and get it all back with one click.
+- **Find duplicates** (right-click on the background or a folder): compares content, selects the extra copies for the trash.
+- **Batch rename** (F2 with several files): pattern with `{name}`, `{n:3}`, `{date}`, `{time}`, `{folder}`, search and replace, case, live preview with conflict check, undo.
+- **Archives can be changed:** drop files onto a ZIP to pack them in, Del removes entries, right-click → *Compress* makes a ZIP (with a confirmation; the old archive goes to the trash).
+- **Web panel:** bookmarks and history per project.
+
+Details and roadmap: [README](https://github.com/lasjoh-toho/brausa#readme)
+
+## Deutsch
+
+### Installation
 
 brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die Schritte stehen ausführlich in **LIESMICH-macOS.txt** und **LIESMICH-Windows.txt** (unten bei den Dateien, außerdem im DMG bzw. im Windows-Installer).
 
@@ -10,7 +40,19 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Windows | `brausa_*_x64-setup.exe` oder `.msi` | SmartScreen → **Weitere Informationen** → **Trotzdem ausführen** |
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
-## Was drin ist
+### Was drin ist
+
+**Neu in 0.8: Englisch, Updates, Liste mit Vorschau**
+- **Englische Oberfläche:** brausa folgt der Sprache des Systems (Deutsch oder Englisch, sonst Englisch); Einstellungen (Zahnrad oben in der Seitenleiste) → Sprache stellt sie um.
+- **Automatische Updates:** brausa sucht kurz nach dem Start nach einer neuen Version und installiert sie auf Wunsch (in den Einstellungen abschaltbar). Updates sind signiert. *Das erste signierte Update kommt mit dem nächsten Release; ab 0.8 aktualisiert sich brausa dann selbst.*
+- **Liste mit Vorschau** (Drei-Spalten-Ansicht): Ordnerbaum, Detailliste mit sortierbaren Spalten und Vorschau der markierten Datei; ↑/↓ blättert.
+- **Sortiermenü** in der Toolbar: Name, Geändert, Erstellt, Aufgenommen (EXIF), Größe oder Art, mit Richtungsknopf.
+- **Intelligente Ordner:** Suche, Art-Filter und Kalender-Rahmen mit Ordner oder Projekt speichern und mit einem Klick zurückholen.
+- **Duplikate finden** (Rechtsklick auf die Fläche oder einen Ordner): vergleicht den Inhalt, markiert die überzähligen Kopien für den Papierkorb.
+- **Stapel-Umbenennen** (F2 bei mehreren Dateien): Muster mit `{name}`, `{n:3}`, `{datum}`, `{zeit}`, `{ordner}`, Ersetzen, Schreibweise, Vorschau mit Konfliktprüfung, Rückgängig.
+- **Archive bearbeiten:** Dateien auf ein ZIP ziehen packt sie ein, Entf löscht im Archiv, Rechtsklick → *komprimieren* legt ein ZIP an (mit Rückfrage; die alte Fassung kommt in den Papierkorb).
+- **Web-Fenster:** Lesezeichen und Verlauf pro Projekt.
+
 
 **Neu in 0.7: Web-Fenster und Archive**
 - **Web-Fenster** (Weltkugel in der Toolbar): Seiten aus dem Internet neben den Dateien, abgeschottet mit eigenen Cookies und ohne Zugriff auf brausa oder deine Dateien. Downloads und gespeicherte Seiten landen im Projekt bzw. im aktuellen Ordner; **Auf die Map** legt markierten Text als Snippet mit Link zurück auf die Projektmap.

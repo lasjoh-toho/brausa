@@ -31,7 +31,7 @@ fn valid_id(id: &str) -> bool {
 
 fn file(root: &Path, id: &str) -> io::Result<PathBuf> {
     if !valid_id(id) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Ungültige Map-ID „{id}“")));
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, crate::tr!(format!("Ungültige Map-ID „{id}“"), format!("Invalid map id “{id}”"))));
     }
     Ok(dir(root).join(format!("{id}.json")))
 }

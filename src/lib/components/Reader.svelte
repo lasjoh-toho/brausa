@@ -17,6 +17,7 @@
   import { renderMarkdown } from '../core/markdown';
   import { anchorText, findQuote, sanitizeHtml, type Snippet } from '../core/snippets';
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -167,7 +168,7 @@
         const el = scroller!.querySelector<HTMLElement>(`[data-page="${r.page}"]`);
         if (el) scroller!.scrollTo({ top: el.offsetTop + (r.rects?.[0]?.y ?? 0) * el.offsetHeight - 80, behavior: 'smooth' });
       } else if (r.quote) {
-        const m = textMarks.find((t) => t.r === r);
+        const m = textMarks.find((x) => x.r === r);
         if (m) scroller!.scrollTo({ top: m.y - 80, behavior: 'smooth' });
       }
     });
@@ -223,9 +224,9 @@
     <header>
       <Icon name="doc" size={14} />
       <span class="name" title={ref.path}>{ref.name}</span>
-      <span class="hint">Text markieren und auf die Map ziehen</span>
-      <button class="btn icon" title="In der Standard-App öffnen" onclick={() => board.openExternal(ref.path!)}><Icon name="open" size={14} /></button>
-      <button class="btn icon" title="Leser schließen" onclick={() => board.closeReader()}><Icon name="x" size={14} /></button>
+      <span class="hint">{t('reader.hint')}</span>
+      <button class="btn icon" title={t('reader.openExternal')} onclick={() => board.openExternal(ref.path!)}><Icon name="open" size={14} /></button>
+      <button class="btn icon" title={t('reader.close')} onclick={() => board.closeReader()}><Icon name="x" size={14} /></button>
     </header>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -233,7 +234,7 @@
       {#if error}
         <p class="msg err">{error}</p>
       {:else if loading}
-        <p class="msg">Lädt …</p>
+        <p class="msg">{t('reader.loading')}</p>
       {:else if kind === 'pdf'}
         {#each sizes as s, i (i)}
           <div
@@ -261,8 +262,8 @@
       {:else}
         <div class="text" bind:this={textEl}>
           {@html html}
-          {#each textMarks as t, j (j)}
-            <div class="mark" class:flash={isFocus(t.r)} style:left="{t.x}px" style:top="{t.y}px" style:width="{t.w}px" style:height="{t.h}px"></div>
+          {#each textMarks as tm, j (j)}
+            <div class="mark" class:flash={isFocus(tm.r)} style:left="{tm.x}px" style:top="{tm.y}px" style:width="{tm.w}px" style:height="{tm.h}px"></div>
           {/each}
         </div>
       {/if}

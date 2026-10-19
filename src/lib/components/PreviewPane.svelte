@@ -8,6 +8,7 @@
   import TextPreview from './TextPreview.svelte';
   import HtmlPreview from './HtmlPreview.svelte';
   import Icon from './Icon.svelte';
+  import { t, tn, loc } from '../i18n/index.svelte';
 
   const e = $derived(app.current);
   const many = $derived(app.selection.size > 1 ? app.selectedEntries : []);
@@ -35,7 +36,7 @@
         .catch(() => (mediaFailed = true));
   });
 
-  const fmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+  const fmt = $derived(new Intl.DateTimeFormat(loc(), { dateStyle: 'medium', timeStyle: 'short' }));
 
   function resize(ev: PointerEvent) {
     ev.preventDefault();
@@ -52,11 +53,11 @@
 </script>
 
 <aside class="pv" style:width="{app.previewWidth}px">
-  <div class="grip" onpointerdown={resize} role="separator" aria-orientation="vertical" aria-label="Breite ändern"></div>
+  <div class="grip" onpointerdown={resize} role="separator" aria-orientation="vertical" aria-label={t('preview.resize')}></div>
   {#if many.length}
     <div class="empty">
       <Icon name="select" size={36} />
-      <b>{many.length} Objekte ausgewählt</b>
+      <b>{tn('preview.selected', many.length)}</b>
       <span>{formatSize(many.reduce((n, x) => n + (x.kind === 'file' ? x.size : 0), 0))}</span>
     </div>
   {:else if e}
@@ -81,9 +82,9 @@
           <div class="ph" style:color={e.color ?? undefined}>
             <Icon name={e.kind === 'dir' ? 'folder' : isArchive(e.path) && !inArchive(e.path) ? 'archive' : family(e.ext) === 'other' ? 'file' : family(e.ext)} size={64} />
             {#if e.kind === 'file'}
-              <span class="ext">{e.ext.toUpperCase() || 'DATEI'}</span>
-              {#if mediaFailed}<span class="hint">Dieses Format kann brausa hier nicht abspielen.</span>
-              {:else if !cat || cat === 'office' || (cat === 'image' && !src)}<span class="hint">Keine Vorschau für diese Art.</span>{/if}
+              <span class="ext">{e.ext.toUpperCase() || t('preview.fileUpper')}</span>
+              {#if mediaFailed}<span class="hint">{t('preview.cannotPlay')}</span>
+              {:else if !cat || cat === 'office' || (cat === 'image' && !src)}<span class="hint">{t('preview.noPreview')}</span>{/if}
             {/if}
           </div>
         {/if}
@@ -92,11 +93,11 @@
     <div class="facts">
       <div class="title" title={e.path}>{e.name}</div>
       <dl>
-        {#if e.kind === 'file'}<dt>Größe</dt><dd>{formatSize(e.size)}</dd>{/if}
-        <dt>Geändert</dt><dd>{fmt.format(e.mtime)}</dd>
-        {#if e.ctime}<dt>Erstellt</dt><dd>{fmt.format(e.ctime)}</dd>{/if}
-        {#if e.taken}<dt>Aufgenommen</dt><dd>{fmt.format(e.taken)}</dd>{/if}
-        <dt>Ort</dt><dd class="path" title={e.path}>{'\u200e' + e.path}</dd>
+        {#if e.kind === 'file'}<dt>{t('preview.size')}</dt><dd>{formatSize(e.size)}</dd>{/if}
+        <dt>{t('preview.modified')}</dt><dd>{fmt.format(e.mtime)}</dd>
+        {#if e.ctime}<dt>{t('preview.created')}</dt><dd>{fmt.format(e.ctime)}</dd>{/if}
+        {#if e.taken}<dt>{t('preview.taken')}</dt><dd>{fmt.format(e.taken)}</dd>{/if}
+        <dt>{t('preview.location')}</dt><dd class="path" title={e.path}>{'\u200e' + e.path}</dd>
       </dl>
       {#if e.tags.length}
         <div class="tags">
@@ -104,15 +105,15 @@
         </div>
       {/if}
       <div class="actions">
-        <button class="btn" onclick={() => app.open(e)}><Icon name="open" size={13} /> Öffnen</button>
-        <button class="btn" onclick={() => app.reveal(e)}><Icon name="folder" size={13} /> {isMac ? 'Im Finder' : 'Im Dateimanager'}</button>
+        <button class="btn" onclick={() => app.open(e)}><Icon name="open" size={13} /> {t('common.open')}</button>
+        <button class="btn" onclick={() => app.reveal(e)}><Icon name="folder" size={13} /> {isMac ? t('preview.inFinder') : t('preview.inFiles')}</button>
       </div>
     </div>
   {:else}
     <div class="empty">
       <Icon name="eye" size={36} />
-      <span>Eine Datei auswählen, um sie hier zu sehen.</span>
-      <span class="hint">↑ ↓ blättert, Leertaste zeigt groß.</span>
+      <span>{t('preview.pickFile')}</span>
+      <span class="hint">{t('preview.keysHint')}</span>
     </div>
   {/if}
 </aside>

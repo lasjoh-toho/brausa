@@ -70,7 +70,7 @@ struct Item {
 }
 
 fn items(archive: &Path) -> io::Result<Vec<Item>> {
-    let k = kind(archive).ok_or_else(|| io::Error::other("Kein Archiv"))?;
+    let k = kind(archive).ok_or_else(|| io::Error::other(crate::tr!("Kein Archiv", "Not an archive")))?;
     let f = fs::File::open(archive)?;
     let mut out = vec![];
     match k {
@@ -162,7 +162,7 @@ pub fn walk(archive: &Path, dir: &str, limit: usize) -> io::Result<Vec<Entry>> {
 
 /// Unpacks `inner` (a file, or a folder with everything in it) to `dest`.
 fn extract(archive: &Path, inner: &str, dest: &Path) -> io::Result<usize> {
-    let k = kind(archive).ok_or_else(|| io::Error::other("Kein Archiv"))?;
+    let k = kind(archive).ok_or_else(|| io::Error::other(crate::tr!("Kein Archiv", "Not an archive")))?;
     let prefix = format!("{inner}/");
     let target = |name: &str| -> Option<PathBuf> {
         if name == inner {
@@ -207,14 +207,14 @@ fn extract(archive: &Path, inner: &str, dest: &Path) -> io::Result<usize> {
         }
     }
     if n == 0 && !dest.exists() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, format!("„{inner}“ ist nicht im Archiv")));
+        return Err(io::Error::new(io::ErrorKind::NotFound, crate::tr!(format!("„{inner}“ ist nicht im Archiv"), format!("“{inner}” is not in the archive"))));
     }
     Ok(n)
 }
 
 /// A file inside an archive as a real file in `cache` (unpacked once per archive version).
 pub fn materialize(virtual_path: &str, cache: &Path) -> io::Result<PathBuf> {
-    let (archive, inner) = split(virtual_path).ok_or_else(|| io::Error::other("Kein Pfad in einem Archiv"))?;
+    let (archive, inner) = split(virtual_path).ok_or_else(|| io::Error::other(crate::tr!("Kein Pfad in einem Archiv", "Not a path inside an archive")))?;
     let mut h = DefaultHasher::new();
     (&archive, mtime_ms(&archive) as u64).hash(&mut h);
     let out = cache.join(format!("{:016x}", h.finish())).join(&inner);
@@ -226,7 +226,7 @@ pub fn materialize(virtual_path: &str, cache: &Path) -> io::Result<PathBuf> {
 
 /// Unpacks a file or folder from an archive into `dir` (next free name); returns where it went.
 pub fn extract_to(virtual_path: &str, dir: &Path) -> io::Result<PathBuf> {
-    let (archive, inner) = split(virtual_path).ok_or_else(|| io::Error::other("Kein Pfad in einem Archiv"))?;
+    let (archive, inner) = split(virtual_path).ok_or_else(|| io::Error::other(crate::tr!("Kein Pfad in einem Archiv", "Not a path inside an archive")))?;
     let name = inner.rsplit('/').next().filter(|n| !n.is_empty()).map(String::from).unwrap_or_else(|| {
         archive.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Archiv".into())
     });
@@ -299,7 +299,7 @@ fn tar_copy<W: io::Write>(b: &mut tar::Builder<W>, old: &Path, k: Kind, keep: &d
 /// Writes `out` as an archive of the kind its name says: the entries of `old`
 /// that `keep` accepts, then `add` (name inside the archive → real file or folder).
 fn write(out: &Path, old: Option<&Path>, keep: &dyn Fn(&str) -> bool, add: &[(String, PathBuf)]) -> io::Result<()> {
-    let k = kind(out).ok_or_else(|| io::Error::other("Kein Archiv"))?;
+    let k = kind(out).ok_or_else(|| io::Error::other(crate::tr!("Kein Archiv", "Not an archive")))?;
     let f = fs::File::create(out)?;
     match k {
         Kind::Zip => {
@@ -350,7 +350,7 @@ fn covers(inner: &str, name: &str) -> bool {
 }
 
 fn rewrite(archive: &Path, keep: &dyn Fn(&str) -> bool, add: &[(String, PathBuf)], retire: &dyn Fn(&Path) -> io::Result<()>) -> io::Result<()> {
-    let name = archive.file_name().ok_or_else(|| io::Error::other("Kein Archiv"))?.to_string_lossy().to_string();
+    let name = archive.file_name().ok_or_else(|| io::Error::other(crate::tr!("Kein Archiv", "Not an archive")))?.to_string_lossy().to_string();
     // Same folder and same extension, so the kind is right and the copy stays on one volume.
     let tmp = archive.with_file_name(format!(".brausa-neu-{name}"));
     let res = write(&tmp, Some(archive), keep, add).and_then(|_| retire(archive)).and_then(|_| fs::copy(&tmp, archive).map(|_| ()));
@@ -362,7 +362,7 @@ fn rewrite(archive: &Path, keep: &dyn Fn(&str) -> bool, add: &[(String, PathBuf)
 pub fn remove(archive: &Path, inners: &[String], retire: &dyn Fn(&Path) -> io::Result<()>) -> io::Result<()> {
     let found = items(archive)?.iter().any(|it| inners.iter().any(|i| covers(i, &it.name)));
     if !found {
-        return Err(io::Error::new(io::ErrorKind::NotFound, "Nicht im Archiv"));
+        return Err(io::Error::new(io::ErrorKind::NotFound, crate::tr!("Nicht im Archiv", "Not in the archive")));
     }
     rewrite(archive, &|n| !inners.iter().any(|i| covers(i, n)), &[], retire)
 }
@@ -372,9 +372,9 @@ pub fn remove(archive: &Path, inners: &[String], retire: &dyn Fn(&Path) -> io::R
 pub fn add(archive: &Path, dir: &str, sources: &[PathBuf], retire: &dyn Fn(&Path) -> io::Result<()>) -> io::Result<Vec<String>> {
     let mut add = vec![];
     for s in sources {
-        let n = s.file_name().ok_or_else(|| io::Error::other("Ungültiger Pfad"))?.to_string_lossy().to_string();
+        let n = s.file_name().ok_or_else(|| io::Error::other(crate::tr!("Ungültiger Pfad", "Invalid path")))?.to_string_lossy().to_string();
         if s == archive {
-            return Err(io::Error::other(format!("„{n}“ kann nicht in sich selbst gepackt werden")));
+            return Err(io::Error::other(crate::tr!(format!("„{n}“ kann nicht in sich selbst gepackt werden"), format!("“{n}” cannot be packed into itself"))));
         }
         add.push((if dir.is_empty() { n } else { format!("{dir}/{n}") }, s.clone()));
     }
@@ -390,8 +390,8 @@ pub fn conflicts(archive: &Path, dir: &str, names: &[String]) -> io::Result<Vec<
 /// Packs files and folders into a new ZIP in `dir`, named after the single item or „Archiv.zip“.
 pub fn compress(sources: &[PathBuf], dir: &Path) -> io::Result<PathBuf> {
     let name = match sources {
-        [one] => format!("{}.zip", one.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "Archiv".into())),
-        _ => "Archiv.zip".into(),
+        [one] => format!("{}.zip", one.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| crate::tr!("Archiv", "Archive").into())),
+        _ => crate::tr!("Archiv.zip", "Archive.zip").into(),
     };
     let dest = crate::fsops::unique_dest(dir, &name);
     let add: Vec<_> = sources.iter().map(|s| (s.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(), s.clone())).collect();
@@ -489,6 +489,7 @@ mod tests {
         let packed = compress(&[src.clone()], t.path()).unwrap();
         assert_eq!(packed.file_name().unwrap(), "neu.zip");
         assert_eq!(names(&packed), vec!["neu/sub/a.txt"]);
+        crate::i18n::set("de");
         assert_eq!(compress(&[src.clone(), zip.clone()], t.path()).unwrap().file_name().unwrap(), "Archiv.zip");
     }
 

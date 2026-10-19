@@ -7,6 +7,7 @@
   import { isToggleKey } from '../platform';
   import Icon from './Icon.svelte';
   import { archiveRoot, inArchive, isArchive } from '../core/archive';
+  import { t } from '../i18n/index.svelte';
 
   let { entry, source = 'canvas', compact = false }: { entry: Entry; source?: string; compact?: boolean } = $props();
 
@@ -107,11 +108,11 @@
     {#if entry.relDir}
       <span class="path" title={entry.relDir}>{entry.relDir}</span>
     {/if}
-    {#if staged}<span class="staged" title="In der Ablage"><Icon name="tray" size={11} /></span>{/if}
+    {#if staged}<span class="staged" title={t('files.inTray')}><Icon name="tray" size={11} /></span>{/if}
     {#if isHit && !packable}
       <div class="zones" aria-hidden="true">
-        <span class="z" class:on={drag.hit?.zone === 'move'}>{drag.copy ? 'Kopieren' : 'Verschieben'}</span>
-        <span class="z attr" class:on={drag.hit?.zone === 'attr'}>Taggen</span>
+        <span class="z" class:on={drag.hit?.zone === 'move'}>{drag.copy ? t('files.dropCopy') : t('files.dropMove')}</span>
+        <span class="z attr" class:on={drag.hit?.zone === 'attr'}>{t('files.dropTag')}</span>
       </div>
     {/if}
   </div>

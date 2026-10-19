@@ -1,3 +1,5 @@
+import { loc } from '../i18n/index.svelte';
+
 /** What was typed: an address (adds https://) or words to search for. */
 export function toUrl(input: string): string {
   const s = input.trim();
@@ -46,10 +48,10 @@ export function toggleBookmark(bookmarks: WebPage[], page: WebPage): WebPage[] {
 
 /** Every word must occur in title or address. */
 export function filterPages(list: WebPage[], q: string): WebPage[] {
-  const words = q.toLocaleLowerCase('de-DE').split(/\s+/).filter(Boolean);
+  const words = q.toLocaleLowerCase(loc()).split(/\s+/).filter(Boolean);
   if (!words.length) return list;
   return list.filter((p) => {
-    const hay = (p.title + ' ' + p.url).toLocaleLowerCase('de-DE');
+    const hay = (p.title + ' ' + p.url).toLocaleLowerCase(loc());
     return words.every((w) => hay.includes(w));
   });
 }

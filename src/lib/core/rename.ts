@@ -5,9 +5,10 @@
  */
 import type { Entry } from './types';
 import { basename, dirname } from './paths';
+import { i18n, loc, t } from '../i18n/index.svelte';
 
 export interface RenameOptions {
-  /** New name without extension: {name} {n} {n:3} {datum} {zeit} {ordner} {ext}. */
+  /** New name without extension: {name} {n} {n:3} {datum} {zeit} {ordner} {ext} (also {date} {time} {folder}). */
   pattern: string;
   find: string;
   replace: string;
@@ -19,13 +20,23 @@ export interface RenameOptions {
 
 export const DEFAULT_RENAME: RenameOptions = { pattern: '{name}', find: '', replace: '', regex: false, start: 1, case: 'keep' };
 
+/** Placeholder with German and English token (both work in a pattern); token and label follow the UI language. */
+const placeholder = (de: string, en: string, key: string): { token: string; label: string } => ({
+  get token() {
+    return i18n.lang === 'en' ? en : de;
+  },
+  get label() {
+    return t(key);
+  }
+});
+
 export const PLACEHOLDERS: { token: string; label: string }[] = [
-  { token: '{name}', label: 'bisheriger Name' },
-  { token: '{n}', label: 'Nummer (1, 2, …)' },
-  { token: '{n:3}', label: 'Nummer mit Nullen (001, 002, …)' },
-  { token: '{datum}', label: 'Datum (Aufnahme, sonst Änderung)' },
-  { token: '{zeit}', label: 'Uhrzeit' },
-  { token: '{ordner}', label: 'Ordnername' }
+  placeholder('{name}', '{name}', 'core.rename.phName'),
+  placeholder('{n}', '{n}', 'core.rename.phNumber'),
+  placeholder('{n:3}', '{n:3}', 'core.rename.phNumberPadded'),
+  placeholder('{datum}', '{date}', 'core.rename.phDate'),
+  placeholder('{zeit}', '{time}', 'core.rename.phTime'),
+  placeholder('{ordner}', '{folder}', 'core.rename.phFolder')
 ];
 
 export interface RenameStep {
@@ -44,9 +55,10 @@ function split(e: Entry): [string, string] {
 const two = (n: number) => String(n).padStart(2, '0');
 
 function caseOf(s: string, c: RenameOptions['case']): string {
-  if (c === 'lower') return s.toLocaleLowerCase('de-DE');
-  if (c === 'upper') return s.toLocaleUpperCase('de-DE');
-  if (c === 'title') return s.toLocaleLowerCase('de-DE').replace(/(^|[\s_-])(\p{L})/gu, (_, a, b) => a + b.toLocaleUpperCase('de-DE'));
+  const l = loc();
+  if (c === 'lower') return s.toLocaleLowerCase(l);
+  if (c === 'upper') return s.toLocaleUpperCase(l);
+  if (c === 'title') return s.toLocaleLowerCase(l).replace(/(^|[\s_-])(\p{L})/gu, (_, a, b) => a + b.toLocaleUpperCase(l));
   return s;
 }
 
@@ -64,12 +76,12 @@ export function searchOf(o: RenameOptions): RegExp | string | null {
 export function newName(e: Entry, index: number, o: RenameOptions): string {
   const [stem, ext] = split(e);
   const d = new Date(e.taken ?? e.mtime);
-  let s = o.pattern.replace(/\{(name|n|n:(\d+)|datum|zeit|ordner|ext)\}/g, (_, key: string, pad?: string) => {
+  let s = o.pattern.replace(/\{(name|n|n:(\d+)|datum|date|zeit|time|ordner|folder|ext)\}/g, (_, key: string, pad?: string) => {
     if (key === 'name') return stem;
     if (key === 'ext') return ext.slice(1);
-    if (key === 'datum') return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
-    if (key === 'zeit') return `${two(d.getHours())}-${two(d.getMinutes())}-${two(d.getSeconds())}`;
-    if (key === 'ordner') return basename(dirname(e.path));
+    if (key === 'datum' || key === 'date') return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+    if (key === 'zeit' || key === 'time') return `${two(d.getHours())}-${two(d.getMinutes())}-${two(d.getSeconds())}`;
+    if (key === 'ordner' || key === 'folder') return basename(dirname(e.path));
     const n = o.start + index;
     return pad ? String(n).padStart(Number(pad), '0') : String(n);
   });
@@ -79,7 +91,7 @@ export function newName(e: Entry, index: number, o: RenameOptions): string {
 }
 
 const BAD = /[/\\:*?"<>|\u0000-\u001f]/;
-const key = (dir: string, name: string) => dir + '\u0000' + name.toLocaleLowerCase('de-DE');
+const key = (dir: string, name: string) => dir + '\u0000' + name.toLocaleLowerCase(loc());
 
 /**
  * New names for `entries` (in this order) with conflicts flagged. `siblings`
@@ -90,7 +102,7 @@ export function planRenames(entries: Entry[], o: RenameOptions, siblings: (dir: 
     const name = newName(e, i, o);
     return { entry: e, name, changed: name !== e.name };
   });
-  if (o.regex && o.find && searchOf(o) === null) return steps.map((s) => ({ ...s, name: s.entry.name, changed: false, error: 'Ungültiger regulärer Ausdruck' }));
+  if (o.regex && o.find && searchOf(o) === null) return steps.map((s) => ({ ...s, name: s.entry.name, changed: false, error: t('core.rename.badRegex') }));
 
   // Names that will be free: those of entries in the batch.
   const leaving = new Set(entries.map((e) => key(dirname(e.path), e.name)));
@@ -109,11 +121,11 @@ export function planRenames(entries: Entry[], o: RenameOptions, siblings: (dir: 
   for (const s of steps) {
     const dir = dirname(s.entry.path);
     const stem = s.entry.kind === 'dir' ? s.name : s.name.slice(0, s.name.length - split(s.entry)[1].length);
-    if (!stem.trim() || s.name === '.' || s.name === '..') s.error = 'Name ist leer';
-    else if (BAD.test(s.name)) s.error = 'Enthält / \\ : * ? " < > |';
-    else if ((taken.get(key(dir, s.name)) ?? 0) > 1) s.error = 'Name doppelt';
-    else if (s.changed && others(dir).has(key(dir, s.name)) && s.name.toLocaleLowerCase('de-DE') !== s.entry.name.toLocaleLowerCase('de-DE'))
-      s.error = 'Gibt es schon';
+    if (!stem.trim() || s.name === '.' || s.name === '..') s.error = t('core.rename.empty');
+    else if (BAD.test(s.name)) s.error = t('core.rename.badChars');
+    else if ((taken.get(key(dir, s.name)) ?? 0) > 1) s.error = t('core.rename.duplicate');
+    else if (s.changed && others(dir).has(key(dir, s.name)) && s.name.toLocaleLowerCase(loc()) !== s.entry.name.toLocaleLowerCase(loc()))
+      s.error = t('core.rename.exists');
   }
   return steps;
 }

@@ -19,6 +19,7 @@ import { family, formatSize } from '../core/format';
 import { extras, keeper } from '../core/dupes';
 import { renameOrder, type RenameStep } from '../core/rename';
 import { store } from '../platform';
+import { t, tn } from '../i18n/index.svelte';
 import { describe, followMoves, placeName, suggestName, type SmartFolder, type SmartView } from '../core/smart';
 
 export interface DropCell {
@@ -39,6 +40,8 @@ export interface Toast {
   id: number;
   text: string;
   undo?: () => Promise<void>;
+  /** Label of the button that runs `undo` (default: Undo). */
+  action?: string;
   error?: boolean;
 }
 
@@ -64,7 +67,9 @@ class AppState {
   currentProject = $derived(this.projects.find((p) => p.id === this.project) ?? null);
   /** Last project worked on; the map view falls back to it. */
   lastProject = $state<string | null>(store.get('lastProject', null));
-  places = $state<{ name: string; path: string }[]>([]);
+  /** Standard places as the core names them (German); `places` shows them in the UI language. */
+  private placesRaw = $state<{ name: string; path: string }[]>([]);
+  places = $derived(this.placesRaw.map((p) => ({ ...p, name: t(`places.${p.name}`) === `places.${p.name}` ? p.name : t(`places.${p.name}`) })));
   cwd = $state('');
   history = $state<string[]>([]);
   future = $state<string[]>([]);
@@ -177,7 +182,7 @@ class AppState {
 
   groups = $derived.by(() => {
     if (this.dupes)
-      return this.dupeGroups.map((g) => ({ key: g[0].path, label: `${g[0].name} · je ${formatSize(g[0].size)}`, entries: g }));
+      return this.dupeGroups.map((g) => ({ key: g[0].path, label: t('app.dupeGroup', { name: g[0].name, size: formatSize(g[0].size) }), entries: g }));
     if (this.view === 'kanban') return groupEntries(this.visible, this.kanbanBy, { depth: this.tagDepth });
     if (this.view === 'timeline') return groupEntries(this.visible.filter((e) => e.kind === 'file'), 'month');
     return groupEntries(this.visible, 'none');
@@ -196,7 +201,7 @@ class AppState {
 
   async init() {
     this.home = await this.backend.homeDir();
-    this.places = await this.backend.places();
+    this.placesRaw = await this.backend.places();
     if (!this.gridConfig.cells.length) this.gridConfig = defaultGrid(this.places);
     const last = store.get<string>('cwd', '');
     await this.navigate(last || this.home, false).catch(() => this.navigate(this.home, false));
@@ -272,7 +277,7 @@ class AppState {
     await this.backend.deleteProject(id);
     if (this.project === id) await this.navigate(this.cwd);
     await this.loadProjects();
-    this.toast(`Projekt „${p?.name ?? ''}“ gelöscht. Die Dateien selbst bleiben, wo sie sind.`);
+    this.toast(t('app.projectDeleted', { name: p?.name ?? '' }));
   }
 
   /** Files and folders join a project; they stay where they are. */
@@ -281,7 +286,7 @@ class AppState {
     try {
       const n = await this.backend.addToProject(id, entries.map((e) => e.path));
       await this.loadProjects();
-      this.toast(n ? `${n} ${n === 1 ? 'Objekt' : 'Objekte'} zu „${p?.name}“ hinzugefügt` : `Schon in „${p?.name}“`);
+      this.toast(n ? tn('app.addedToProject', n, { name: p?.name ?? '' }) : t('app.alreadyInProject', { name: p?.name ?? '' }));
       if (this.project === id) await this.refresh(true);
     } catch (e) {
       this.toast(String(e).replace(/^Error: /, ''), true);
@@ -294,9 +299,7 @@ class AppState {
     if (!p || !entries.length) return;
     const n = await this.backend.removeFromProject(p.id, entries.map((e) => e.path));
     const left = entries.length - n;
-    this.toast(
-      `${n} aus „${p.name}“ entfernt` + (left ? ` · ${left} gehören über einen Projektordner dazu und bleiben` : '') + '. Auf der Festplatte ändert sich nichts.'
-    );
+    this.toast(left ? t('app.removedFromProjectKept', { n, name: p.name, left }) : t('app.removedFromProject', { n, name: p.name }));
     await this.loadProjects();
     await this.refresh(true);
   }
@@ -316,13 +319,13 @@ class AppState {
     }
     const files = this.visible.filter((e) => e.kind === 'file' && !inArchive(e.path));
     if (files.length < 2) {
-      this.toast('Hier gibt es nichts zu vergleichen.');
+      this.toast(t('app.nothingToCompare'));
       return;
     }
     this.dupeBusy = true;
     try {
       const groups = await this.backend.findDuplicates(files.map((e) => e.path));
-      if (!groups.length) this.toast(`Keine doppelten Dateien unter ${files.length} Dateien`);
+      if (!groups.length) this.toast(tn('app.noDupes', files.length));
       else {
         this.selection.clear();
         this.dupes = groups;
@@ -368,7 +371,7 @@ class AppState {
     const f: SmartFolder = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: name.trim() || this.suggestSmartName(), ...v };
     this.smartFolders = [...this.smartFolders, f];
     this.saveSmartFolders();
-    this.toast(`„${f.name}“ gespeichert`);
+    this.toast(t('app.smartSaved', { name: f.name }));
     return f;
   }
 
@@ -377,7 +380,7 @@ class AppState {
     const f = this.smartFolders.find((x) => x.id === id);
     if (!f) return;
     if ('project' in f.scope && !this.projects.some((p) => 'project' in f.scope && p.id === f.scope.project)) {
-      this.toast(`Das Projekt von „${f.name}“ gibt es nicht mehr`, true);
+      this.toast(t('app.smartProjectGone', { name: f.name }), true);
       return;
     }
     // Set the filters before loading, so the place is read only once.
@@ -427,7 +430,7 @@ class AppState {
     const at = this.smartFolders.indexOf(f);
     this.smartFolders = this.smartFolders.filter((x) => x.id !== id);
     this.saveSmartFolders();
-    this.toast(`„${f.name}“ entfernt`, false, async () => {
+    this.toast(t('app.smartRemoved', { name: f.name }), false, async () => {
       this.smartFolders = [...this.smartFolders.slice(0, at), f, ...this.smartFolders.slice(at)];
       this.saveSmartFolders();
     });
@@ -439,11 +442,11 @@ class AppState {
 
   private onIndexReport(r: IndexReport) {
     const parts: string[] = [];
-    if (r.relinked.length) parts.push(`${r.relinked.length} verschoben/umbenannt erkannt`);
-    if (r.imported) parts.push(`${r.imported} alte Sidecars übernommen`);
-    if (r.restored) parts.push(`${r.restored} zurückgekehrt`);
-    if (r.orphaned.length) parts.push(`${r.orphaned.length} vermisst`);
-    if (parts.length) this.toast('Index: ' + parts.join(' · '));
+    if (r.relinked.length) parts.push(t('app.indexRelinked', { n: r.relinked.length }));
+    if (r.imported) parts.push(t('app.indexImported', { n: r.imported }));
+    if (r.restored) parts.push(t('app.indexRestored', { n: r.restored }));
+    if (r.orphaned.length) parts.push(t('app.indexOrphaned', { n: r.orphaned.length }));
+    if (parts.length) this.toast(t('app.indexReport', { parts: parts.join(' · ') }));
     void this.loadLibraries();
     void this.refresh(true);
   }
@@ -782,7 +785,7 @@ class AppState {
   private async packInto(entries: Entry[], targetDir: string) {
     const name = archiveName(targetDir);
     if (entries.some((e) => archiveName(e.path) === name && inArchive(e.path))) {
-      this.toast('Innerhalb eines Archivs kann brausa nichts verschieben', true);
+      this.toast(t('app.noMoveInArchive'), true);
       return;
     }
     let replaced: string[] = [];
@@ -793,12 +796,13 @@ class AppState {
     }
     const n = entries.length;
     const ok = await this.ask({
-      title: `In „${basename(name)}“ einpacken?`,
-      text:
-        `${n === 1 ? `„${entries[0].name}“ wird` : `${n} Objekte werden`} als Kopie in das Archiv gelegt, die Originale bleiben, wo sie sind.` +
-        (replaced.length ? ` Ersetzt wird: ${replaced.map((r) => `„${r}“`).join(', ')}.` : '') +
-        ' Die bisherige Fassung des Archivs kommt zur Sicherheit in den Papierkorb.',
-      ok: 'Einpacken',
+      title: t('app.packTitle', { name: basename(name) }),
+      text: [
+        tn('app.packText', n, { name: entries[0].name }),
+        ...(replaced.length ? [t('app.packReplaced', { names: replaced.map((r) => t('app.quoted', { name: r })).join(', ') })] : []),
+        t('app.archiveBackup')
+      ].join(' '),
+      ok: t('app.packOk'),
       danger: replaced.length > 0
     });
     if (!ok) return;
@@ -809,7 +813,7 @@ class AppState {
         'copy'
       );
       const k = Object.keys(res.moved).length;
-      this.toast(`${k} ${k === 1 ? 'Objekt' : 'Objekte'} eingepackt → ${basename(name)}`);
+      this.toast(tn('app.packed', k, { name: basename(name) }));
     } catch (e) {
       this.toast(String(e).replace(/^Error: /, ''), true);
     }
@@ -822,7 +826,7 @@ class AppState {
       const p = await this.backend.compress(entries.map((e) => e.path));
       await this.afterFsChange();
       if (!inArchive(entries[0].path)) this.select(p, 'replace');
-      this.toast(`„${basename(p)}“ angelegt`);
+      this.toast(t('app.created', { name: basename(p) }));
     } catch (e) {
       this.toast(String(e).replace(/^Error: /, ''), true);
     }
@@ -838,7 +842,6 @@ class AppState {
     const n = Object.keys(res.moved).length;
     if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
     if (n) {
-      const verb = mode === 'move' ? 'verschoben' : 'kopiert';
       const undo =
         mode === 'move'
           ? async () => {
@@ -851,7 +854,7 @@ class AppState {
               await this.afterFsChange();
             }
           : undefined;
-      this.toast(`${n} ${n === 1 ? 'Objekt' : 'Objekte'} ${verb} → ${targetDir.split(/[\\/]/).pop()}`, false, undo);
+      this.toast(tn(mode === 'move' ? 'app.moved' : 'app.copied', n, { folder: targetDir.split(/[\\/]/).pop() ?? '' }), false, undo);
     }
     // Keep the tray pointing at the new locations.
     if (mode === 'move' && n) {
@@ -888,7 +891,7 @@ class AppState {
     await this.patchMeta(
       entries,
       { addTags: tags, color: meta.color ?? undefined },
-      `${entries.length} × ${tags.map((t) => '#' + t).join(' ')} zugewiesen`
+      t('app.assigned', { n: entries.length, tags: tags.map((x) => '#' + x).join(' ') })
     );
   }
 
@@ -915,7 +918,7 @@ class AppState {
   /** New folder, then straight into rename mode (like Finder). */
   async newFolder() {
     try {
-      const p = await this.mkdir('Neuer Ordner');
+      const p = await this.mkdir(t('app.newFolder'));
       this.select(p, 'replace');
       this.renaming = p;
     } catch (e) {
@@ -982,7 +985,7 @@ class AppState {
     await this.afterFsChange();
     if (!done.length) return;
     this.setSelection(done.map((d) => d.to));
-    this.toast(`${done.length} ${done.length === 1 ? 'Objekt' : 'Objekte'} umbenannt`, false, async () => {
+    this.toast(tn('app.renamed', done.length), false, async () => {
       const back = done.map((d) => ({
         entry: { ...this.raw.find((e) => e.path === d.to), path: d.to, name: basename(d.to) } as Entry,
         name: basename(d.from),
@@ -1001,9 +1004,9 @@ class AppState {
       const archives = [...new Set(packed.map((e) => basename(archiveName(e.path))))];
       const n = packed.length;
       const ok = await this.ask({
-        title: `Aus ${archives.map((a) => `„${a}“`).join(', ')} löschen?`,
-        text: `${n === 1 ? `„${packed[0].name}“ wird` : `${n} Objekte werden`} aus dem Archiv entfernt. Das lässt sich nicht rückgängig machen, aber die bisherige Fassung des Archivs kommt zur Sicherheit in den Papierkorb.`,
-        ok: 'Löschen',
+        title: t('app.trashArchiveTitle', { names: archives.map((a) => t('app.quoted', { name: a })).join(', ') }),
+        text: tn('app.trashArchiveText', n, { name: packed[0].name }),
+        ok: t('common.delete'),
         danger: true
       });
       if (!ok) return;
@@ -1011,7 +1014,7 @@ class AppState {
     const res = await this.backend.trash(entries.map((e) => e.path));
     const n = Object.keys(res.moved).length;
     if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
-    if (n) this.toast(`${n} ${n === 1 ? 'Objekt' : 'Objekte'} ${entries.some((e) => inArchive(e.path)) ? 'aus dem Archiv gelöscht' : 'in den Papierkorb gelegt'}`);
+    if (n) this.toast(tn(entries.some((e) => inArchive(e.path)) ? 'app.deletedFromArchive' : 'app.trashed', n));
     this.unstage(Object.keys(res.moved));
     await this.afterFsChange();
   }
@@ -1057,11 +1060,11 @@ class AppState {
   // ---------------------------------------------------------------- toasts
 
   private toastId = 0;
-  toast(text: string, error = false, undo?: () => Promise<void>) {
+  toast(text: string, error = false, undo?: () => Promise<void>, opts: { action?: string; ms?: number } = {}) {
     const id = ++this.toastId;
     text = text.replace(/^Error: /, '');
-    this.toasts = [...this.toasts, { id, text, error, undo }];
-    setTimeout(() => this.dismiss(id), undo ? 7000 : 3500);
+    this.toasts = [...this.toasts, { id, text, error, undo, action: opts.action }];
+    setTimeout(() => this.dismiss(id), opts.ms ?? (undo ? 7000 : 3500));
   }
 
   dismiss(id: number) {

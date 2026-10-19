@@ -16,6 +16,7 @@ import { UNTAGGED } from '../core/views';
 import { isCopyKey } from '../platform';
 import { archiveRoot, inArchive } from '../core/archive';
 import { app } from './app.svelte';
+import { t } from '../i18n/index.svelte';
 
 export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'board' | 'project';
 
@@ -71,25 +72,25 @@ class DragController {
     const name = h.path ? basename(h.path).replace(/!$/, '') : '';
     switch (h.kind) {
       case 'folder':
-        return h.zone === 'attr' ? `Attribute von „${name}“ zuweisen` : `${this.verb()} ${this.hit?.path && inArchive(this.hit.path) ? 'in' : 'nach'} „${name}“`;
+        return h.zone === 'attr' ? t('drag.assignAttributes', { name }) : t(this.verb(), { name });
       case 'crumb':
-        return `${this.verb()} ${this.hit?.path && inArchive(this.hit.path) ? 'in' : 'nach'} „${name}“`;
+        return t(this.verb(), { name });
       case 'tray':
-        return 'In die Ablage legen';
+        return t('drag.toTray');
       case 'project':
-        return `Zu „${app.projects.find((p) => p.id === h.key)?.name ?? ''}“ hinzufügen`;
+        return t('drag.addTo', { name: app.projects.find((p) => p.id === h.key)?.name ?? '' });
       case 'canvas':
-        if (app.currentProject) return this.source === 'canvas' ? '' : `Zu „${app.currentProject.name}“ hinzufügen`;
-        return this.isFolderFunnel() ? 'Ansicht auf diesen Zweig filtern' : this.source === 'canvas' ? '' : 'Hierher verschieben';
+        if (app.currentProject) return this.source === 'canvas' ? '' : t('drag.addTo', { name: app.currentProject.name });
+        return this.isFolderFunnel() ? t('drag.funnel') : this.source === 'canvas' ? '' : t('drag.moveHere');
       case 'column':
-        return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? 'Tag entfernen' : `#${h.key} setzen`) : `Nach „${h.key}“ verschieben`;
+        return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? t('drag.removeTag') : t('drag.setTag', { tag: h.key ?? '' })) : t('drag.moveTo', { name: h.key ?? '' });
       case 'grid-trigger':
-        return 'Ablagezonen öffnen';
+        return t('drag.openGrid');
       case 'board':
         return this.boardHint;
       case 'grid-cell': {
         const c = app.gridConfig.cells[h.cell ?? -1];
-        return c?.tag ? `#${c.tag} zuweisen` : c ? `${this.copy ? 'Kopieren' : 'Verschieben'} nach „${c.label}“` : '';
+        return c?.tag ? t('drag.assignTag', { tag: c.tag }) : c ? t(this.copy ? 'drag.copyTo' : 'drag.moveTo', { name: c.label }) : '';
       }
     }
   });
@@ -229,8 +230,8 @@ class DragController {
 
   /** Out of an archive is unpacking; otherwise ⌥/Ctrl decides between copy and move. */
   private verb() {
-    if (this.hit?.path && inArchive(this.hit.path)) return 'Einpacken';
-    return this.items.some((i) => inArchive(i.path)) ? 'Auspacken' : this.copy ? 'Kopieren' : 'Verschieben';
+    if (this.hit?.path && inArchive(this.hit.path)) return 'drag.packInto';
+    return this.items.some((i) => inArchive(i.path)) ? 'drag.unpackTo' : this.copy ? 'drag.copyTo' : 'drag.moveTo';
   }
 
   private isFolderFunnel() {
@@ -279,7 +280,7 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
           const label = app.groups.find((g) => g.key === key)?.label ?? key;
           const fromLabel = from && from !== UNTAGGED ? app.groups.find((g) => g.key === from)?.label : undefined;
           if (key === UNTAGGED) await app.patchMeta(items, { removeTags: fromLabel ? [fromLabel] : [] });
-          else await app.patchMeta(items, { addTags: [label], removeTags: fromLabel ? [fromLabel] : [] }, `#${label} gesetzt`);
+          else await app.patchMeta(items, { addTags: [label], removeTags: fromLabel ? [fromLabel] : [] }, t('drag.tagSet', { tag: label }));
         } else {
           const target = key === '.' ? app.cwd : app.cwd.replace(/[\\/]+$/, '') + '/' + key;
           await app.transfer(items, target, mode);
@@ -288,7 +289,7 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
       }
       case 'grid-cell': {
         const c = app.gridConfig.cells[h.cell ?? -1];
-        if (c?.tag) await app.patchMeta(items, { addTags: [c.tag] }, `#${c.tag} zugewiesen`);
+        if (c?.tag) await app.patchMeta(items, { addTags: [c.tag] }, t('drag.tagAssigned', { tag: c.tag }));
         else if (c?.path) await app.transfer(items, c.path, mode);
         break;
       }

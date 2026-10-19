@@ -7,6 +7,7 @@
   import { tagColor } from '../core/tags';
   import Icon from './Icon.svelte';
   import TreeNode from './TreeNode.svelte';
+  import { t } from '../i18n/index.svelte';
 
   let { entry, depth = 0 }: { entry: Entry; depth?: number } = $props();
 
@@ -40,7 +41,7 @@
       class:hidden={leafKnown}
       onpointerdown={(e) => e.stopPropagation()}
       onclick={() => app.toggle(entry.path)}
-      aria-label={open ? 'Zuklappen' : 'Aufklappen'}><Icon name="chevron" size={12} /></button
+      aria-label={open ? t('sidebar.collapse') : t('sidebar.expand')}><Icon name="chevron" size={12} /></button
     >
     <span class="ico" style:color={entry.color ?? undefined}><Icon name="folder" size={15} /></span>
     <span class="name">{entry.name}</span>
@@ -49,7 +50,7 @@
     {/if}
     {#if isHit}
       <span class="pill" class:attr={drag.hit?.zone === 'attr'} aria-hidden="true">
-        {drag.hit?.zone === 'attr' ? 'Taggen' : drag.copy ? 'Kopieren' : 'Verschieben'}
+        {drag.hit?.zone === 'attr' ? t('sidebar.dropTag') : drag.copy ? t('sidebar.dropCopy') : t('sidebar.dropMove')}
       </span>
     {/if}
   </div>

@@ -11,6 +11,7 @@
   import { family, formatDate, formatSize } from '../core/format';
   import { isToggleKey, store } from '../platform';
   import Icon from './Icon.svelte';
+  import { t, tn } from '../i18n/index.svelte';
   import { archiveRoot, inArchive, isArchive } from '../core/archive';
 
   const path = $derived(app.pane!);
@@ -108,28 +109,28 @@
 </script>
 
 <aside class="pane" style:width="{width}px">
-  <div class="grip" onpointerdown={resize} role="separator" aria-orientation="vertical" aria-label="Breite ändern"></div>
+  <div class="grip" onpointerdown={resize} role="separator" aria-orientation="vertical" aria-label={t('panel.resize')}></div>
   <div class="head">
-    <button class="btn icon" disabled={!back.length} onclick={goBack} aria-label="Zurück"><Icon name="back" size={14} /></button>
-    <button class="btn icon" disabled={dirname(path) === path} onclick={() => go(dirname(path))} aria-label="Übergeordneter Ordner"><Icon name="up" size={14} /></button>
+    <button class="btn icon" disabled={!back.length} onclick={goBack} aria-label={t('panel.back')}><Icon name="back" size={14} /></button>
+    <button class="btn icon" disabled={dirname(path) === path} onclick={() => go(dirname(path))} aria-label={t('panel.up')}><Icon name="up" size={14} /></button>
     <span class="title" title={path}>{basename(path) || path}</span>
     <select class="places" value="" onchange={(ev) => {
         const v = ev.currentTarget.value;
         ev.currentTarget.value = '';
         if (v) go(v);
-      }} aria-label="Ort wählen">
-      <option value="">Orte …</option>
+      }} aria-label={t('panel.pickPlace')}>
+      <option value="">{t('panel.places')}</option>
       {#each places as p (p.path)}<option value={p.path}>{p.name}</option>{/each}
-      {#if app.cwd !== path}<option value={app.cwd}>Wie links: {basename(app.cwd)}</option>{/if}
+      {#if app.cwd !== path}<option value={app.cwd}>{t('panel.sameAsLeft', { name: basename(app.cwd) })}</option>{/if}
     </select>
-    <button class="btn icon" onclick={swap} title="Ordner links und rechts tauschen" aria-label="Tauschen"><Icon name="sync" size={14} /></button>
-    <button class="btn icon" onclick={() => app.setPane(null)} aria-label="Panel schließen"><Icon name="x" size={14} /></button>
+    <button class="btn icon" onclick={swap} title={t('panel.swapTitle')} aria-label={t('panel.swap')}><Icon name="sync" size={14} /></button>
+    <button class="btn icon" onclick={() => app.setPane(null)} aria-label={t('panel.close')}><Icon name="x" size={14} /></button>
   </div>
 
   <div class="list" class:hit={hitHere} data-drop="folder" data-path={path} data-autoscroll>
     {#if error}<p class="msg">{error}</p>{/if}
     {#each entries as e (e.path)}
-      {@const t = app.thumbOf(e)}
+      {@const thumb = app.thumbOf(e)}
       {@const fam = family(e.ext, e.kind)}
       {@const target = e.kind === 'dir' ? e.path : isArchive(e.path) && !inArchive(e.path) ? archiveRoot(e.path) : undefined}
       <div
@@ -144,17 +145,17 @@
         ondblclick={() => open(e)}
       >
         <span class="ico">
-          {#if t}<img src={t} alt="" draggable="false" />{:else}<Icon name={fam === 'dir' ? 'folder' : fam === 'other' ? 'file' : fam} size={16} />{/if}
+          {#if thumb}<img src={thumb} alt="" draggable="false" />{:else}<Icon name={fam === 'dir' ? 'folder' : fam === 'other' ? 'file' : fam} size={16} />{/if}
         </span>
         <span class="name">{e.name}</span>
         <span class="meta">{e.kind === 'dir' ? '' : formatSize(e.size)}</span>
         <span class="meta date">{formatDate(e.mtime)}</span>
       </div>
     {:else}
-      {#if !error}<p class="msg">Leerer Ordner. Dateien hierher ziehen.</p>{/if}
+      {#if !error}<p class="msg">{t('panel.empty')}</p>{/if}
     {/each}
   </div>
-  <div class="foot">{entries.length} Objekte{sel.size ? ` · ${sel.size} ausgewählt` : ''} · Ziehen verschiebt, mit ⌥/Strg kopieren</div>
+  <div class="foot">{tn('common.objects', entries.length)}{sel.size ? ` · ${t('panel.selected', { n: sel.size })}` : ''} · {t('panel.dragHint')}</div>
 </aside>
 
 <style>

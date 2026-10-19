@@ -9,6 +9,7 @@
   import { store } from '../platform';
   import { decisionFor, dirOf, forget, hasScripts, remember, resolveLocal, type ScriptDecisions } from '../core/htmlpreview';
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   let { entry }: { entry: Entry } = $props();
 
@@ -86,23 +87,20 @@
   {#if error}
     <p class="msg">{error}</p>
   {:else if text === null}
-    <p class="msg">Seite wird geladen …</p>
+    <p class="msg">{t('preview.loadingPage')}</p>
   {:else if asking}
-    <div class="ask" role="alertdialog" aria-label="Skripte ausführen?">
-      <div class="head"><Icon name="warn" size={22} /><b>Diese Seite enthält Skripte</b></div>
-      <p>
-        Skripte machen Seiten interaktiv, können aber auch Inhalte aus dem Internet nachladen, Daten an fremde Server schicken
-        und die Anzeige verändern. Die Seite läuft abgeschottet: Auf brausa und auf andere Dateien kann sie nicht zugreifen.
-      </p>
-      <p>Skripte nur bei Seiten aus Quellen erlauben, denen du vertraust. Ohne Skripte fehlen manchen Seiten Inhalte oder Funktionen.</p>
+    <div class="ask" role="alertdialog" aria-label={t('preview.runScripts')}>
+      <div class="head"><Icon name="warn" size={22} /><b>{t('preview.hasScripts')}</b></div>
+      <p>{t('preview.scriptsExplain')}</p>
+      <p>{t('preview.scriptsAdvice')}</p>
       <div class="scope">
-        <label><input type="radio" bind:group={scope} value="once" /> nur jetzt</label>
-        <label><input type="radio" bind:group={scope} value="file" /> für diese Datei merken</label>
-        <label><input type="radio" bind:group={scope} value="dir" /> für alle Seiten in diesem Ordner merken</label>
+        <label><input type="radio" bind:group={scope} value="once" /> {t('preview.scopeOnce')}</label>
+        <label><input type="radio" bind:group={scope} value="file" /> {t('preview.scopeFile')}</label>
+        <label><input type="radio" bind:group={scope} value="dir" /> {t('preview.scopeDir')}</label>
       </div>
       <div class="actions">
-        <button class="btn" onclick={() => decide(false)}>Ohne Skripte anzeigen</button>
-        <button class="btn warn" onclick={() => decide(true)}><Icon name="warn" size={13} /> Mit Skripten anzeigen</button>
+        <button class="btn" onclick={() => decide(false)}>{t('preview.withoutScripts')}</button>
+        <button class="btn warn" onclick={() => decide(true)}><Icon name="warn" size={13} /> {t('preview.withScripts')}</button>
       </div>
     </div>
   {:else if srcdoc !== null}
@@ -112,8 +110,8 @@
     {#if scripted}
       <div class="bar">
         <Icon name={allow ? 'warn' : 'globe'} size={12} />
-        {allow ? 'Skripte laufen' : 'Skripte aus'}{saved !== null && once === null ? ' (gemerkt)' : ''}
-        <button onclick={reset}>Ändern</button>
+        {t(`preview.${allow ? 'scriptsOn' : 'scriptsOff'}${saved !== null && once === null ? 'Saved' : ''}`)}
+        <button onclick={reset}>{t('preview.change')}</button>
       </div>
     {/if}
   {/if}

@@ -1,6 +1,6 @@
 [package]
 name = "brausa"
-version = "0.7.0"
+version = "0.8.0"
 description = "Plattformunabhängiger visueller Datei-Browser"
 edition = "2021"
 license = "MIT"
@@ -42,3 +42,7 @@ tempfile = "3"
 # Linux: the web panel's webview is laid over brausa in a GtkOverlay (see web.rs).
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"

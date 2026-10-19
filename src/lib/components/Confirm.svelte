@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { app } from '../state/app.svelte';
+  import { t } from '../i18n/index.svelte';
 
   const d = $derived(app.dialog);
   let okBtn = $state<HTMLButtonElement>();
@@ -27,7 +28,7 @@
       <h2 id="confirm-title">{d.title}</h2>
       <p>{d.text}</p>
       <div class="row">
-        <button class="btn" onclick={() => d.resolve(false)}>Abbrechen</button>
+        <button class="btn" onclick={() => d.resolve(false)}>{t('common.cancel')}</button>
         <button class="btn primary" class:danger={d.danger} bind:this={okBtn} onclick={() => d.resolve(true)}>{d.ok}</button>
       </div>
     </div>

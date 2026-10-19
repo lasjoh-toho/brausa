@@ -5,6 +5,7 @@
   import { wikis } from '../state/wikis.svelte';
   import type { WikiRecipe } from '../backend/types';
   import Icon from './Icon.svelte';
+  import { t, tn } from '../i18n/index.svelte';
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -30,8 +31,8 @@
 
   const own = $derived(`wiki-${r.name.trim()}`);
   const available = $derived([
-    ...wikis.bags.filter((b) => b.name !== own && !r.bags.includes(b.name)).map((b) => ({ bag: b.name, label: b.name, sub: b.readonly ? 'schreibgeschützt' : `${b.tiddlers} Tiddler` })),
-    ...wikis.maps.filter((m) => !r.bags.includes(m.bag)).map((m) => ({ bag: m.bag, label: m.title, sub: `Map in ${m.project}` }))
+    ...wikis.bags.filter((b) => b.name !== own && !r.bags.includes(b.name)).map((b) => ({ bag: b.name, label: b.name, sub: b.readonly ? t('wiki.readonlyBag') : tn('wiki.tiddlers', b.tiddlers) })),
+    ...wikis.maps.filter((m) => !r.bags.includes(m.bag)).map((m) => ({ bag: m.bag, label: m.title, sub: t('wiki.mapIn', { project: m.project }) }))
   ]);
   const selectedHtml = $derived(app.selectedEntries.find((e) => e.ext === 'html' || e.ext === 'htm'));
 
@@ -55,7 +56,7 @@
 
   async function save(sync: boolean) {
     error = '';
-    if (!r.name.trim() || !r.target.path.trim()) return void (error = 'Name und Ziel-Wiki angeben.');
+    if (!r.name.trim() || !r.target.path.trim()) return void (error = t('wiki.missing'));
     try {
       const plain = $state.snapshot(r);
       const saved = await wikis.save({ ...plain, name: plain.name.trim(), target: { ...plain.target, path: plain.target.path.trim() } }, original?.name ?? null);
@@ -79,67 +80,67 @@
   <div class="panel" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="Wiki">
     <div class="head">
       <Icon name="book" size={16} />
-      <b>{original ? `Wiki „${original.name}“` : 'Neues Wiki'}</b>
-      <span class="muted">Ein Wiki besteht aus Bags; bei gleichem Titel gewinnt der untere in der Liste.</span>
+      <b>{original ? t('wiki.title', { name: original.name }) : t('wiki.new')}</b>
+      <span class="muted">{t('wiki.intro')}</span>
     </div>
 
     <div class="row">
-      <label>Name <input bind:value={r.name} placeholder="Projekt-Wiki" /></label>
-      <label class="grow">Beschreibung <input bind:value={r.description} placeholder="optional" /></label>
+      <label>{t('wiki.name')} <input bind:value={r.name} placeholder={t('wiki.namePlaceholder')} /></label>
+      <label class="grow">{t('wiki.description')} <input bind:value={r.description} placeholder={t('wiki.optional')} /></label>
     </div>
 
-    <div class="sec">Ziel-Wiki (in TiddlyDesktop-RS öffnen)</div>
+    <div class="sec">{t('wiki.target')}</div>
     <div class="row">
       <div class="seg">
-        <button class="btn" class:on={r.target.kind === 'folder'} onclick={() => (r.target.kind = 'folder')}>Ordner-Wiki</button>
-        <button class="btn" class:on={r.target.kind === 'file'} onclick={() => (r.target.kind = 'file')}>Einzeldatei</button>
+        <button class="btn" class:on={r.target.kind === 'folder'} onclick={() => (r.target.kind = 'folder')}>{t('wiki.folderWiki')}</button>
+        <button class="btn" class:on={r.target.kind === 'file'} onclick={() => (r.target.kind = 'file')}>{t('wiki.singleFile')}</button>
       </div>
-      <input class="grow mono" bind:value={r.target.path} placeholder={r.target.kind === 'folder' ? '/Pfad/zum/Wiki-Ordner' : '/Pfad/zu/wiki.html'} />
+      <input class="grow mono" bind:value={r.target.path} placeholder={r.target.kind === 'folder' ? t('wiki.folderPath') : t('wiki.filePath')} />
       {#if r.target.kind === 'folder'}
-        <button class="btn" title="Unterordner im aktuellen Ordner" onclick={() => (r.target.path = `${app.cwd}/${r.name.trim() || 'wiki'}`)}>Hier</button>
+        <button class="btn" title={t('wiki.hereTitle')} onclick={() => (r.target.path = `${app.cwd}/${r.name.trim() || 'wiki'}`)}>{t('wiki.here')}</button>
       {:else if selectedHtml}
-        <button class="btn" title="Die ausgewählte HTML-Datei" onclick={() => (r.target.path = selectedHtml.path)}>Auswahl: {selectedHtml.name}</button>
+        <button class="btn" title={t('wiki.selectionTitle')} onclick={() => (r.target.path = selectedHtml.path)}>{t('wiki.selection', { name: selectedHtml.name })}</button>
       {/if}
     </div>
     <p class="muted">
       {#if r.target.kind === 'folder'}
-        Ordner-Wikis speichert TiddlyDesktop-RS bei jeder Änderung (mit Node.js). brausa legt <code>tiddlywiki.info</code> an, falls es fehlt.
+        {@html t('wiki.folderNote')}
       {:else}
-        Ein vorhandenes Wiki (TiddlyWiki ≥ 5.2), z. B. in TiddlyDesktop-RS neu angelegt. Vor jedem Abgleich speichern und schließen; brausa legt eine Sicherung in <code>.backups/</code> an.
+        {@html t('wiki.fileNote')}
       {/if}
     </p>
 
     <label class="plugins">
       <input type="checkbox" bind:checked={r.plugins} />
       <span>
-        <b>Plugins mitliefern:</b>
+        <b>{t('wiki.plugins')}</b>
         {plugins.map(([n, v]) => `${n} ${v}`).join(' · ')}
-        <span class="muted">– Karten erscheinen im Wiki als Pinboard und Kanban, Markdown wird gerendert. Nichts muss im Wiki installiert werden.</span>
+        <span class="muted">– {t('wiki.pluginsNote')}</span>
       </span>
     </label>
 
     <div class="cols">
       <div>
-        <div class="sec">Bags in diesem Wiki</div>
+        <div class="sec">{t('wiki.bagsHere')}</div>
         <ol class="bags">
           {#each r.bags as b, i (b)}
             <li>
               <Icon name={b.startsWith('@map:') ? 'nodes' : 'tray'} size={13} />
               <span class="name">{wikis.label(b)}</span>
-              {#if wikis.bags.find((x) => x.name === b)?.readonly}<span class="badge">nur lesen</span>{/if}
-              <button class="btn icon" disabled={i === 0} onclick={() => move(i, -1)} aria-label="Nach oben"><Icon name="up" size={12} /></button>
-              <button class="btn icon" onclick={() => (r.bags = r.bags.filter((x) => x !== b))} aria-label="Entfernen"><Icon name="x" size={12} /></button>
+              {#if wikis.bags.find((x) => x.name === b)?.readonly}<span class="badge">{t('wiki.readonly')}</span>{/if}
+              <button class="btn icon" disabled={i === 0} onclick={() => move(i, -1)} aria-label={t('wiki.moveUp')}><Icon name="up" size={12} /></button>
+              <button class="btn icon" onclick={() => (r.bags = r.bags.filter((x) => x !== b))} aria-label={t('common.remove')}><Icon name="x" size={12} /></button>
             </li>
           {:else}
-            <li class="muted">Noch keine Bags</li>
+            <li class="muted">{t('wiki.noBags')}</li>
           {/each}
           {#if !r.bags.includes(own) && r.name.trim()}
-            <li class="muted"><Icon name="tray" size={13} /> {own} (eigener Bag, wird angelegt)</li>
+            <li class="muted"><Icon name="tray" size={13} /> {t('wiki.ownBag', { bag: own })}</li>
           {/if}
         </ol>
       </div>
       <div>
-        <div class="sec">Hinzufügen</div>
+        <div class="sec">{t('wiki.add')}</div>
         <div class="avail">
           {#each available as a (a.bag)}
             <button class="add" onclick={() => (r.bags = [...r.bags.filter((x) => x !== own), a.bag, ...(r.bags.includes(own) ? [own] : [])])}>
@@ -147,24 +148,24 @@
               <span class="name">{a.label}</span><span class="sub">{a.sub}</span>
             </button>
           {:else}
-            <span class="muted">Alles hinzugefügt</span>
+            <span class="muted">{t('wiki.allAdded')}</span>
           {/each}
         </div>
         <div class="row newbag">
-          <input bind:value={newBag} placeholder="Neuer gemeinsamer Bag" onkeydown={(e) => e.key === 'Enter' && createBag()} />
-          <label class="ro"><input type="checkbox" bind:checked={newReadonly} /> nur lesen</label>
-          <button class="btn" onclick={createBag}><Icon name="plus" size={13} /></button>
+          <input bind:value={newBag} placeholder={t('wiki.newBag')} onkeydown={(e) => e.key === 'Enter' && createBag()} />
+          <label class="ro"><input type="checkbox" bind:checked={newReadonly} /> {t('wiki.readonly')}</label>
+          <button class="btn" onclick={createBag} aria-label={t('wiki.createBag')}><Icon name="plus" size={13} /></button>
         </div>
       </div>
     </div>
 
     {#if error}<p class="err">{error}</p>{/if}
     <div class="foot">
-      {#if original}<button class="btn danger" onclick={remove}>Entfernen</button>{/if}
+      {#if original}<button class="btn danger" onclick={remove}>{t('common.remove')}</button>{/if}
       <span class="grow"></span>
-      <button class="btn" onclick={onclose}>Abbrechen</button>
-      <button class="btn" onclick={() => save(false)}>Speichern</button>
-      <button class="btn primary" onclick={() => save(true)}>Speichern und abgleichen</button>
+      <button class="btn" onclick={onclose}>{t('common.cancel')}</button>
+      <button class="btn" onclick={() => save(false)}>{t('common.save')}</button>
+      <button class="btn primary" onclick={() => save(true)}>{t('wiki.saveSync')}</button>
     </div>
   </div>
 </div>
@@ -226,7 +227,7 @@
     color: var(--fg-faint);
     font-size: 12px;
   }
-  code {
+  .muted :global(code) {
     font-family: var(--mono);
   }
   .sec {

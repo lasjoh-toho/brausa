@@ -3,6 +3,7 @@
   import { app } from '../state/app.svelte';
   import type { Entry } from '../core/types';
   import { renderMarkdown } from '../core/markdown';
+  import { t } from '../i18n/index.svelte';
 
   let { entry }: { entry: Entry } = $props();
 
@@ -57,7 +58,7 @@
 
 <div class="text">
   {#if markdown}
-    <button class="btn toggle" onclick={() => (source = !source)}>{source ? 'Formatiert' : 'Quelltext'}</button>
+    <button class="btn toggle" onclick={() => (source = !source)}>{source ? t('preview.formatted') : t('preview.source')}</button>
   {/if}
   {#if error}
     <p class="msg">{error}</p>
@@ -68,7 +69,7 @@
   {:else}
     <pre><code>{text}</code></pre>
   {/if}
-  {#if cut}<p class="msg">Die Datei ist groß; gezeigt wird nur der Anfang.</p>{/if}
+  {#if cut}<p class="msg">{t('preview.truncated')}</p>{/if}
 </div>
 
 <style>

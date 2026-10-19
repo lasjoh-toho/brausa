@@ -4,6 +4,7 @@
   import { isMac, modLabel } from '../platform';
   import Icon from './Icon.svelte';
   import { inArchive } from '../core/archive';
+  import { t, tn } from '../i18n/index.svelte';
 
   let { onTag, onPreview }: { onTag: () => void; onPreview: () => void } = $props();
 
@@ -19,46 +20,46 @@
   const items = $derived<Item[]>(
     m.entry
       ? [
-          { label: 'Öffnen', icon: 'open', key: `${modLabel}O`, run: () => targets.forEach((t) => app.open(t)) },
-          ...(one?.kind === 'file' ? [{ label: 'Vorschau', icon: 'eye', key: 'Leertaste', run: onPreview }] : []),
-          ...(one && (one.ext === 'html' || one.ext === 'htm') ? [{ label: 'Im Web-Fenster öffnen', icon: 'globe', run: () => web.openLocal(one.path) }] : []),
-          ...(one ? [{ label: isMac ? 'Im Finder zeigen' : 'Im Dateimanager zeigen', icon: 'folder', run: () => app.reveal(one) }] : []),
+          { label: t('common.open'), icon: 'open', key: `${modLabel}O`, run: () => targets.forEach((t) => app.open(t)) },
+          ...(one?.kind === 'file' ? [{ label: t('menu.preview'), icon: 'eye', key: t('menu.keySpace'), run: onPreview }] : []),
+          ...(one && (one.ext === 'html' || one.ext === 'htm') ? [{ label: t('menu.openInWeb'), icon: 'globe', run: () => web.openLocal(one.path) }] : []),
+          ...(one ? [{ label: isMac ? t('menu.revealFinder') : t('menu.revealFiles'), icon: 'folder', run: () => app.reveal(one) }] : []),
           null,
-          ...(one ? [{ label: 'Umbenennen', icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.renaming = one.path) }] : []),
+          ...(one ? [{ label: t('common.rename'), icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.renaming = one.path) }] : []),
           ...(targets.length > 1 && !packed
-            ? [{ label: `${targets.length} Objekte umbenennen …`, icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.batchRenaming = targets) }]
+            ? [{ label: tn('menu.renameMany', targets.length), icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.batchRenaming = targets) }]
             : []),
-          ...(files.length ? [{ label: 'Taggen', icon: 'tag', key: 'T', run: onTag }] : []),
-          ...(files.length ? [{ label: 'In die Ablage', icon: 'tray', key: 'S', run: () => app.stage(files) }] : []),
+          ...(files.length ? [{ label: t('menu.tag'), icon: 'tag', key: 'T', run: onTag }] : []),
+          ...(files.length ? [{ label: t('menu.stage'), icon: 'tray', key: 'S', run: () => app.stage(files) }] : []),
           null,
           // Projects collect files from anywhere; adding never moves a file.
           ...app.projects
             .filter((p) => p.id !== app.project)
             .slice(0, 6)
-            .map((p) => ({ label: `Zu „${p.name}“ hinzufügen`, icon: 'kanban', run: () => app.addToProject(p.id, targets) })),
+            .map((p) => ({ label: t('menu.addToProject', { name: p.name }), icon: 'kanban', run: () => app.addToProject(p.id, targets) })),
           ...(app.currentProject
-            ? [{ label: `Aus „${app.currentProject.name}“ entfernen`, icon: 'x', key: isMac ? '⌘⌫' : 'Entf', run: () => app.removeFromProject(targets) }]
+            ? [{ label: t('menu.removeFromProject', { name: app.currentProject.name }), icon: 'x', key: isMac ? '⌘⌫' : t('menu.keyDel'), run: () => app.removeFromProject(targets) }]
             : []),
           ...(one?.kind === 'dir' && !packed
-            ? [{ label: `Duplikate in „${one.name}“ finden`, icon: 'copy', run: () => void app.navigate(one.path).then(() => app.findDuplicates()) }]
+            ? [{ label: t('menu.findDuplicatesIn', { name: one.name }), icon: 'copy', run: () => void app.navigate(one.path).then(() => app.findDuplicates()) }]
             : []),
-          { label: targets.length === 1 ? `„${targets[0].name}“ komprimieren` : `${targets.length} Objekte komprimieren`, icon: 'archive', run: () => app.compress(targets) },
+          { label: targets.length === 1 ? t('menu.compressOne', { name: targets[0].name }) : tn('menu.compressMany', targets.length), icon: 'archive', run: () => app.compress(targets) },
           null,
           {
-            label: packed ? 'Aus dem Archiv löschen …' : 'In den Papierkorb',
+            label: packed ? t('menu.deleteFromArchive') : t('menu.trash'),
             icon: 'trash',
-            key: app.project ? undefined : isMac ? '⌘⌫' : 'Entf',
+            key: app.project ? undefined : isMac ? '⌘⌫' : t('menu.keyDel'),
             danger: true,
             run: () => app.trash(targets)
           }
         ]
       : [
-          { label: 'Neuer Ordner', icon: 'folderPlus', key: `${modLabel}⇧N`, run: () => app.newFolder() },
-          { label: 'Alles auswählen', icon: 'select', key: `${modLabel}A`, run: () => app.selectAll() },
+          { label: t('menu.newFolder'), icon: 'folderPlus', key: `${modLabel}⇧N`, run: () => app.newFolder() },
+          { label: t('menu.selectAll'), icon: 'select', key: `${modLabel}A`, run: () => app.selectAll() },
           null,
           app.dupes
-            ? { label: 'Duplikat-Suche beenden', icon: 'x', run: () => app.endDuplicates() }
-            : { label: 'Duplikate finden', icon: 'copy', run: () => void app.findDuplicates() }
+            ? { label: t('menu.endDuplicates'), icon: 'x', run: () => app.endDuplicates() }
+            : { label: t('menu.findDuplicates'), icon: 'copy', run: () => void app.findDuplicates() }
         ]
   );
 
@@ -81,7 +82,7 @@
 
 <div class="scrim" role="presentation" onpointerdown={() => (app.menu = null)} oncontextmenu={(e) => { e.preventDefault(); app.menu = null; }}></div>
 <div class="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px" role="menu">
-  {#if targets.length > 1}<div class="title">{targets.length} Objekte</div>{/if}
+  {#if targets.length > 1}<div class="title">{tn('common.objects', targets.length)}</div>{/if}
   {#each items as i, n (n)}
     {#if i}
       <button class="item" class:danger={i.danger} role="menuitem" onclick={() => run(i)}>

@@ -8,6 +8,7 @@
   import { wikis } from '../state/wikis.svelte';
   import { changedFields, lineDiff } from '../core/diff';
   import Icon from './Icon.svelte';
+  import { t, tn } from '../i18n/index.svelte';
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -47,23 +48,23 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
 
 <div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
-  <div class="panel" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="Überdeckungen">
+  <div class="panel" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label={t('wiki.overlay.title')}>
     <div class="head">
       <Icon name="layers" size={16} />
-      <b>Überdeckungen</b>
-      <span class="muted">Ein Wiki hat einen Tiddler eines gemeinsamen Bags in seinem eigenen Bag überschrieben.</span>
+      <b>{t('wiki.overlay.title')}</b>
+      <span class="muted">{t('wiki.overlay.intro')}</span>
       <span class="grow"></span>
-      <label class="muted"><input type="checkbox" bind:checked={showKept} /> behaltene zeigen</label>
+      <label class="muted"><input type="checkbox" bind:checked={showKept} /> {t('wiki.overlay.showKept')}</label>
       {#if identical}
-        <button class="btn" onclick={() => wikis.discardIdentical()} title="Überdeckungen, die sich nur im Datum unterscheiden">
-          {identical} gleiche verwerfen
+        <button class="btn" onclick={() => wikis.discardIdentical()} title={t('wiki.overlay.identicalTitle')}>
+          {tn('wiki.overlay.discardIdentical', identical)}
         </button>
       {/if}
-      <button class="btn icon" onclick={onclose} aria-label="Schließen"><Icon name="x" size={14} /></button>
+      <button class="btn icon" onclick={onclose} aria-label={t('common.close')}><Icon name="x" size={14} /></button>
     </div>
 
     {#if !list.length}
-      <p class="empty">Keine offenen Überdeckungen. Alles einheitlich.</p>
+      <p class="empty">{t('wiki.overlay.empty')}</p>
     {:else}
       <div class="body">
         <ul class="list">
@@ -72,10 +73,9 @@
               <button class:on={current && key(o) === key(current)} onclick={() => pick(o)}>
                 <span class="t">{o.title}</span>
                 <span class="sub">
-                  {wikis.label(o.bag)} · {o.variants.length}
-                  {o.variants.length === 1 ? 'Wiki' : 'Wikis'}
-                  {#if o.variants.every((x) => x.identical)}<span class="badge">gleich</span>{/if}
-                  {#if o.variants.some((x) => x.kept)}<span class="badge">behalten</span>{/if}
+                  {wikis.label(o.bag)} · {tn('wiki.overlay.wikis', o.variants.length)}
+                  {#if o.variants.every((x) => x.identical)}<span class="badge">{t('wiki.overlay.same')}</span>{/if}
+                  {#if o.variants.some((x) => x.kept)}<span class="badge">{t('wiki.overlay.kept')}</span>{/if}
                 </span>
               </button>
             </li>
@@ -85,7 +85,7 @@
         {#if current && v}
           <div class="detail">
             <div class="tabs">
-              <span class="muted">Fassung aus</span>
+              <span class="muted">{t('wiki.overlay.versionFrom')}</span>
               {#each current.variants as x (x.recipe)}
                 <button class="btn" class:on={x.recipe === v.recipe} onclick={() => ((variant = x.recipe), (merging = null))}>
                   <Icon name="book" size={12} />{x.recipe}{x.kept ? ' ✓' : ''}
@@ -94,16 +94,16 @@
             </div>
 
             {#if merging !== null}
-              <div class="sec">Zusammengeführter Text für „{current.bag}“ (ersetzt alle Fassungen)</div>
+              <div class="sec">{t('wiki.overlay.mergedText', { bag: current.bag })}</div>
               <textarea bind:value={merging} rows="14"></textarea>
               <div class="actions">
-                <button class="btn" onclick={() => (merging = null)}>Abbrechen</button>
-                <button class="btn primary" onclick={merge}>In „{current.bag}“ speichern</button>
+                <button class="btn" onclick={() => (merging = null)}>{t('common.cancel')}</button>
+                <button class="btn primary" onclick={merge}>{t('wiki.overlay.saveIn', { bag: current.bag })}</button>
               </div>
             {:else}
               <div class="sec">
-                <span class="del">gemeinsam ({wikis.label(current.bag)})</span> → <span class="add">Wiki „{v.recipe}“</span>
-                {#if v.identical}<span class="badge">nur das Datum unterscheidet sich</span>{/if}
+                <span class="del">{t('wiki.overlay.shared', { bag: wikis.label(current.bag) })}</span> → <span class="add">{t('wiki.overlay.wiki', { recipe: v.recipe })}</span>
+                {#if v.identical}<span class="badge">{t('wiki.overlay.onlyDate')}</span>{/if}
               </div>
               {#if fields.length}
                 <div class="fields">
@@ -115,27 +115,27 @@
               <pre class="diff">{#each diff as l, i (i)}<div class={l.op}>{l.op === 'add' ? '+ ' : l.op === 'del' ? '− ' : '  '}{l.text}</div>{/each}</pre>
 
               <div class="actions">
-                <button class="btn" title="Die Fassung des Wikis löschen; es bekommt wieder die gemeinsame" onclick={() => wikis.resolve(current, { action: 'discard', recipe: v.recipe })}>
-                  <Icon name="trash" size={13} /> Verwerfen
+                <button class="btn" title={t('wiki.overlay.discardTitle')} onclick={() => wikis.resolve(current, { action: 'discard', recipe: v.recipe })}>
+                  <Icon name="trash" size={13} /> {t('wiki.overlay.discard')}
                 </button>
                 <button
                   class="btn"
-                  title="Als eigene Variante dieses Wikis behalten und nicht mehr nachfragen"
+                  title={t('wiki.overlay.keepTitle')}
                   onclick={() => wikis.resolve(current, { action: 'keep', recipe: v.recipe, keep: !v.kept })}
                 >
-                  {v.kept ? 'Nicht mehr behalten' : 'Als Variante behalten'}
+                  {v.kept ? t('wiki.overlay.unkeep') : t('wiki.overlay.keep')}
                 </button>
                 <span class="grow"></span>
                 {#if writable}
-                  <button class="btn" onclick={() => (merging = v.fields.text ?? '')}><Icon name="pencil" size={13} /> Zusammenführen …</button>
+                  <button class="btn" onclick={() => (merging = v.fields.text ?? '')}><Icon name="pencil" size={13} /> {t('wiki.overlay.merge')}</button>
                   {#if current.variants.length > 1}
-                    <button class="btn" onclick={() => promote(false)} title="Nur dieses Wiki gibt seine Fassung ab; die anderen behalten ihre">Übernehmen</button>
+                    <button class="btn" onclick={() => promote(false)} title={t('wiki.overlay.promoteTitle')}>{t('wiki.overlay.promote')}</button>
                   {/if}
-                  <button class="btn primary" onclick={() => promote(true)} title="Wird die gemeinsame Fassung; alle Überdeckungen dieses Tiddlers entfallen">
-                    Für alle übernehmen
+                  <button class="btn primary" onclick={() => promote(true)} title={t('wiki.overlay.promoteAllTitle')}>
+                    {t('wiki.overlay.promoteAll')}
                   </button>
                 {:else}
-                  <span class="muted">„{current.bag}“ ist schreibgeschützt.</span>
+                  <span class="muted">{t('wiki.overlay.readonly', { bag: current.bag })}</span>
                 {/if}
               </div>
             {/if}
@@ -143,7 +143,7 @@
         {/if}
       </div>
     {/if}
-    <p class="muted foot">Änderungen erreichen die Wikis beim nächsten Abgleich (↻).</p>
+    <p class="muted foot">{t('wiki.overlay.foot')}</p>
   </div>
 </div>
 

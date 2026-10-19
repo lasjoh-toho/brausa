@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { i18n } from '../i18n/index.svelte';
 import {
   applyTagPatch,
   expandTag,
@@ -15,6 +16,9 @@ import { filterEntries, groupEntries, UNTAGGED } from './views';
 import type { Entry } from './types';
 import { category } from './format';
 import { decisionFor, forget, hasScripts, remember, resolveLocal } from './htmlpreview';
+
+// Tests check the German texts.
+beforeAll(() => i18n.set('de'));
 
 const DAY = 86400e3;
 const NOW = Date.UTC(2026, 9, 16);

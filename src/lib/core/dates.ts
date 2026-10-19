@@ -3,6 +3,7 @@
  * All buckets use local time, like a wall calendar.
  */
 import type { Entry } from './types';
+import { loc, t } from '../i18n/index.svelte';
 
 export type DateField = 'mtime' | 'ctime' | 'taken';
 export type CalLevel = 'years' | 'year' | 'month';
@@ -17,7 +18,15 @@ export interface DateRange {
   weekdays?: number[];
 }
 
-export const WEEKDAY_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+/** Short weekday names, Monday first, in the UI language. */
+export function weekdayShort(): string[] {
+  return t('core.dates.weekdays').split(',');
+}
+
+/** Same as weekdayShort(), read on every access so a language switch takes effect. */
+export const WEEKDAY_SHORT: readonly string[] = new Proxy([] as string[], {
+  get: (_, p) => Reflect.get(weekdayShort(), p)
+});
 
 /** Weekday with Monday = 0, like the rows of the year heatmap. */
 export function weekdayOf(ms: number): number {
@@ -53,9 +62,15 @@ export function unionRange(a: DateRange, b: DateRange): DateRange {
 }
 
 export const DATE_FIELD_LABEL: Record<DateField, string> = {
-  mtime: 'Geändert',
-  ctime: 'Erstellt',
-  taken: 'Aufgenommen'
+  get mtime() {
+    return t('core.dates.mtime');
+  },
+  get ctime() {
+    return t('core.dates.ctime');
+  },
+  get taken() {
+    return t('core.dates.taken');
+  }
 };
 
 /** Capture date falls back to the modification date for files without EXIF. */
@@ -158,9 +173,11 @@ export function monthGrid(y: number, m: number): { lead: number; days: { key: st
   return { lead, days };
 }
 
-export function formatRange(r: DateRange, locale = 'de-DE'): string {
-  const days = r.weekdays ? ` · nur ${r.weekdays.map((w) => WEEKDAY_SHORT[w]).join(', ')}` : '';
-  return formatSpan(r, locale) + days;
+export function formatRange(r: DateRange, locale = loc()): string {
+  const range = formatSpan(r, locale);
+  if (!r.weekdays) return range;
+  const names = weekdayShort();
+  return t('core.dates.onlyWeekdays', { range, days: r.weekdays.map((w) => names[w]).join(', ') });
 }
 
 function formatSpan(r: DateRange, locale: string): string {

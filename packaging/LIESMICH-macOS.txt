@@ -41,8 +41,7 @@ macOS 14 (Sonoma) und älter:
    (oder Rechtsklick) und „Öffnen“ wählen.
 2. In der Rückfrage nochmals „Öffnen“ klicken.
 
-Danach startet brausa normal per Doppelklick. Nach einem Update auf eine neue
-Version kann die Freigabe noch einmal nötig sein.
+Danach startet brausa normal per Doppelklick.
 
 Falls macOS meldet, brausa sei „beschädigt“:
 Das ist dieselbe Sperre in strengerer Form. Im Terminal eingeben:
@@ -50,6 +49,19 @@ Das ist dieselbe Sperre in strengerer Form. Im Terminal eingeben:
     xattr -dr com.apple.quarantine /Applications/brausa.app
 
 und brausa danach wie oben öffnen.
+
+
+UPDATES
+-------
+brausa sucht kurz nach dem Start nach einer neuen Version (abschaltbar in den
+Einstellungen, Zahnrad oben in der Seitenleiste) und installiert sie auf Wunsch.
+Updates sind signiert; brausa installiert nur Updates seines Herausgebers.
+
+
+SPRACHE
+-------
+brausa folgt der Sprache des Systems (Deutsch oder Englisch, sonst Englisch).
+Einstellungen (Zahnrad) > Sprache stellt sie um.
 
 
 ZUGRIFF AUF ORDNER

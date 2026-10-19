@@ -118,17 +118,17 @@ impl Projects {
     }
 
     fn get_mut(&mut self, id: &str) -> io::Result<&mut Project> {
-        self.list.iter_mut().find(|p| p.id == id).ok_or_else(|| bad(format!("Projekt „{id}“ gibt es nicht")))
+        self.list.iter_mut().find(|p| p.id == id).ok_or_else(|| bad(crate::tr!(format!("Projekt „{id}“ gibt es nicht"), format!("There is no project “{id}”"))))
     }
 
     pub fn get(&self, id: &str) -> io::Result<&Project> {
-        self.list.iter().find(|p| p.id == id).ok_or_else(|| bad(format!("Projekt „{id}“ gibt es nicht")))
+        self.list.iter().find(|p| p.id == id).ok_or_else(|| bad(crate::tr!(format!("Projekt „{id}“ gibt es nicht"), format!("There is no project “{id}”"))))
     }
 
     pub fn create(&mut self, name: &str) -> io::Result<Project> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(bad("Der Projektname fehlt".into()));
+            return Err(bad(crate::tr!("Der Projektname fehlt", "The project needs a name").into()));
         }
         let p = Project { id: new_id(), name: name.into(), color: None, files: vec![], folders: vec![], home: None };
         fs::create_dir_all(self.root(&p))?;
@@ -141,7 +141,7 @@ impl Projects {
         let p = self.get_mut(id)?;
         if let Some(n) = name.map(str::trim) {
             if n.is_empty() {
-                return Err(bad("Der Projektname fehlt".into()));
+                return Err(bad(crate::tr!("Der Projektname fehlt", "The project needs a name").into()));
             }
             p.name = n.into();
         }

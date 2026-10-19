@@ -5,6 +5,7 @@
   import { drag } from '../state/drag.svelte';
   import { family } from '../core/format';
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   let { onTag }: { onTag: () => void } = $props();
 
@@ -18,7 +19,7 @@
       class="handle"
       role="button"
       tabindex="-1"
-      title="Alle Dateien aus der Ablage ziehen"
+      title={t('files.trayDragAll')}
       onpointerdown={(e) => drag.begin(e, () => app.staging, 'tray')}
     >
       <Icon name="tray" size={16} />
@@ -36,21 +37,21 @@
           >
             {#if e.thumb}<img src={e.thumb} alt="" draggable="false" />{:else}<span class="ext">{e.ext || family(e.ext)}</span>{/if}
           </div>
-          <button class="rm" onclick={() => app.unstage([e.path])} aria-label="Aus Ablage entfernen"><Icon name="x" size={10} /></button>
+          <button class="rm" onclick={() => app.unstage([e.path])} aria-label={t('files.trayRemove')}><Icon name="x" size={10} /></button>
         </div>
       {:else}
-        <span class="placeholder">Hier ablegen: Dateien bleiben beim Ordnerwechsel gesammelt.</span>
+        <span class="placeholder">{t('files.trayEmpty')}</span>
       {/each}
     </div>
 
     {#if app.staging.length}
       <div class="actions">
-        <button class="btn" onclick={onTag} title="Ablage taggen"><Icon name="tag" size={14} /> Taggen</button>
-        <button class="btn" onclick={() => app.setSelection(app.staging.map((e) => e.path))}>Auswählen</button>
-        <button class="btn" onclick={() => app.transfer(app.staging, app.funnel ?? app.cwd, 'move')} title="Alles in den aktuellen Ordner verschieben">
-          Hierher
+        <button class="btn" onclick={onTag} title={t('files.trayTag')}><Icon name="tag" size={14} /> {t('files.tag')}</button>
+        <button class="btn" onclick={() => app.setSelection(app.staging.map((e) => e.path))}>{t('files.traySelect')}</button>
+        <button class="btn" onclick={() => app.transfer(app.staging, app.funnel ?? app.cwd, 'move')} title={t('files.trayHereHint')}>
+          {t('files.trayHere')}
         </button>
-        <button class="btn" onclick={() => app.clearStaging()}>Leeren</button>
+        <button class="btn" onclick={() => app.clearStaging()}>{t('files.trayClear')}</button>
       </div>
     {/if}
   </div>

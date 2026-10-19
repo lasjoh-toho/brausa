@@ -5,6 +5,7 @@
   import { dirname } from '../core/paths';
   import { DEFAULT_RENAME, PLACEHOLDERS, planRenames, type RenameOptions } from '../core/rename';
   import { store } from '../platform';
+  import { t, tn } from '../i18n/index.svelte';
 
   const entries = $derived(app.batchRenaming ?? []);
   let o = $state<RenameOptions>({ ...DEFAULT_RENAME, ...store.get<Partial<RenameOptions>>('renameOptions', {}), find: '', replace: '' });
@@ -51,45 +52,45 @@
 
 <div class="scrim" transition:fade={{ duration: 120 }} onpointerdown={(e) => e.target === e.currentTarget && (app.batchRenaming = null)} role="presentation">
   <div class="box" role="dialog" aria-modal="true" aria-labelledby="rename-title">
-    <h2 id="rename-title">{entries.length} Objekte umbenennen{dirs > 1 ? ` (in ${dirs} Ordnern)` : ''}</h2>
+    <h2 id="rename-title">{dirs > 1 ? tn('batch.titleIn', entries.length, { dirs }) : tn('batch.title', entries.length)}</h2>
 
     <label class="field">
-      <span>Name</span>
+      <span>{t('batch.name')}</span>
       <input bind:this={patternEl} bind:value={o.pattern} spellcheck="false" placeholder={'{name}'} />
     </label>
     <div class="tokens">
       {#each PLACEHOLDERS as p (p.token)}
         <button class="chip" tabindex="-1" title={p.label} onclick={() => insert(p.token)}>{p.token}</button>
       {/each}
-      <span class="note">Die Endung bleibt.</span>
+      <span class="note">{t('batch.keepExt')}</span>
     </div>
 
     <div class="row">
       <label class="field grow">
-        <span>Ersetzen</span>
-        <input bind:value={o.find} spellcheck="false" placeholder="Suchen" />
+        <span>{t('batch.replace')}</span>
+        <input bind:value={o.find} spellcheck="false" placeholder={t('batch.find')} />
       </label>
       <label class="field grow">
-        <span>durch</span>
-        <input bind:value={o.replace} spellcheck="false" placeholder="(nichts)" />
+        <span>{t('batch.with')}</span>
+        <input bind:value={o.replace} spellcheck="false" placeholder={t('batch.nothing')} />
       </label>
-      <label class="check" title="Suchen mit regulärem Ausdruck; $1 … im Ersatz setzt Gruppen ein">
-        <input type="checkbox" bind:checked={o.regex} /> Regex
+      <label class="check" title={t('batch.regexTitle')}>
+        <input type="checkbox" bind:checked={o.regex} /> {t('batch.regex')}
       </label>
     </div>
 
     <div class="row">
       <label class="field">
-        <span>Zählen ab</span>
+        <span>{t('batch.start')}</span>
         <input class="num" type="number" min="0" bind:value={o.start} />
       </label>
       <label class="field">
-        <span>Schreibweise</span>
+        <span>{t('batch.case')}</span>
         <select bind:value={o.case}>
-          <option value="keep">unverändert</option>
-          <option value="lower">klein</option>
-          <option value="upper">GROSS</option>
-          <option value="title">Wörter Groß</option>
+          <option value="keep">{t('batch.caseKeep')}</option>
+          <option value="lower">{t('batch.caseLower')}</option>
+          <option value="upper">{t('batch.caseUpper')}</option>
+          <option value="title">{t('batch.caseTitle')}</option>
         </select>
       </label>
     </div>
@@ -107,10 +108,10 @@
 
     <div class="foot">
       <span class="sum" class:bad={errors > 0}>
-        {#if errors}{errors} {errors === 1 ? 'Konflikt' : 'Konflikte'}{:else}{changed} von {entries.length} werden umbenannt{/if}
+        {#if errors}{tn('batch.conflicts', errors)}{:else}{t('batch.willRename', { changed, total: entries.length })}{/if}
       </span>
-      <button class="btn" onclick={() => (app.batchRenaming = null)}>Abbrechen</button>
-      <button class="btn primary" disabled={!!errors || !changed} onclick={apply}>Umbenennen</button>
+      <button class="btn" onclick={() => (app.batchRenaming = null)}>{t('common.cancel')}</button>
+      <button class="btn primary" disabled={!!errors || !changed} onclick={apply}>{t('common.rename')}</button>
     </div>
   </div>
 </div>

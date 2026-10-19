@@ -5,6 +5,7 @@
   import { app } from '../state/app.svelte';
   import { normalizeTag, suggestTags, tagColor, expandTag } from '../core/tags';
   import Icon from './Icon.svelte';
+  import { t, tn } from '../i18n/index.svelte';
 
   let { targets, onclose }: { targets: Entry[]; onclose: () => void } = $props();
 
@@ -61,36 +62,36 @@
 </script>
 
 <div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
-  <div class="bar" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="Tags bearbeiten">
+  <div class="bar" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label={t('files.editTags')}>
     <div class="head">
       <Icon name="tag" size={15} />
-      <span>{targets.length} {targets.length === 1 ? 'Datei' : 'Dateien'} taggen</span>
+      <span>{tn('files.tagFiles', targets.length)}</span>
       <span class="colors">
         {#each COLORS as c (c)}
           <button
             class="swatch"
             class:none={!c}
             style:background={c ?? undefined}
-            title={c ? 'Farbe setzen' : 'Farbe entfernen'}
+            title={c ? t('files.setColor') : t('files.removeColor')}
             onclick={() => app.patchMeta(targets, { color: c })}
-            aria-label={c ?? 'keine Farbe'}
+            aria-label={c ?? t('files.noColor')}
           ></button>
         {/each}
       </span>
     </div>
 
     <div class="field">
-      {#each counts as [t, n] (t)}
-        <span class="chip" class:partial={n < targets.length} title={n < targets.length ? `${n} von ${targets.length}` : ''}>
-          <span class="dot" style:background={tagColor(t)}></span>{t}
-          <button onclick={() => commit('-' + t)} aria-label="{t} entfernen"><Icon name="x" size={10} /></button>
+      {#each counts as [tag, n] (tag)}
+        <span class="chip" class:partial={n < targets.length} title={n < targets.length ? t('files.tagPartial', { n, total: targets.length }) : ''}>
+          <span class="dot" style:background={tagColor(tag)}></span>{tag}
+          <button onclick={() => commit('-' + tag)} aria-label={t('files.removeTag', { tag })}><Icon name="x" size={10} /></button>
         </span>
       {/each}
       <input
         bind:this={inputEl}
         bind:value={input}
         onkeydown={key}
-        placeholder={counts.length ? '' : 'Tag eingeben, z. B. Work/Design/UI'}
+        placeholder={counts.length ? '' : t('files.tagPlaceholder')}
         spellcheck="false"
       />
     </div>
@@ -102,14 +103,14 @@
             <button class:active={i === active} onmouseenter={() => (active = i)} onclick={() => commit(s)}>
               <span class="dot" style:background={tagColor(s)}></span>
               {s}
-              {#if s.includes('/')}<span class="anc">indexiert unter {expandTag(s).slice(0, -1).join(', ')}</span>{/if}
-              {#if app.recentTags.includes(s)}<span class="recent">zuletzt</span>{/if}
+              {#if s.includes('/')}<span class="anc">{t('files.tagIndexedUnder', { tags: expandTag(s).slice(0, -1).join(', ') })}</span>{/if}
+              {#if app.recentTags.includes(s)}<span class="recent">{t('files.tagRecent')}</span>{/if}
             </button>
           </li>
         {/each}
       </ul>
     {/if}
-    <div class="foot"><kbd>↵</kbd> hinzufügen · <kbd>-tag</kbd> entfernen · <kbd>Tab</kbd> vervollständigen · <kbd>Esc</kbd></div>
+    <div class="foot"><kbd>↵</kbd> {t('files.tagAdd')} · <kbd>-tag</kbd> {t('files.tagRemoveHint')} · <kbd>Tab</kbd> {t('files.tagComplete')} · <kbd>Esc</kbd></div>
   </div>
 </div>
 

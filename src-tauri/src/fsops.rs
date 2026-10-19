@@ -157,12 +157,12 @@ fn copy_recursive(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 fn transfer_one(src: &Path, target_dir: &Path, mode: Mode) -> Result<PathBuf, String> {
-    let name = src.file_name().ok_or("ungültiger Pfad")?.to_string_lossy().to_string();
+    let name = src.file_name().ok_or_else(|| crate::tr!("Ungültiger Pfad", "Invalid path"))?.to_string_lossy().to_string();
     if !target_dir.is_dir() {
         return Err(format!("Ziel ist kein Ordner: {}", target_dir.display()));
     }
     if src.is_dir() && target_dir.starts_with(src) {
-        return Err(format!("„{name}“ kann nicht in sich selbst verschoben werden"));
+        return Err(crate::tr!(format!("„{name}“ kann nicht in sich selbst verschoben werden"), format!("“{name}” cannot be moved into itself")));
     }
     if mode == Mode::Move && src.parent() == Some(target_dir) {
         return Ok(src.to_path_buf());
@@ -199,9 +199,9 @@ pub fn transfer(paths: &[String], target_dir: &Path, mode: Mode) -> TransferResu
 pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
     let name = new_name.trim();
     if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
-        return Err("Ungültiger Name".into());
+        return Err(crate::tr!("Ungültiger Name", "Invalid name").into());
     }
-    let dir = path.parent().ok_or("Kein Elternordner")?;
+    let dir = path.parent().ok_or_else(|| crate::tr!("Kein Elternordner", "No parent folder"))?;
     let dest = dir.join(name);
     if dest == path {
         return Ok(dest);
@@ -210,7 +210,7 @@ pub fn rename(path: &Path, new_name: &str) -> Result<PathBuf, String> {
     let same_file = dest.exists()
         && fs::canonicalize(&dest).ok() == fs::canonicalize(path).ok();
     if dest.exists() && !same_file {
-        return Err(format!("„{name}“ existiert bereits"));
+        return Err(crate::tr!(format!("„{name}“ existiert bereits"), format!("“{name}” already exists")));
     }
     fs::rename(path, &dest).map_err(|e| e.to_string())?;
     Ok(dest)

@@ -3,6 +3,7 @@
   import { scale } from 'svelte/transition';
   import { app, type DropCell, type DropGridConfig } from '../state/app.svelte';
   import Icon from './Icon.svelte';
+  import { t } from '../i18n/index.svelte';
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -36,15 +37,15 @@
 </script>
 
 <div class="backdrop" role="presentation" onpointerdown={(e) => e.target === e.currentTarget && onclose()}>
-  <div class="panel" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label="Ablagezonen">
+  <div class="panel" transition:scale={{ start: 0.96, duration: 140 }} role="dialog" aria-label={t('grid.title')}>
     <div class="head">
       <Icon name="target" size={16} />
-      <b>Ablagezonen</b>
-      <span class="muted">Ziehe Dateien auf „Ablage“ in der Toolbar, um dieses Raster zu öffnen.</span>
+      <b>{t('grid.title')}</b>
+      <span class="muted">{t('grid.hint')}</span>
     </div>
     <div class="size">
-      <label>Spalten <input type="number" min="1" max="6" bind:value={cfg.cols} /></label>
-      <label>Zeilen <input type="number" min="1" max="4" bind:value={cfg.rows} /></label>
+      <label>{t('grid.cols')} <input type="number" min="1" max="6" bind:value={cfg.cols} /></label>
+      <label>{t('grid.rows')} <input type="number" min="1" max="4" bind:value={cfg.rows} /></label>
     </div>
     <div class="grid" style:grid-template-columns="repeat({cfg.cols}, 1fr)">
       {#each Array.from({ length: total }, (_, i) => i) as i (i)}
@@ -55,18 +56,18 @@
               <Icon name={c.tag ? 'tag' : 'folder'} size={13} />
               <input value={c.label} oninput={(e) => setCell(i, { ...c, label: e.currentTarget.value })} />
             </div>
-            <div class="sub">{c.tag ? 'Tag: ' + c.tag : c.path}</div>
-            <button class="rm" onclick={() => setCell(i, null)}>Leeren</button>
+            <div class="sub">{c.tag ? t('grid.tag', { tag: c.tag }) : c.path}</div>
+            <button class="rm" onclick={() => setCell(i, null)}>{t('grid.clear')}</button>
           {:else}
-            <button class="btn" onclick={() => useCurrent(i)}><Icon name="folder" size={13} /> Aktueller Ordner</button>
+            <button class="btn" onclick={() => useCurrent(i)}><Icon name="folder" size={13} /> {t('grid.current')}</button>
             <input class="taginput" placeholder="#tag + ↵" onkeydown={(e) => e.key === 'Enter' && setTag(i, e.currentTarget.value)} />
           {/if}
         </div>
       {/each}
     </div>
     <div class="foot">
-      <button class="btn" onclick={onclose}>Abbrechen</button>
-      <button class="btn primary" onclick={save}>Speichern</button>
+      <button class="btn" onclick={onclose}>{t('common.cancel')}</button>
+      <button class="btn primary" onclick={save}>{t('common.save')}</button>
     </div>
   </div>
 </div>

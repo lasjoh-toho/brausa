@@ -20,11 +20,13 @@
   import ContextMenu from './lib/components/ContextMenu.svelte';
   import Confirm from './lib/components/Confirm.svelte';
   import BatchRename from './lib/components/BatchRename.svelte';
+  import { updates } from './lib/state/updates.svelte';
   import { inArchive } from './lib/core/archive';
   import ProjectBoard from './lib/components/ProjectBoard.svelte';
   import WikiEditor from './lib/components/WikiEditor.svelte';
   import OverlayTool from './lib/components/OverlayTool.svelte';
   import { wikis } from './lib/state/wikis.svelte';
+  import { t } from './lib/i18n/index.svelte';
 
   let toolbar: Toolbar;
   let accent = $state<{ color: string; light: boolean } | null>(null);
@@ -33,6 +35,7 @@
 
   onMount(() => {
     app.init();
+    updates.startup();
   });
 
   function openPreview() {
@@ -43,8 +46,8 @@
   }
 
   function typing(e: KeyboardEvent) {
-    const t = e.target as HTMLElement;
-    return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable;
+    const el = e.target as HTMLElement;
+    return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
   }
 
   function key(e: KeyboardEvent) {
@@ -79,7 +82,7 @@
     } else if (e.key === 't' || e.key === 'T') {
       if (app.selection.size) tagSource = 'selection';
       else if (app.staging.length) tagSource = 'staging';
-      else app.toast('Erst Dateien auswählen (oder in die Ablage legen).');
+      else app.toast(t('files.selectFirst'));
       e.preventDefault();
     } else if (e.key === 's' && !mod) {
       app.stage(app.selectedEntries);

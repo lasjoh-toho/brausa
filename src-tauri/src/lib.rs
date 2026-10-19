@@ -1,5 +1,6 @@
 mod archive;
 mod dupes;
+mod i18n;
 mod fsops;
 mod library;
 mod maps;
@@ -79,7 +80,7 @@ struct FolderMeta {
 
 #[tauri::command]
 fn home_dir() -> CmdResult<String> {
-    dirs::home_dir().map(|p| p.to_string_lossy().to_string()).ok_or_else(|| "Kein Home-Verzeichnis".into())
+    dirs::home_dir().map(|p| p.to_string_lossy().to_string()).ok_or_else(|| tr!("Kein Home-Verzeichnis", "No home folder").into())
 }
 
 #[tauri::command]
@@ -203,7 +204,7 @@ fn project_root(state: &State<'_, Index>, projs: &State<'_, Projs>, root: &str) 
     if known {
         Ok(PathBuf::from(root))
     } else {
-        Err(format!("„{root}“ ist kein Projekt"))
+        Err(tr!(format!("„{root}“ ist kein Projekt"), format!("“{root}” is not a project")))
     }
 }
 
@@ -459,7 +460,7 @@ fn reconcile(app: AppHandle) {
 #[tauri::command]
 async fn mkdir(parent: String, name: String) -> CmdResult<String> {
     if name.contains(['/', '\\']) || name.trim().is_empty() {
-        return Err("Ungültiger Ordnername".into());
+        return Err(tr!("Ungültiger Ordnername", "Invalid folder name").into());
     }
     let p = fsops::unique_dest(Path::new(&parent), name.trim());
     std::fs::create_dir(&p).map_err(err)?;
@@ -482,7 +483,7 @@ fn real_path(app: &AppHandle, path: &str) -> CmdResult<PathBuf> {
 
 fn read_only(path: &str) -> CmdResult<()> {
     if archive::split(path).is_some() {
-        Err("Archive kann brausa nur lesen. Zum Ändern die Dateien herausziehen.".into())
+        Err(tr!("Archive kann brausa nur lesen. Zum Ändern die Dateien herausziehen.", "brausa can only read archives here. Drag the files out to change them.").into())
     } else {
         Ok(())
     }
@@ -494,7 +495,7 @@ fn retire(app: &AppHandle, old: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(&dir)?;
     let copy = dir.join(old.file_name().unwrap_or_default());
     std::fs::copy(old, &copy)?;
-    let r = ::trash::delete(&copy).map_err(|e| std::io::Error::other(format!("Sicherung in den Papierkorb fehlgeschlagen: {e}")));
+    let r = ::trash::delete(&copy).map_err(|e| std::io::Error::other(tr!(format!("Sicherung in den Papierkorb fehlgeschlagen: {e}"), format!("Could not move the backup to the trash: {e}"))));
     let _ = std::fs::remove_dir_all(&dir);
     r
 }
@@ -502,10 +503,10 @@ fn retire(app: &AppHandle, old: &Path) -> std::io::Result<()> {
 /// Packs files and folders into a new ZIP next to the first one; returns its path.
 #[tauri::command]
 async fn compress(app: AppHandle, paths: Vec<String>) -> CmdResult<String> {
-    let first = paths.first().ok_or("Nichts ausgewählt")?;
+    let first = paths.first().ok_or_else(|| tr!("Nichts ausgewählt", "Nothing selected"))?;
     let dir = match archive::split(first) {
-        Some((a, _)) => a.parent().map(Path::to_path_buf).ok_or("Kein Ordner")?,
-        None => Path::new(first).parent().map(Path::to_path_buf).ok_or("Kein Ordner")?,
+        Some((a, _)) => a.parent().map(Path::to_path_buf).ok_or_else(|| tr!("Kein Ordner", "No folder"))?,
+        None => Path::new(first).parent().map(Path::to_path_buf).ok_or_else(|| tr!("Kein Ordner", "No folder"))?,
     };
     tauri::async_runtime::spawn_blocking(move || {
         let sources = paths.iter().map(|p| real_path(&app, p)).collect::<CmdResult<Vec<_>>>()?;
@@ -514,6 +515,12 @@ async fn compress(app: AppHandle, paths: Vec<String>) -> CmdResult<String> {
     .await
     .map_err(err)?
     .map(|p| p.to_string_lossy().to_string())
+}
+
+/// Language of the core's messages ("de" or "en").
+#[tauri::command]
+fn set_lang(lang: String) {
+    i18n::set(&lang);
 }
 
 /// Groups of files with identical content among `paths` (files inside archives are skipped).
@@ -530,7 +537,7 @@ async fn find_duplicates(paths: Vec<String>) -> CmdResult<Vec<Vec<String>>> {
 /// Names in an archive folder that dropping `names` there would replace.
 #[tauri::command]
 async fn archive_conflicts(dir: String, names: Vec<String>) -> CmdResult<Vec<String>> {
-    let (a, inner) = archive::split(&dir).ok_or("Kein Archiv")?;
+    let (a, inner) = archive::split(&dir).ok_or_else(|| tr!("Kein Archiv", "Not an archive"))?;
     archive::conflicts(&a, &inner, &names).map_err(err)
 }
 
@@ -584,7 +591,7 @@ async fn trash(app: AppHandle, state: State<'_, Index>, paths: Vec<String>) -> C
     let mut res = fsops::trash(&paths);
     for (a, inners) in by_archive {
         let r = if inners.iter().any(String::is_empty) {
-            Err("Das ganze Archiv bitte von außen löschen".to_string())
+            Err(tr!("Das ganze Archiv bitte von außen löschen", "Delete the whole archive from outside it").to_string())
         } else {
             archive::remove(&a, &inners, &|old| retire(&app, old)).map_err(err)
         };
@@ -653,6 +660,8 @@ fn watch(app: AppHandle, state: State<'_, Watcher>, path: String, recursive: boo
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(Watcher::default())
         .manage(web::Web::default())
         .setup(|app| {
@@ -724,6 +733,7 @@ pub fn run() {
             archive_extract,
             archive_conflicts,
             find_duplicates,
+            set_lang,
             compress,
             web_open,
             web_place,

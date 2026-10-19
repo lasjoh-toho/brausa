@@ -9,27 +9,28 @@
   import type { SortKey } from '../core/views';
   import { isToggleKey } from '../platform';
   import Icon from './Icon.svelte';
+  import { t, loc } from '../i18n/index.svelte';
 
   const cols: { key: SortKey; label: string; cls: string }[] = [
-    { key: 'name', label: 'Name', cls: 'name' },
-    { key: 'mtime', label: 'Geändert', cls: 'date' },
-    { key: 'size', label: 'Größe', cls: 'size' },
-    { key: 'ext', label: 'Art', cls: 'kind' }
+    { key: 'name', get label() { return t('files.colName'); }, cls: 'name' },
+    { key: 'mtime', get label() { return t('files.colModified'); }, cls: 'date' },
+    { key: 'size', get label() { return t('files.colSize'); }, cls: 'size' },
+    { key: 'ext', get label() { return t('files.colKind'); }, cls: 'kind' }
   ];
   // The date column follows the sort: created or taken when sorted by those.
   const dateKey = $derived<SortKey>(app.sort === 'ctime' || app.sort === 'taken' ? app.sort : 'mtime');
-  const dateLabel = $derived(dateKey === 'ctime' ? 'Erstellt' : dateKey === 'taken' ? 'Aufgenommen' : 'Geändert');
+  const dateLabel = $derived(dateKey === 'ctime' ? t('files.colCreated') : dateKey === 'taken' ? t('files.colTaken') : t('files.colModified'));
 
-  const fmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmt = $derived(new Intl.DateTimeFormat(loc(), { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
   function dateOf(e: Entry) {
     const ms = dateKey === 'ctime' ? e.ctime || e.mtime : dateKey === 'taken' ? (e.taken ?? null) : e.mtime;
     return ms ? fmt.format(ms) : '–';
   }
 
   function kindOf(e: Entry) {
-    if (e.kind === 'dir') return 'Ordner';
-    if (isArchive(e.path)) return 'Archiv';
-    return e.ext ? e.ext.toUpperCase() : 'Datei';
+    if (e.kind === 'dir') return t('files.kindFolder');
+    if (isArchive(e.path)) return t('files.kindArchive');
+    return e.ext ? e.ext.toUpperCase() : t('files.kindFile');
   }
 
   function lazyThumb(node: HTMLElement, entry: Entry) {
@@ -145,7 +146,7 @@
         <span class="td kind">{kindOf(e)}</span>
       </div>
     {:else}
-      {#if !app.loading}<p class="empty">{app.search ? 'Nichts gefunden.' : 'Keine Dateien'}</p>{/if}
+      {#if !app.loading}<p class="empty">{app.search ? t('files.nothingFound') : t('files.noFiles')}</p>{/if}
     {/each}
   </div>
 </div>

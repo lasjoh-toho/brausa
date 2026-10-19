@@ -4,6 +4,7 @@
  */
 import { app } from './app.svelte';
 import { board } from './board.svelte';
+import { t, tn } from '../i18n/index.svelte';
 import type { OverlayResolution, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
 
 class WikiState {
@@ -39,7 +40,7 @@ class WikiState {
     try {
       await app.backend.resolveOverlay(o.title, o.bag, how);
       this.overlays = await app.backend.wikiOverlays();
-      if (!quiet) app.toast('Erledigt – die Wikis bekommen es beim nächsten Abgleich.');
+      if (!quiet) app.toast(t('wikis.resolved'));
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
     }
@@ -55,7 +56,7 @@ class WikiState {
           n++;
         }
     this.overlays = await app.backend.wikiOverlays();
-    app.toast(`${n} gleiche Überdeckungen verworfen`);
+    app.toast(tn('wikis.discarded', n));
   }
 
   /** Open the editor with fresh lists (maps may have been created since). */
@@ -75,7 +76,7 @@ class WikiState {
   async remove(name: string) {
     await app.backend.deleteWikiRecipe(name);
     await this.load();
-    app.toast(`Wiki „${name}“ entfernt. Wiki-Dateien und Bags bleiben erhalten.`);
+    app.toast(t('wikis.removed', { name }));
   }
 
   async addBag(name: string, readonly: boolean, description = '') {
@@ -90,15 +91,15 @@ class WikiState {
     try {
       await board.flush(true);
       const r = await app.backend.syncWiki(name);
-      const parts = [`${r.pushed} ins Wiki geschrieben`];
-      if (r.pulled.length) parts.push(`${r.pulled.length} aus dem Wiki übernommen`);
-      if (r.deleted.length) parts.push(`${r.deleted.length} gelöscht`);
-      app.toast(`„${name}“ abgeglichen: ${parts.join(' · ')}`);
-      if (r.conflicts.length) app.toast(`Konflikte: ${r.conflicts.join(', ')}`, true);
+      const parts = [t('wikis.pushed', { n: r.pushed })];
+      if (r.pulled.length) parts.push(t('wikis.pulled', { n: r.pulled.length }));
+      if (r.deleted.length) parts.push(t('wikis.deleted', { n: r.deleted.length }));
+      app.toast(t('wikis.synced', { name, parts: parts.join(' · ') }));
+      if (r.conflicts.length) app.toast(t('wikis.conflicts', { list: r.conflicts.join(', ') }), true);
       for (const w of r.warnings) app.toast(w, true);
       for (const [root, id] of r.maps) if (board.root === root && board.map?.id === id) await board.load(id);
       await this.load();
-      if (this.pending) app.toast(`${this.pending} Überdeckung${this.pending === 1 ? '' : 'en'} gemeinsamer Tiddler – unter „Wikis“ prüfen`);
+      if (this.pending) app.toast(tn('wikis.pending', this.pending));
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
     } finally {
@@ -110,9 +111,9 @@ class WikiState {
   label(bag: string): string {
     if (!bag.startsWith('@map:')) return bag;
     const m = this.maps.find((x) => x.bag === bag);
-    if (m) return `${m.title} (Map in ${m.project})`;
+    if (m) return t('wikis.mapBag', { title: m.title, project: m.project });
     const [root, id] = bag.slice(5).split('|');
-    return `Map ${id} (${root.split(/[\\/]/).pop()})`;
+    return t('wikis.mapBagUnknown', { id, folder: root.split(/[\\/]/).pop() ?? '' });
   }
 }
 

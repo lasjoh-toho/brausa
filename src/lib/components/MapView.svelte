@@ -10,6 +10,7 @@
   import { app } from '../state/app.svelte';
   import { store } from '../platform';
   import type { Entry } from '../core/types';
+  import { t } from '../i18n/index.svelte';
 
   const TILE_URL = store.get('tileUrl', 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
 
@@ -87,7 +88,7 @@
 <div class="wrap">
   <div class="map" bind:this={el}></div>
   <p class="note">
-    {located.length} mit Ortsdaten{missing ? ` · ${missing} ohne` : ''} · Klick auf einen Marker wählt die Fotos aus
+    {t('mapview.located', { n: located.length })}{missing ? ` · ${t('mapview.missing', { n: missing })}` : ''} · {t('mapview.hint')}
   </p>
 </div>
 

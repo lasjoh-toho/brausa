@@ -13,6 +13,7 @@
 import type { Entry } from './types';
 import { hasTag } from './tags';
 import { category, type Category } from './format';
+import { t } from '../i18n/index.svelte';
 
 export type Cmp = '<' | '<=' | '>' | '>=' | '=';
 
@@ -141,10 +142,10 @@ export function parsePattern(input: string): Pattern {
       const op = fm[2] as Cmp;
       if (field === 'size') {
         const bytes = parseSize(fm[3]);
-        bytes === null ? errors.push(`Ungültige Größe: ${fm[3]}`) : terms.push({ type: 'size', op, bytes });
+        bytes === null ? errors.push(t('core.pattern.badSize', { value: fm[3] })) : terms.push({ type: 'size', op, bytes });
       } else {
         const ms = parseAge(fm[3]);
-        ms === null ? errors.push(`Ungültige Zeitspanne: ${fm[3]}`) : terms.push({ type: 'age', field, op, ms });
+        ms === null ? errors.push(t('core.pattern.badAge', { value: fm[3] })) : terms.push({ type: 'age', field, op, ms });
       }
       continue;
     }
@@ -157,7 +158,7 @@ export function parsePattern(input: string): Pattern {
       const ms = parseAge(om[2]);
       if (ms !== null) terms.push({ type: 'age', field: 'mtime', op, ms });
       else if (bytes !== null) terms.push({ type: 'size', op, bytes });
-      else errors.push(`Ungültiger Vergleich: ${body}`);
+      else errors.push(t('core.pattern.badCompare', { value: body }));
       continue;
     }
 
@@ -176,7 +177,7 @@ export function parsePattern(input: string): Pattern {
       else {
         const cats = parseCategories(val);
         if (cats) terms.push({ type: 'cat', cats, neg });
-        else errors.push(`Unbekannter Typ: ${val}`);
+        else errors.push(t('core.pattern.unknownType', { value: val }));
       }
       continue;
     }

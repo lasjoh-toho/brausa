@@ -8,19 +8,18 @@ import { isWithin } from './paths';
 import { matches, parsePattern } from './pattern';
 import { inRange, type DateRange } from './dates';
 import { category, type Category } from './format';
+import { loc, t } from '../i18n/index.svelte';
 
 export type ViewMode = 'stream' | 'panes' | 'kanban' | 'timeline' | 'calendar' | 'map' | 'board';
 export type GroupBy = 'none' | 'tag' | 'subfolder' | 'month';
 export type SortKey = 'name' | 'mtime' | 'ctime' | 'taken' | 'size' | 'ext';
 
-export const SORT_KEYS: { key: SortKey; label: string }[] = [
-  { key: 'name', label: 'Name' },
-  { key: 'mtime', label: 'Geändert' },
-  { key: 'ctime', label: 'Erstellt' },
-  { key: 'taken', label: 'Aufgenommen' },
-  { key: 'size', label: 'Größe' },
-  { key: 'ext', label: 'Art' }
-];
+export const SORT_KEYS: { key: SortKey; label: string }[] = (['name', 'mtime', 'ctime', 'taken', 'size', 'ext'] as SortKey[]).map((key) => ({
+  key,
+  get label() {
+    return t(`core.views.${key}`);
+  }
+}));
 
 export interface Group {
   key: string;
@@ -80,7 +79,7 @@ export function sortEntries(entries: Entry[], key: SortKey, desc = false): Entry
  * every matching column.
  */
 export function groupEntries(entries: Entry[], by: GroupBy, opts: { depth?: number; locale?: string } = {}): Group[] {
-  if (by === 'none') return [{ key: 'all', label: 'Alle', entries }];
+  if (by === 'none') return [{ key: 'all', label: t('core.views.all'), entries }];
 
   const map = new Map<string, Group>();
   const add = (key: string, label: string, e: Entry) => {
@@ -92,17 +91,17 @@ export function groupEntries(entries: Entry[], by: GroupBy, opts: { depth?: numb
   for (const e of entries) {
     if (by === 'tag') {
       const depth = opts.depth ?? 1;
-      const level = indexTags(e.tags).filter((t) => t.split(TAG_SEPARATOR).length === depth);
-      if (!level.length) add(UNTAGGED, 'Ohne Tag', e);
-      for (const t of level) add(t.toLowerCase(), t, e);
+      const level = indexTags(e.tags).filter((x) => x.split(TAG_SEPARATOR).length === depth);
+      if (!level.length) add(UNTAGGED, t('core.views.untagged'), e);
+      for (const tag of level) add(tag.toLowerCase(), tag, e);
     } else if (by === 'subfolder') {
       const rel = e.relDir ?? '';
       const top = rel.split(/[\\/]/)[0] ?? '';
-      add(top || '.', top || '(oberste Ebene)', e);
+      add(top || '.', top || t('core.views.topLevel'), e);
     } else if (by === 'month') {
       const d = new Date(e.taken ?? e.mtime);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = d.toLocaleDateString(opts.locale ?? 'de-DE', { month: 'long', year: 'numeric' });
+      const label = d.toLocaleDateString(opts.locale ?? loc(), { month: 'long', year: 'numeric' });
       add(key, label, e);
     }
   }

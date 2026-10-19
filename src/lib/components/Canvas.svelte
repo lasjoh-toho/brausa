@@ -12,6 +12,7 @@
   import CalendarView from './CalendarView.svelte';
   import FileList from './FileList.svelte';
   import PreviewPane from './PreviewPane.svelte';
+  import { t, tn } from '../i18n/index.svelte';
 
   let el: HTMLElement;
   let lasso = $state<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -79,20 +80,20 @@
       <Icon name="copy" size={15} />
       {#if app.dupeGroups.length}
         <span
-          ><b>{extraCount} überzählige {extraCount === 1 ? 'Kopie' : 'Kopien'}</b> in {app.dupeGroups.length}
-          {app.dupeGroups.length === 1 ? 'Gruppe' : 'Gruppen'} · {formatSize(waste(app.dupeGroups))} frei zu machen</span
+          ><b>{tn('files.dupeExtras', extraCount)}</b>
+          {t('files.dupeSummary', { groups: tn('files.dupeGroups', app.dupeGroups.length), size: formatSize(waste(app.dupeGroups)) })}</span
         >
         <span class="grow"></span>
         <button
           class="btn"
-          title="Je Gruppe bleibt eine Datei stehen: nicht wie eine Kopie benannt, sonst die älteste. Danach Entf legt die Auswahl in den Papierkorb."
-          onclick={() => app.selectExtras()}>Überzählige auswählen</button
+          title={t('files.selectExtrasHint')}
+          onclick={() => app.selectExtras()}>{t('files.selectExtras')}</button
         >
       {:else}
-        <span>Keine Duplikate mehr.</span>
+        <span>{t('files.noDupes')}</span>
         <span class="grow"></span>
       {/if}
-      <button class="btn" onclick={() => app.endDuplicates()}>Fertig</button>
+      <button class="btn" onclick={() => app.endDuplicates()}>{t('common.done')}</button>
     </div>
   {/if}
   {#if app.view === 'panes' && !app.dupes}
@@ -115,7 +116,7 @@
           </div>
         </div>
       {:else}
-        <p class="empty">Keine Dateien</p>
+        <p class="empty">{t('files.noFiles')}</p>
       {/each}
     </div>
   {:else}
@@ -133,8 +134,8 @@
     {/each}
     {#if !app.visible.length && !app.loading}
       <p class="empty">
-        {app.search ? 'Nichts gefunden.' : app.project ? 'Das Projekt ist noch leer. Dateien und Ordner von überall hierher oder auf das Projekt in der Seitenleiste ziehen; sie bleiben, wo sie sind.' : 'Dieser Ordner ist leer.'}
-        {#if !app.recursive}<button class="btn" onclick={() => app.setRecursive(true)}>Unterordner als Stream zeigen</button>{/if}
+        {app.search ? t('files.nothingFound') : app.project ? t('files.projectEmpty') : t('files.folderEmpty')}
+        {#if !app.recursive}<button class="btn" onclick={() => app.setRecursive(true)}>{t('files.showStream')}</button>{/if}
       </p>
     {/if}
   {/if}

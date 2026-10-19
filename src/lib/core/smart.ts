@@ -4,7 +4,8 @@
  */
 import { CATEGORIES } from './format';
 import { basename, isWithin, joinPath, relativeTo, sep } from './paths';
-import { WEEKDAY_SHORT, type DateRange } from './dates';
+import { weekdayShort, type DateRange } from './dates';
+import { loc, t } from '../i18n/index.svelte';
 
 export interface SmartFolder {
   id: string;
@@ -26,13 +27,13 @@ export function hasFilter(v: SmartView): boolean {
   return !!(v.search.trim() || v.typeFilter || v.date);
 }
 
-const day = (ms: number) => new Date(ms).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric', year: 'numeric' });
+const day = (ms: number) => new Date(ms).toLocaleDateString(loc(), { day: 'numeric', month: 'numeric', year: 'numeric' });
 
 export function describeDate(r: DateRange): string {
   // `to` is exclusive; show the last day included.
   const last = r.to - 1;
   let s = day(r.from) === day(last) ? day(r.from) : `${day(r.from)} – ${day(last)}`;
-  if (r.weekdays?.length && r.weekdays.length < 7) s += ' (' + r.weekdays.map((d) => WEEKDAY_SHORT[d]).join(', ') + ')';
+  if (r.weekdays?.length && r.weekdays.length < 7) s += ' (' + r.weekdays.map((d) => weekdayShort()[d]).join(', ') + ')';
   return s;
 }
 
@@ -42,7 +43,7 @@ export function describe(v: SmartView, placeName: string): string {
   if (v.search.trim()) parts.push(v.search.trim());
   if (v.typeFilter) parts.push(v.typeFilter.split(',').map((k) => CATEGORIES.find((c) => c.key === k)?.label ?? k).join(', '));
   if (v.date) parts.push(describeDate(v.date));
-  if (v.recursive && !v.typeFilter && !('project' in v.scope)) parts.push('mit Unterordnern');
+  if (v.recursive && !v.typeFilter && !('project' in v.scope)) parts.push(t('core.smart.withSubfolders'));
   return parts.join(' · ');
 }
 
@@ -50,7 +51,7 @@ export function describe(v: SmartView, placeName: string): string {
 export function suggestName(v: SmartView, placeName: string): string {
   const type = v.typeFilter ? (CATEGORIES.find((c) => c.key === v.typeFilter)?.label ?? v.typeFilter) : '';
   const what = [v.search.trim(), type].filter(Boolean).join(' ');
-  return what ? `${what} in ${placeName}` : placeName;
+  return what ? t('core.smart.nameIn', { what, place: placeName }) : placeName;
 }
 
 function sameDate(a: DateRange | null, b: DateRange | null): boolean {
@@ -73,7 +74,7 @@ export function matches(f: SmartFolder, v: SmartView): boolean {
 }
 
 export function placeName(scope: SmartFolder['scope'], projectName: (id: string) => string | undefined): string {
-  return 'project' in scope ? (projectName(scope.project) ?? 'Projekt') : basename(scope.folder) || scope.folder;
+  return 'project' in scope ? (projectName(scope.project) ?? t('core.smart.project')) : basename(scope.folder) || scope.folder;
 }
 
 /** Follow moved or renamed folders; returns null when nothing changed. */

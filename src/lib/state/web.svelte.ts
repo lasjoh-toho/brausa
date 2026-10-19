@@ -6,6 +6,7 @@
 import { app } from './app.svelte';
 import { board } from './board.svelte';
 import { store } from '../platform';
+import { t } from '../i18n/index.svelte';
 import { basename, dirname } from '../core/paths';
 import { addCard, bounds } from '../core/map';
 import { decisionFor, remember, type ScriptDecisions } from '../core/htmlpreview';
@@ -177,20 +178,20 @@ class WebState {
   /** Saves the page as shown into the project's folder (or the current folder) and adds it to the project. */
   async savePage() {
     const dir = this.target();
-    if (!dir) return app.toast('Das Projekt hat keinen Ordner. Erst einen Ordner zum Projekt hinzufügen oder einen Ordner öffnen.', true);
+    if (!dir) return app.toast(t('web.noFolder'), true);
     try {
       const path = await app.backend.webSavePage(dir);
       await this.joinProject(path);
-      app.toast(`Seite gespeichert: ${basename(path)}`);
+      app.toast(t('web.pageSaved', { name: basename(path) }));
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
     }
   }
 
   private async downloaded(path: string | null, ok: boolean) {
-    if (!ok || !path) return app.toast('Download fehlgeschlagen', true);
+    if (!ok || !path) return app.toast(t('web.downloadFailed'), true);
     await this.joinProject(path);
-    app.toast(`Heruntergeladen: ${basename(path)} → ${basename(dirname(path))}`);
+    app.toast(t('web.downloaded', { name: basename(path), folder: basename(dirname(path)) }));
   }
 
   private async joinProject(path: string) {
@@ -206,7 +207,7 @@ class WebState {
    */
   async clip() {
     const p = app.boardProject;
-    if (!p) return app.toast('Erst ein Projekt öffnen oder anlegen: Karten gehören auf seine Map.', true);
+    if (!p) return app.toast(t('web.noProject'), true);
     try {
       const sel = await app.backend.webSelection();
       if (board.root !== p.root || !board.map) await board.open(p.root);
@@ -219,7 +220,7 @@ class WebState {
           ? { kind: 'snippet', title: sel.title || sel.url, text: quote, refs: [ref], w: 260, h: Math.min(420, Math.max(96, 70 + Math.ceil(quote.length / 34) * 19)) }
           : { title: sel.title || sel.url, text: sel.url, refs: [ref] });
       });
-      app.toast(quote ? `Markierung auf die Map von „${p.name}“ gelegt` : `Seite als Karte auf die Map von „${p.name}“ gelegt`);
+      app.toast(t(quote ? 'web.clippedQuote' : 'web.clippedPage', { project: p.name }));
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
     }

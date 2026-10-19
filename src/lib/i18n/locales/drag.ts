@@ -1,0 +1,36 @@
+// What a drop will do, shown next to the drag ghost.
+export const de = {
+  assignAttributes: 'Attribute von „{name}“ zuweisen',
+  packInto: 'Einpacken in „{name}“',
+  unpackTo: 'Auspacken nach „{name}“',
+  copyTo: 'Kopieren nach „{name}“',
+  moveTo: 'Verschieben nach „{name}“',
+  toTray: 'In die Ablage legen',
+  addTo: 'Zu „{name}“ hinzufügen',
+  funnel: 'Ansicht auf diesen Zweig filtern',
+  moveHere: 'Hierher verschieben',
+  removeTag: 'Tag entfernen',
+  setTag: '#{tag} setzen',
+  tagSet: '#{tag} gesetzt',
+  openGrid: 'Ablagezonen öffnen',
+  assignTag: '#{tag} zuweisen',
+  tagAssigned: '#{tag} zugewiesen'
+};
+
+export const en: typeof de = {
+  assignAttributes: 'Apply attributes of “{name}”',
+  packInto: 'Pack into “{name}”',
+  unpackTo: 'Unpack to “{name}”',
+  copyTo: 'Copy to “{name}”',
+  moveTo: 'Move to “{name}”',
+  toTray: 'Put in the tray',
+  addTo: 'Add to “{name}”',
+  funnel: 'Filter view to this branch',
+  moveHere: 'Move here',
+  removeTag: 'Remove tag',
+  setTag: 'Set #{tag}',
+  tagSet: '#{tag} set',
+  openGrid: 'Open drop zones',
+  assignTag: 'Assign #{tag}',
+  tagAssigned: '#{tag} assigned'
+};

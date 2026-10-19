@@ -8,21 +8,22 @@
   import Icon from './Icon.svelte';
   import { CATEGORIES } from '../core/format';
   import { web } from '../state/web.svelte';
+  import { t } from '../i18n/index.svelte';
 
   let { accent = null }: { accent?: { color: string; light: boolean } | null } = $props();
 
   const path = $derived(crumbs(app.cwd, app.home));
   const typeLabel = $derived(
-    !app.typeFilter ? 'Alle Arten' : app.typeFilter === 'medien' ? 'Medien' : (CATEGORIES.find((c) => c.key === app.typeFilter)?.label ?? app.typeFilter)
+    !app.typeFilter ? t('toolbar.allTypes') : app.typeFilter === 'medien' ? t('toolbar.media') : (CATEGORIES.find((c) => c.key === app.typeFilter)?.label ?? app.typeFilter)
   );
-  const views: { id: ViewMode; icon: string; label: string }[] = [
-    { id: 'stream', icon: 'grid', label: 'Kacheln' },
-    { id: 'panes', icon: 'columns', label: 'Liste mit Vorschau (drei Spalten)' },
-    { id: 'kanban', icon: 'kanban', label: 'Kanban' },
-    { id: 'timeline', icon: 'timeline', label: 'Zeitachse' },
-    { id: 'calendar', icon: 'calendar', label: 'Kalender' },
-    { id: 'map', icon: 'map', label: 'Fotos auf der Landkarte' },
-    { id: 'board', icon: 'nodes', label: 'Projektmap' }
+  const views: { id: ViewMode; icon: string }[] = [
+    { id: 'stream', icon: 'grid' },
+    { id: 'panes', icon: 'columns' },
+    { id: 'kanban', icon: 'kanban' },
+    { id: 'timeline', icon: 'timeline' },
+    { id: 'calendar', icon: 'calendar' },
+    { id: 'map', icon: 'map' },
+    { id: 'board', icon: 'nodes' }
   ];
 
   let searchEl: HTMLInputElement;
@@ -34,7 +35,7 @@
   function onSearchKey(e: KeyboardEvent) {
     if (e.key === 'Enter' && app.searchMode === 'select') {
       const n = app.selectPattern(app.search);
-      app.toast(`${n} ausgewählt`);
+      app.toast(t('toolbar.selected', { n }));
     } else if (e.key === 'Escape') {
       app.search = '';
       searchEl.blur();
@@ -44,17 +45,17 @@
 
 <header data-tauri-drag-region class="toolbar" class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
   <div class="nav">
-    <button class="btn icon" onclick={() => app.back()} disabled={!app.history.length} title="Zurück">
+    <button class="btn icon" onclick={() => app.back()} disabled={!app.history.length} title={t('toolbar.back')}>
       <Icon name="back" />
     </button>
-    <button class="btn icon" onclick={() => app.forward()} disabled={!app.future.length} title="Vor">
+    <button class="btn icon" onclick={() => app.forward()} disabled={!app.future.length} title={t('toolbar.forward')}>
       <Icon name="forward" />
     </button>
   </div>
 
-  <nav class="crumbs" aria-label="Pfad">
+  <nav class="crumbs" aria-label={t('toolbar.path')}>
     {#if app.currentProject}
-      <span class="crumb last proj" title="Projekt: Dateien aus allen Orten. Ziehen fügt hinzu, Entf nimmt heraus (die Dateien bleiben).">
+      <span class="crumb last proj" title={t('toolbar.projectHint')}>
         <Icon name="kanban" size={13} />
         {app.currentProject.name}
       </span>
@@ -74,14 +75,14 @@
       <span class="chip funnel">
         <Icon name="filter" size={11} />
         {relativeTo(app.funnel, app.cwd)}
-        <button onclick={() => app.setFunnel(null)} aria-label="Filter entfernen"><Icon name="x" size={11} /></button>
+        <button onclick={() => app.setFunnel(null)} aria-label={t('toolbar.removeFilter')}><Icon name="x" size={11} /></button>
       </span>
     {/if}
     {#if app.dateFilter && app.view !== 'calendar'}
       <span class="chip funnel">
         <Icon name="calendar" size={11} />
         {formatRange(app.dateFilter)}
-        <button onclick={() => app.setDateFilter(null)} aria-label="Zeitfilter entfernen"><Icon name="x" size={11} /></button>
+        <button onclick={() => app.setDateFilter(null)} aria-label={t('toolbar.removeDateFilter')}><Icon name="x" size={11} /></button>
       </span>
     {/if}
   </nav>
@@ -89,7 +90,7 @@
   <div class="search" class:select={app.searchMode === 'select'}>
     <button
       class="mode"
-      title={app.searchMode === 'filter' ? 'Modus: Filtern (klicken für Auswählen)' : 'Modus: Auswählen per Muster'}
+      title={app.searchMode === 'filter' ? t('toolbar.modeFilter') : t('toolbar.modeSelect')}
       onclick={() => (app.searchMode = app.searchMode === 'filter' ? 'select' : 'filter')}
     >
       <Icon name={app.searchMode === 'filter' ? 'search' : 'select'} size={14} />
@@ -98,7 +99,7 @@
       bind:this={searchEl}
       bind:value={app.search}
       onkeydown={onSearchKey}
-      placeholder={app.searchMode === 'filter' ? 'Suchen … *.png > 5MB #tag' : 'Auswählen: *.png > 5MB ↵'}
+      placeholder={app.searchMode === 'filter' ? t('toolbar.searchPlaceholder') : t('toolbar.selectPlaceholder')}
       spellcheck="false"
     />
     <kbd>{modLabel}F</kbd>
@@ -106,7 +107,7 @@
 
   <div class="seg" role="tablist">
     {#each views as v (v.id)}
-      <button class="btn" class:on={app.view === v.id} onclick={() => app.setView(v.id)} title={v.label} role="tab" aria-selected={app.view === v.id}>
+      <button class="btn" class:on={app.view === v.id} onclick={() => app.setView(v.id)} title={t(`toolbar.view.${v.id}`)} role="tab" aria-selected={app.view === v.id}>
         <Icon name={v.icon} size={15} />
       </button>
     {/each}
@@ -114,27 +115,27 @@
 
   {#if app.view === 'kanban'}
     <div class="seg">
-      <button class="btn" class:on={app.kanbanBy === 'tag'} onclick={() => app.setKanbanBy('tag')}>Tags</button>
-      <button class="btn" class:on={app.kanbanBy === 'subfolder'} onclick={() => app.setKanbanBy('subfolder')}>Ordner</button>
+      <button class="btn" class:on={app.kanbanBy === 'tag'} onclick={() => app.setKanbanBy('tag')}>{t('toolbar.byTag')}</button>
+      <button class="btn" class:on={app.kanbanBy === 'subfolder'} onclick={() => app.setKanbanBy('subfolder')}>{t('toolbar.bySubfolder')}</button>
     </div>
   {/if}
 
   {#if app.view !== 'board'}
-    <button class="btn" class:on={app.recursive} onclick={() => app.setRecursive(!app.recursive)} title="Unterordner flach anzeigen">
+    <button class="btn" class:on={app.recursive} onclick={() => app.setRecursive(!app.recursive)} title={t('toolbar.streamHint')}>
       <Icon name="stream" size={15} /> Stream
     </button>
-    <label class="btn types" class:on={!!app.typeFilter} title="Nur Dateien dieser Art zeigen (auch aus Unterordnern)">
+    <label class="btn types" class:on={!!app.typeFilter} title={t('toolbar.typeHint')}>
       <span>{typeLabel}</span>
       <select value={app.typeFilter ?? ''} onchange={(ev) => app.setTypeFilter(ev.currentTarget.value || null)}>
-        <option value="">Alle Arten</option>
-        <option value="medien">Medien</option>
+        <option value="">{t('toolbar.allTypes')}</option>
+        <option value="medien">{t('toolbar.media')}</option>
         {#each CATEGORIES as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
       </select>
       <Icon name="chevronDown" size={12} />
     </label>
 
     <div class="sortbox">
-      <label class="btn types" title="Sortieren nach">
+      <label class="btn types" title={t('toolbar.sortBy')}>
         <span>{SORT_KEYS.find((k) => k.key === app.sort)?.label ?? 'Name'}</span>
         <select value={app.sort} onchange={(ev) => app.setSort(ev.currentTarget.value as typeof app.sort, app.desc)}>
           {#each SORT_KEYS as k (k.key)}<option value={k.key}>{k.label}</option>{/each}
@@ -144,8 +145,8 @@
       <button
         class="btn icon"
         onclick={() => app.setSort(app.sort, !app.desc)}
-        title={app.desc ? 'Absteigend (klicken: aufsteigend)' : 'Aufsteigend (klicken: absteigend)'}
-        aria-label="Sortierrichtung"><Icon name={app.desc ? 'sortDown' : 'sortUp'} size={14} /></button
+        title={app.desc ? t('toolbar.descending') : t('toolbar.ascending')}
+        aria-label={t('toolbar.sortDirection')}><Icon name={app.desc ? 'sortDown' : 'sortUp'} size={14} /></button
       >
     </div>
 
@@ -158,15 +159,15 @@
       step="4"
       value={app.tileSize}
       oninput={(e) => app.setTileSize(Number(e.currentTarget.value))}
-      aria-label="Kachelgröße"
+      aria-label={t('toolbar.tileSize')}
     />
     {/if}
   {/if}
 
-  <button class="btn icon" class:on={web.open} onclick={() => web.toggle()} title="Web-Fenster: Seiten aus dem Internet und lokale Webseiten, abgeschottet" aria-label="Web-Fenster">
+  <button class="btn icon" class:on={web.open} onclick={() => web.toggle()} title={t('toolbar.webHint')} aria-label={t('toolbar.web')}>
     <Icon name="globe" size={15} />
   </button>
-  <button class="btn icon" class:on={!!app.pane} onclick={() => app.setPane(app.pane ? null : app.cwd)} title="Zweites Panel: zwei Ordner nebeneinander, Dateien hin und her ziehen" aria-label="Zweites Panel">
+  <button class="btn icon" class:on={!!app.pane} onclick={() => app.setPane(app.pane ? null : app.cwd)} title={t('toolbar.paneHint')} aria-label={t('toolbar.pane')}>
     <Icon name="split" size={15} />
   </button>
   <button
@@ -175,9 +176,9 @@
     class:hit={drag.hit?.kind === 'grid-trigger'}
     data-drop="grid-trigger"
     onclick={() => (app.gridEditorOpen = true)}
-    title="Ablagezonen: Datei hierher ziehen (klicken zum Konfigurieren)"
+    title={t('toolbar.dropHint')}
   >
-    <Icon name="target" size={15} /> Ablage
+    <Icon name="target" size={15} /> {t('toolbar.drop')}
   </button>
 </header>
 
