@@ -661,6 +661,27 @@ class AppState {
     store.set('tileSize', v);
   }
 
+  /** Filters narrowing the view right now (the empty view offers to remove them). */
+  activeFilters = $derived.by(() => {
+    const f: { kind: 'search' | 'type' | 'date' | 'funnel'; label: string }[] = [];
+    if (this.searchMode === 'filter' && this.search.trim()) f.push({ kind: 'search', label: this.search.trim() });
+    if (this.typeFilter) f.push({ kind: 'type', label: this.typeFilter });
+    if (this.dateFilter) f.push({ kind: 'date', label: '' });
+    if (this.funnel) f.push({ kind: 'funnel', label: basename(this.funnel) });
+    return f;
+  });
+
+  clearFilter(kind: 'search' | 'type' | 'date' | 'funnel') {
+    if (kind === 'search') this.search = '';
+    else if (kind === 'type') this.setTypeFilter(null);
+    else if (kind === 'date') this.setDateFilter(null);
+    else this.setFunnel(null);
+  }
+
+  clearFilters() {
+    for (const f of this.activeFilters) this.clearFilter(f.kind);
+  }
+
   setFunnel(path: string | null) {
     this.funnel = path;
     this.selection.clear();

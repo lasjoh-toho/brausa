@@ -9,6 +9,7 @@
   import type { SortKey } from '../core/views';
   import { isToggleKey } from '../platform';
   import Icon from './Icon.svelte';
+  import NoResults from './NoResults.svelte';
   import { t, loc } from '../i18n/index.svelte';
 
   const cols: { key: SortKey; label: string; cls: string }[] = [
@@ -146,7 +147,7 @@
         <span class="td kind">{kindOf(e)}</span>
       </div>
     {:else}
-      {#if !app.loading}<p class="empty">{app.search ? t('files.nothingFound') : t('files.noFiles')}</p>{/if}
+      {#if app.loading}{''}{:else if app.activeFilters.length}<NoResults />{:else}<p class="empty">{t('files.noFiles')}</p>{/if}
     {/each}
   </div>
 </div>

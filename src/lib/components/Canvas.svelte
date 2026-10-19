@@ -11,6 +11,7 @@
   import MapView from './MapView.svelte';
   import CalendarView from './CalendarView.svelte';
   import FileList from './FileList.svelte';
+  import NoResults from './NoResults.svelte';
   import PreviewPane from './PreviewPane.svelte';
   import { t, tn } from '../i18n/index.svelte';
 
@@ -116,7 +117,7 @@
           </div>
         </div>
       {:else}
-        <p class="empty">{t('files.noFiles')}</p>
+        {#if app.activeFilters.length}<NoResults />{:else}<p class="empty">{t('files.noFiles')}</p>{/if}
       {/each}
     </div>
   {:else}
@@ -132,7 +133,9 @@
         {/each}
       </div>
     {/each}
-    {#if !app.visible.length && !app.loading}
+    {#if !app.visible.length && !app.loading && app.activeFilters.length}
+      <NoResults />
+    {:else if !app.visible.length && !app.loading}
       <p class="empty">
         {app.search ? t('files.nothingFound') : app.project ? t('files.projectEmpty') : t('files.folderEmpty')}
         {#if !app.recursive}<button class="btn" onclick={() => app.setRecursive(true)}>{t('files.showStream')}</button>{/if}
