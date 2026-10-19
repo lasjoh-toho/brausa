@@ -33,12 +33,14 @@ const LOCAL_TAGS: [&str; 2] = ["lokal", "privat"];
 const GENERATED: &str = "brausa-generated";
 
 /// Plugin tiddlers bundled into brausa (rebuild with scripts/build-tw-plugins.sh).
-const BUNDLED_PLUGINS: [&str; 5] = [
+const BUNDLED_PLUGINS: [&str; 6] = [
     include_str!("../resources/tw-plugins/markdown.json"),
     include_str!("../resources/tw-plugins/graph.json"),
     include_str!("../resources/tw-plugins/vis-network.json"),
     include_str!("../resources/tw-plugins/pinboard.json"),
     include_str!("../resources/tw-plugins/kanban.json"),
+    // Renames follow into lists, story fields and Pinboard boards.
+    include_str!("../resources/tw-plugins/relink.json"),
 ];
 
 fn plugin_tiddlers() -> Vec<Fields> {
