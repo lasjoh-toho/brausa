@@ -10,7 +10,7 @@ import { basename, dirname } from '../core/paths';
 import { addCard, bounds } from '../core/map';
 import { decisionFor, remember, type ScriptDecisions } from '../core/htmlpreview';
 import type { WebBounds, WebEvent } from '../backend/types';
-import { toUrl } from '../core/web';
+import { addVisit, setTitle, toggleBookmark, toUrl, type WebLibrary, type WebPage } from '../core/web';
 
 export { toUrl };
 
@@ -24,6 +24,12 @@ class WebState {
   width = $state(store.get('webWidth', 620));
   /** A local website being shown: its folder and whether its scripts run. */
   local = $state<{ root: string; file: string; scripts: boolean } | null>(null);
+  /** Bookmarks and history per project ('' = pages visited without a project). */
+  libraries = $state<Record<string, WebLibrary>>(store.get('webLibraries', {}));
+  /** Bookmark/history list shown over the page (the native page hides meanwhile). */
+  listOpen = $state<'bookmarks' | 'history' | null>(null);
+  /** Library the visit was recorded in, so a late title lands there too. */
+  private visitScope = '';
   /** Area of the panel body; the webview is placed there. */
   rect: WebBounds | null = null;
   private listening = false;
@@ -36,11 +42,64 @@ class WebState {
 
   private event(e: WebEvent) {
     if (e.kind === 'nav') {
+      if (e.url !== this.url) this.title = '';
       this.url = e.url;
       this.loading = e.loading;
       store.set('webUrl', e.url);
-    } else if (e.kind === 'title') this.title = e.title;
+      if (!e.loading) this.visit();
+    } else if (e.kind === 'title') {
+      this.title = e.title;
+      this.edit(this.visitScope, (l) => ({ history: setTitle(l.history, this.url, e.title), bookmarks: setTitle(l.bookmarks, this.url, e.title) }));
+    }
     else if (e.kind === 'download') void this.downloaded(e.path, e.success);
+  }
+
+  // ---------------------------------------------------------------- bookmarks and history
+
+  /** Pages belong to the open project, else to a project holding the current folder. */
+  get scope(): { id: string; name: string | null } {
+    const p = app.currentProject ?? app.projectOf(app.cwd);
+    return { id: p?.id ?? '', name: p?.name ?? null };
+  }
+
+  get library(): WebLibrary {
+    return this.libraries[this.scope.id] ?? { bookmarks: [], history: [] };
+  }
+
+  get bookmarked(): boolean {
+    return this.library.bookmarks.some((p) => p.url === this.url);
+  }
+
+  private edit(id: string, f: (l: WebLibrary) => WebLibrary) {
+    const cur = this.libraries[id] ?? { bookmarks: [], history: [] };
+    const next = f(cur);
+    if (next.bookmarks === cur.bookmarks && next.history === cur.history) return;
+    this.libraries = { ...this.libraries, [id]: next };
+    store.set('webLibraries', $state.snapshot(this.libraries));
+  }
+
+  private visit() {
+    this.visitScope = this.scope.id;
+    this.edit(this.visitScope, (l) => ({ ...l, history: addVisit(l.history, { url: this.url, title: this.title, at: Date.now() }) }));
+  }
+
+  toggleBookmark(page: WebPage = { url: this.url, title: this.title, at: Date.now() }) {
+    if (!page.url) return;
+    this.edit(this.scope.id, (l) => ({ ...l, bookmarks: toggleBookmark(l.bookmarks, page) }));
+  }
+
+  forget(url: string) {
+    this.edit(this.scope.id, (l) => ({ ...l, history: l.history.filter((p) => p.url !== url) }));
+  }
+
+  clearHistory() {
+    this.edit(this.scope.id, (l) => ({ ...l, history: [] }));
+  }
+
+  /** Open a page from the list. */
+  async pick(url: string) {
+    this.listOpen = null;
+    await this.go(url);
   }
 
   toggle(open = !this.open) {

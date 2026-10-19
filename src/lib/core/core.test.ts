@@ -402,3 +402,30 @@ describe('batch rename', () => {
     expect(renameOrder(planRenames([a], { ...D, pattern: 'x' }, none))[0].viaTemp).toBe(false);
   });
 });
+
+describe('web library', () => {
+  it('keeps a history without repeats and fills in titles', async () => {
+    const { addVisit, setTitle } = await import('./web');
+    let h = addVisit([], { url: 'https://a.org/', title: '', at: 1 });
+    h = addVisit(h, { url: 'https://b.org/', title: 'B', at: 2 });
+    h = setTitle(h, 'https://a.org/', 'A');
+    h = addVisit(h, { url: 'https://a.org/', title: '', at: 3 });
+    expect(h).toEqual([
+      { url: 'https://a.org/', title: 'A', at: 3 },
+      { url: 'https://b.org/', title: 'B', at: 2 }
+    ]);
+    expect(addVisit(h, { url: 'http://127.0.0.1:4711/abc/index.html', title: 'lokal', at: 4 })).toBe(h);
+    expect(addVisit(h, { url: 'https://c.org/', title: 'C', at: 5 }, 2).map((p) => p.url)).toEqual(['https://c.org/', 'https://a.org/']);
+  });
+
+  it('toggles bookmarks and filters pages', async () => {
+    const { toggleBookmark, filterPages, shortUrl } = await import('./web');
+    const p = { url: 'https://www.wikipedia.org/wiki/Brausa', title: 'Brausa – Wikipedia', at: 1 };
+    const b = toggleBookmark([], p);
+    expect(b).toEqual([p]);
+    expect(toggleBookmark(b, { ...p, at: 2 })).toEqual([]);
+    expect(filterPages(b, 'wiki brausa')).toEqual([p]);
+    expect(filterPages(b, 'brausa python')).toEqual([]);
+    expect(shortUrl(p.url)).toBe('wikipedia.org/wiki/Brausa');
+  });
+});

@@ -10,6 +10,7 @@
   import { wikis } from '../state/wikis.svelte';
   import { web } from '../state/web.svelte';
   import Icon from './Icon.svelte';
+  import { filterPages, shortUrl } from '../core/web';
 
   let view = $state<HTMLElement>();
   let address = $state(web.url);
@@ -21,7 +22,7 @@
 
   // Anything brausa draws over the panel must not end up under the native page.
   const covered = $derived(
-    !!app.preview || !!app.menu || !!app.dialog || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || drag.active
+    !!web.listOpen || !!app.preview || !!app.menu || !!app.dialog || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || drag.active
   );
 
   function measure() {
@@ -67,6 +68,17 @@
   }
 
   const secure = $derived(web.url.startsWith('https:'));
+  let query = $state('');
+  const lib = $derived(web.library);
+  const shown = $derived(filterPages(web.listOpen === 'history' ? lib.history : [...lib.bookmarks].reverse(), query));
+  const scopeName = $derived(web.scope.name ? `„${web.scope.name}“` : 'ohne Projekt');
+
+  function openList(which: 'bookmarks' | 'history') {
+    query = '';
+    web.listOpen = web.listOpen === which ? null : which;
+  }
+
+  const when = (ms: number) => new Date(ms).toLocaleString('de-DE', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 </script>
 
 <aside class="web" style:width="{web.width}px">
@@ -85,6 +97,15 @@
         spellcheck="false"
       />
       {#if web.loading}<span class="spin"></span>{/if}
+      {#if web.started && !web.local}
+        <button
+          type="button"
+          class="star"
+          class:on={web.bookmarked}
+          title={web.bookmarked ? `Lesezeichen entfernen (${scopeName})` : `Lesezeichen setzen (${scopeName})`}
+          onclick={() => web.toggleBookmark()}><Icon name="star" size={13} /></button
+        >
+      {/if}
     </form>
     <button class="btn icon" onclick={() => web.toggle(false)} aria-label="Web-Fenster schließen"><Icon name="x" size={14} /></button>
   </div>
@@ -94,6 +115,12 @@
     </button>
     <button class="btn" disabled={!web.started} onclick={() => web.savePage()} title="Seite als HTML in den Projektordner (oder den aktuellen Ordner) speichern">
       <Icon name="tray" size={13} /> Speichern
+    </button>
+    <button class="btn" class:on={web.listOpen === 'bookmarks'} onclick={() => openList('bookmarks')} title="Lesezeichen von {scopeName}">
+      <Icon name="star" size={13} /> Lesezeichen
+    </button>
+    <button class="btn icon" class:on={web.listOpen === 'history'} onclick={() => openList('history')} title="Verlauf von {scopeName}" aria-label="Verlauf">
+      <Icon name="clock" size={13} />
     </button>
     <span class="grow"></span>
     {#if web.local}
@@ -108,7 +135,42 @@
     {/if}
   </div>
   <div class="view" bind:this={view}>
-    {#if !web.started}
+    {#if web.listOpen}
+      <div class="list">
+        <div class="list-head">
+          <b>{web.listOpen === 'history' ? 'Verlauf' : 'Lesezeichen'}</b>
+          <span class="scope">{scopeName}</span>
+          <span class="grow"></span>
+          {#if web.listOpen === 'history' && lib.history.length}
+            <button class="btn" onclick={() => web.clearHistory()}>Verlauf leeren</button>
+          {/if}
+          <button class="btn icon" onclick={() => (web.listOpen = null)} aria-label="Schließen"><Icon name="x" size={13} /></button>
+        </div>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input class="filter" bind:value={query} placeholder="Suchen …" autofocus onkeydown={(e) => e.key === 'Enter' && shown[0] && web.pick(shown[0].url)} />
+        <ul>
+          {#each shown as p (p.url)}
+            <li>
+              <button class="page" onclick={() => web.pick(p.url)} title={p.url}>
+                <span class="t">{p.title || shortUrl(p.url)}</span>
+                <span class="u">{shortUrl(p.url)}</span>
+              </button>
+              {#if web.listOpen === 'history'}<span class="when">{when(p.at)}</span>{/if}
+              <button
+                class="rm"
+                title={web.listOpen === 'history' ? 'Aus dem Verlauf entfernen' : 'Lesezeichen entfernen'}
+                onclick={() => (web.listOpen === 'history' ? web.forget(p.url) : web.toggleBookmark(p))}><Icon name="x" size={11} /></button
+              >
+            </li>
+          {:else}
+            <li class="none">
+              {#if query}Nichts gefunden.{:else if web.listOpen === 'history'}Noch keine Seiten besucht.{:else}Noch keine Lesezeichen. Der Stern in der Adresszeile setzt eins.{/if}
+            </li>
+          {/each}
+        </ul>
+        <p class="muted foot">Lesezeichen und Verlauf gehören zum offenen Projekt (bzw. zum Projekt des aktuellen Ordners).</p>
+      </div>
+    {:else if !web.started}
       <div class="start">
         <Icon name="globe" size={28} />
         <p>Adresse oder Suchbegriff oben eingeben.</p>
@@ -118,6 +180,13 @@
           Projektmap.
         </p>
         <p class="muted">Lokale Webseiten: Rechtsklick auf eine HTML-Datei → „Im Web-Fenster öffnen“.</p>
+        {#if lib.bookmarks.length}
+          <div class="marks">
+            {#each lib.bookmarks as p (p.url)}
+              <button class="chip" title={p.url} onclick={() => web.pick(p.url)}><Icon name="star" size={11} />{p.title || shortUrl(p.url)}</button>
+            {/each}
+          </div>
+        {/if}
       </div>
     {:else if covered}
       <div class="start muted">…</div>
@@ -223,6 +292,141 @@
     text-align: center;
     color: var(--fg-muted);
     background: var(--bg);
+  }
+  .star {
+    display: grid;
+    place-items: center;
+    color: var(--fg-faint);
+  }
+  .star:hover {
+    color: var(--fg);
+  }
+  .star.on {
+    color: #d49b00;
+  }
+  .star.on :global(path) {
+    fill: currentColor;
+  }
+  .list {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .list-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .scope {
+    color: var(--fg-faint);
+    font-size: 12px;
+  }
+  .filter {
+    padding: 6px 9px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg-elev);
+    color: var(--fg);
+    font: inherit;
+    font-size: 12.5px;
+    outline: none;
+  }
+  .filter:focus {
+    border-color: var(--accent);
+  }
+  .list ul {
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow: auto;
+  }
+  .list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 7px;
+  }
+  .list li:hover {
+    background: var(--bg-sunken);
+  }
+  .page {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 5px 8px;
+    text-align: left;
+  }
+  .t,
+  .u {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .t {
+    font-size: 13px;
+    color: var(--fg);
+  }
+  .u,
+  .when {
+    font-size: 11px;
+    color: var(--fg-faint);
+  }
+  .when {
+    flex: none;
+  }
+  .rm {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    margin-right: 4px;
+    border-radius: 5px;
+    color: var(--fg-faint);
+    visibility: hidden;
+  }
+  .list li:hover .rm {
+    visibility: visible;
+  }
+  .rm:hover {
+    color: var(--fg);
+    background: var(--line);
+  }
+  .none {
+    padding: 8px;
+    font-size: 12px;
+    color: var(--fg-faint);
+  }
+  .foot {
+    margin: 0;
+    font-size: 11px;
+  }
+  .marks {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    max-width: 460px;
+    margin-top: 6px;
+  }
+  .marks .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .muted {
     color: var(--fg-faint);
