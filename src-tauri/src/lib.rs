@@ -431,6 +431,13 @@ async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
     w.0.lock().map_err(err)?.overlays().map_err(err)
 }
 
+/// A wiki's layers in load order with their tiddler titles.
+#[tauri::command]
+async fn tw_layers(w: State<'_, Wikis>, recipe: String) -> CmdResult<Vec<serde_json::Value>> {
+    let layers = w.0.lock().map_err(err)?.layers(&recipe).map_err(err)?;
+    Ok(layers.into_iter().map(|(bag, titles)| serde_json::json!({ "bag": bag, "titles": titles })).collect())
+}
+
 #[tauri::command]
 async fn tw_resolve_overlay(w: State<'_, Wikis>, title: String, bag: String, how: tw::Resolve) -> CmdResult<()> {
     w.0.lock().map_err(err)?.resolve_overlay(&title, &bag, how).map_err(err)
@@ -751,6 +758,7 @@ pub fn run() {
             tw_delete_recipe,
             tw_sync,
             tw_overlays,
+            tw_layers,
             tw_resolve_overlay,
             tw_plugins
         ])

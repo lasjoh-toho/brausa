@@ -74,11 +74,19 @@ export interface WikiRecipe {
   lastSync?: string | null;
   /** Put brausa's bundled plugins (Markdown, tw5-graph, Pinboard, Kanban) into the wiki. */
   plugins: boolean;
+  /** Include the shared bag „lokal“ (file links to this computer, notes tagged lokal/privat) right below the wiki's own bag. */
+  local: boolean;
   /** Overlays kept on purpose as this wiki's own variant. */
   kept?: string[];
 }
 
 export type TiddlerFields = Record<string, string>;
+
+/** One layer of a wiki: `@plugins` (built-in), real bags, `lokal`, `@map:…`, the wiki's own bag on top. */
+export interface WikiLayer {
+  bag: string;
+  titles: string[];
+}
 
 /** A shared tiddler that wikis cover with their own version (MultiWikiServer-style overlay). */
 export interface WikiOverlay {
@@ -222,6 +230,8 @@ export interface Backend {
   deleteWikiRecipe(name: string): Promise<void>;
   syncWiki(name: string): Promise<WikiSyncReport>;
   wikiOverlays(): Promise<WikiOverlay[]>;
+  /** The layers of a wiki in load order (bottom first, the last one wins): bag and its tiddler titles. */
+  wikiLayers(recipe: string): Promise<WikiLayer[]>;
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;

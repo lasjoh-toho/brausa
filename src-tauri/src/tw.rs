@@ -23,6 +23,14 @@ pub type Fields = BTreeMap<String, String>;
 const MAP_BAG: &str = "@map:";
 /// Built-in, read-only bag with the plugins every brausa wiki needs.
 pub const PLUGINS: &str = "@plugins";
+/// Shared bag for what stays on this computer: links to local files (generated from
+/// the maps' file cards) and notes tagged `lokal` or `privat`. Wikis include it
+/// right below their own bag unless switched off (`Recipe::local`).
+pub const LOCAL: &str = "lokal";
+/// Tags that send a tiddler edited in a wiki to the bag `lokal`.
+const LOCAL_TAGS: [&str; 2] = ["lokal", "privat"];
+/// Marks tiddlers brausa generates in `lokal` for linked files.
+const GENERATED: &str = "brausa-generated";
 
 /// Plugin tiddlers bundled into brausa (rebuild with scripts/build-tw-plugins.sh).
 const BUNDLED_PLUGINS: [&str; 5] = [
@@ -124,7 +132,6 @@ pub fn stringify_list(items: &[String]) -> String {
     items.iter().map(|t| if t.contains(' ') { format!("[[{t}]]") } else { t.clone() }).collect::<Vec<_>>().join(" ")
 }
 
-#[cfg(test)]
 pub fn parse_list(s: &str) -> Vec<String> {
     let mut out = vec![];
     let mut rest = s.trim();
@@ -339,6 +346,9 @@ pub struct Recipe {
     /// Put brausa's bundled plugins (Markdown, tw5-graph with Pinboard and Kanban) into the wiki.
     #[serde(default = "yes")]
     pub plugins: bool,
+    /// Include the bag `lokal` (file links, private notes) below the wiki's own bag.
+    #[serde(default = "yes")]
+    pub local: bool,
     /// Overlays the user decided to keep as this wiki's own variant.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kept: Vec<String>,
@@ -525,6 +535,9 @@ impl Store {
         if r.bags.last().map(|b| b.starts_with(MAP_BAG) || self.bag_readonly(b)).unwrap_or(true) && !r.bags.contains(&own) {
             r.bags.push(own.clone());
         }
+        if r.local {
+            self.ensure_local()?;
+        }
         for b in &r.bags {
             if !b.starts_with(MAP_BAG) && !self.bag_dir(b)?.exists() {
                 self.put_bag(&BagInfo { name: b.clone(), description: crate::tr!(format!("Eigener Bag von „{}“", r.name), format!("Own bag of “{}”", r.name)), ..Default::default() })?;
@@ -565,16 +578,114 @@ impl Store {
         Ok(self.bag_tiddlers(bag)?.into_iter().map(|(t, (f, _))| (t, f)).collect())
     }
 
+    /// The recipe's layers in load order (later ones win): the plugins, the recipe's
+    /// bags, `lokal` right below the wiki's own bag, then the own bag.
+    pub fn layer_names(r: &Recipe) -> Vec<String> {
+        let mut out = vec![];
+        if r.plugins {
+            out.push(PLUGINS.to_string());
+        }
+        let (top, lower) = match r.bags.split_last() {
+            Some((t, l)) => (Some(t), l),
+            None => (None, &r.bags[..]),
+        };
+        out.extend(lower.iter().cloned());
+        if r.local && !r.bags.iter().any(|b| b == LOCAL) {
+            out.push(LOCAL.to_string());
+        }
+        out.extend(top.cloned());
+        out
+    }
+
     /// The recipe's view: title → (fields, bag); later bags win.
     fn merged(&self, r: &Recipe) -> io::Result<BTreeMap<String, (Fields, String)>> {
         let mut out = BTreeMap::new();
-        let plugins = r.plugins.then(|| PLUGINS.to_string());
-        for b in plugins.iter().chain(&r.bags) {
-            for (t, f) in self.layer(b)? {
+        for b in Self::layer_names(r) {
+            for (t, f) in self.layer(&b)? {
                 out.insert(t, (f, b.clone()));
             }
         }
         Ok(out)
+    }
+
+    /// Each layer of a wiki with its tiddler titles, bottom first (for the layer view).
+    pub fn layers(&self, name: &str) -> io::Result<Vec<(String, Vec<String>)>> {
+        let r = self.recipes().into_iter().find(|x| x.name == name).ok_or_else(|| err(crate::tr!(format!("Wiki „{name}“ gibt es nicht"), format!("There is no wiki “{name}”"))))?;
+        Self::layer_names(&r).into_iter().map(|b| Ok((b.clone(), self.layer(&b).map(|l| l.into_keys().collect()).unwrap_or_default()))).collect()
+    }
+
+    // ------------------------------------------------------------ bag „lokal“
+
+    fn ensure_local(&self) -> io::Result<()> {
+        if !self.bag_dir(LOCAL)?.exists() {
+            self.put_bag(&BagInfo {
+                name: LOCAL.into(),
+                description: crate::tr!("Bleibt auf diesem Rechner: Verweise auf lokale Dateien und Notizen mit dem Tag lokal oder privat", "Stays on this computer: links to local files and notes tagged lokal or privat").into(),
+                ..Default::default()
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Keep one tiddler per file linked from a map card in `lokal`: title = file name,
+    /// `_canonical_uri` = the file. Text and tags added in the wiki are kept; tiddlers of
+    /// files no map links any more go, unless someone wrote text into them.
+    fn refresh_local_files(&self) -> io::Result<()> {
+        self.ensure_local()?;
+        let mut files: BTreeSet<String> = BTreeSet::new();
+        let map_bags: BTreeSet<String> = self.recipes().iter().flat_map(|r| r.bags.iter().filter(|b| b.starts_with(MAP_BAG)).cloned()).collect();
+        for b in map_bags {
+            for (_, f) in self.layer(&b).unwrap_or_default() {
+                if let Some(p) = f.get("brausa-file").filter(|p| !p.is_empty()) {
+                    files.insert(p.clone());
+                }
+            }
+        }
+        let have = self.bag_tiddlers(LOCAL)?;
+        let generated: HashMap<String, Fields> =
+            have.values().filter(|(f, _)| f.contains_key(GENERATED)).filter_map(|(f, _)| Some((f.get("brausa-file")?.clone(), f.clone()))).collect();
+        let mut titles: BTreeSet<String> = have.keys().cloned().collect();
+        for path in &files {
+            let uri = tauri::Url::from_file_path(path).map(|u| u.to_string()).unwrap_or_else(|_| format!("file://{path}"));
+            let mime = mime_guess::from_path(path).first_raw().unwrap_or("application/octet-stream").to_string();
+            let mut f = match generated.get(path) {
+                Some(f) => f.clone(),
+                None => {
+                    let p = Path::new(path);
+                    let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
+                    let mut title = name.clone();
+                    if titles.contains(&title) {
+                        let parent = p.parent().and_then(|d| d.file_name()).map(|d| d.to_string_lossy().to_string()).unwrap_or_default();
+                        title = format!("{name} ({parent})");
+                        let mut n = 2;
+                        while titles.contains(&title) {
+                            title = format!("{name} ({parent} {n})");
+                            n += 1;
+                        }
+                    }
+                    titles.insert(title.clone());
+                    let mut f = Fields::new();
+                    f.insert("title".into(), title);
+                    f.insert("tags".into(), stringify_list(&[LOCAL.to_string(), "brausa-datei".to_string()]));
+                    f.insert("text".into(), String::new());
+                    f
+                }
+            };
+            let before = f.clone();
+            f.insert("_canonical_uri".into(), uri);
+            f.insert("type".into(), mime);
+            f.insert("brausa-file".into(), path.clone());
+            f.insert(GENERATED.into(), "datei".into());
+            if f != before {
+                self.put_tiddler(LOCAL, &f)?;
+            }
+        }
+        for (path, f) in &generated {
+            if !files.contains(path) && f.get("text").map(|t| t.trim().is_empty()).unwrap_or(true) {
+                self.delete_tiddler(LOCAL, &f["title"])?;
+            }
+        }
+        Ok(())
     }
 
     // ------------------------------------------------------------ overlays
@@ -587,12 +698,10 @@ impl Store {
             if top.starts_with('@') {
                 continue;
             }
+            let _ = lower;
             let own = self.layer(top)?;
             let mut layers = vec![];
-            if r.plugins {
-                layers.push((PLUGINS.to_string(), self.layer(PLUGINS)?));
-            }
-            for b in lower {
+            for b in Self::layer_names(&r).iter().filter(|b| *b != top) {
                 layers.push((b.clone(), self.layer(b)?));
             }
             for (title, f) in own {
@@ -671,6 +780,9 @@ impl Store {
         let state: SyncState =
             fs::read(self.state_file(name)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         let target = Path::new(&r.target.path);
+        if r.local {
+            self.refresh_local_files()?;
+        }
         let wiki = read_wiki(&r.target)?;
         let first = state.wiki.is_empty() && state.pushed.is_empty();
 
@@ -701,7 +813,11 @@ impl Store {
                 }
                 // Like the MultiWikiServer: everything else lands in the wiki's own bag. A tiddler
                 // from a shared bag is overlaid there; `overlays()` finds these for later resolution.
-                let bag = top.clone();
+                // Private notes and everything that already lives in `lokal` stay there.
+                let private = r.local
+                    && (parse_list(f.get("tags").map(String::as_str).unwrap_or("")).iter().any(|t| LOCAL_TAGS.contains(&t.to_lowercase().as_str()))
+                        || before.get(title).map(|(_, b)| b == LOCAL).unwrap_or(false));
+                let bag = if private { LOCAL.to_string() } else { top.clone() };
                 // Changed in the own bag as well since the last sync? The bag wins, the wiki's version is kept aside.
                 let bag_now = before.get(title).filter(|(_, b)| *b == bag).map(|(f, _)| hash(f));
                 let bag_then = state.pushed.get(title).filter(|(b, _)| *b == bag).map(|(_, h)| h.clone());
@@ -721,7 +837,8 @@ impl Store {
                 if wiki.contains_key(title) || bag == PLUGINS || bag.starts_with(MAP_BAG) {
                     continue;
                 }
-                if *bag != top {
+                let generated = before.get(title).map(|(f, _)| f.contains_key(GENERATED)).unwrap_or(false);
+                if (*bag != top && *bag != LOCAL) || generated {
                     rep.warnings.push(crate::tr!(format!("„{title}“ kommt aus dem Bag „{bag}“ und erscheint beim nächsten Abgleich wieder"), format!("“{title}” comes from the bag “{bag}” and will reappear on the next sync")));
                     continue;
                 }
@@ -1059,9 +1176,65 @@ mod tests {
                 target,
                 last_sync: None,
                 plugins: true,
+                local: false,
                 kept: vec![],
             })
             .unwrap()
+    }
+
+    #[test]
+    fn bag_lokal_holds_file_links_and_private_notes() {
+        let (t, store, proj) = setup();
+        crate::i18n::set("de");
+        let doc = proj.join("Bericht 2026.pdf");
+        fs::write(&doc, b"%PDF").unwrap();
+        maps::save(&proj, &json!({"id": "m_1", "title": "Plan", "roots": ["c_a"], "links": [],
+            "cards": {"c_a": {"id": "c_a", "title": "Idee", "text": "", "x": 0, "y": 0, "parent": null, "children": [],
+                              "refs": [{"kind": "file", "path": doc.display().to_string()}]}}}))
+        .unwrap();
+        let wa = t.path().join("wiki-a");
+        let mut r = recipe(&store, "a", &proj, Target { kind: "folder".into(), path: wa.display().to_string() });
+        r.local = true;
+        store.put_recipe(r).unwrap();
+
+        // Layer order: plugins, shared bags and maps, lokal, the wiki's own bag on top.
+        let names: Vec<String> = store.layers("a").unwrap().into_iter().map(|(b, _)| b).collect();
+        assert_eq!(names.first().unwrap(), PLUGINS);
+        assert_eq!(&names[names.len() - 2..], [LOCAL.to_string(), "wiki-a".to_string()]);
+
+        store.sync("a").unwrap();
+        // One tiddler per linked file, pointing at the file on this computer.
+        let link = store.bag_tiddlers(LOCAL).unwrap().into_values().map(|(f, _)| f).find(|f| f.contains_key(GENERATED)).unwrap();
+        assert_eq!(link["title"], "Bericht 2026.pdf");
+        assert!(link["_canonical_uri"].starts_with("file://") && link["_canonical_uri"].ends_with("Bericht%202026.pdf"), "{link:?}");
+        assert_eq!(link["type"], "application/pdf");
+        assert!(read_tiddler_dir(&wa.join("tiddlers")).contains_key("Bericht 2026.pdf"));
+
+        // Notes tagged privat (or lokal) go to the bag lokal, others to the wiki's own bag.
+        fs::write(wa.join("tiddlers/Geheim.tid"), "tags: [[Privat]] idee\ntitle: Geheim\n\nnoch nicht veröffentlichen").unwrap();
+        fs::write(wa.join("tiddlers/Offen.tid"), "title: Offen\n\nfür alle").unwrap();
+        store.sync("a").unwrap();
+        assert!(store.bag_tiddlers(LOCAL).unwrap().contains_key("Geheim"));
+        assert!(!store.bag_tiddlers("wiki-a").unwrap().contains_key("Geheim"));
+        assert!(store.bag_tiddlers("wiki-a").unwrap().contains_key("Offen"));
+        // Edited again without the tag, it stays where it lives.
+        fs::write(wa.join("tiddlers/Geheim.tid"), "title: Geheim\n\ngeändert").unwrap();
+        store.sync("a").unwrap();
+        assert_eq!(store.bag_tiddlers(LOCAL).unwrap()["Geheim"].0["text"], "geändert");
+        assert!(!store.bag_tiddlers("wiki-a").unwrap().contains_key("Geheim"));
+
+        // Without the link on the map, the generated tiddler goes again.
+        maps::save(&proj, &json!({"id": "m_1", "title": "Plan", "roots": ["c_a"], "links": [],
+            "cards": {"c_a": {"id": "c_a", "title": "Idee", "text": "", "x": 0, "y": 0, "parent": null, "children": []}}}))
+        .unwrap();
+        store.sync("a").unwrap();
+        assert!(!store.bag_tiddlers(LOCAL).unwrap().contains_key("Bericht 2026.pdf"));
+
+        // A wiki can leave lokal out (e.g. one meant for publishing).
+        let wb = t.path().join("wiki-b");
+        recipe(&store, "b", &proj, Target { kind: "folder".into(), path: wb.display().to_string() });
+        store.sync("b").unwrap();
+        assert!(!read_tiddler_dir(&wb.join("tiddlers")).contains_key("Geheim"));
     }
 
     #[test]

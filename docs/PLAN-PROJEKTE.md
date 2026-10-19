@@ -331,6 +331,38 @@ gemeinsame Bags werden in allen offenen Wikis sofort sichtbar. Das hängt
 davon ab, wie stabil die MWS-API ist; sie wird gerade aus dem Kern in ein
 eigenes Projekt verlagert.
 
+**Bag „lokal“ (umgesetzt, 19.10.2026):** Ein gemeinsamer Bag für alles, was
+auf diesem Rechner bleibt. Jedes Wiki bindet ihn standardmäßig direkt unter
+seinem eigenen Bag ein (pro Wiki abschaltbar, z. B. für ein Wiki, das
+veröffentlicht wird). Er enthält:
+
+- je verknüpfter Datei aus den Karten einen Tiddler mit `_canonical_uri`
+  (`file://…`) und passendem `type`; brausa legt sie beim Abgleich an, hält
+  Pfad und Typ aktuell und entfernt sie wieder, wenn keine Karte die Datei
+  mehr verknüpft (außer jemand hat Text hineingeschrieben). Erkennbar am Feld
+  `brausa-generated: datei` und am Tag `brausa-datei`.
+- Notizen, die im Wiki mit `lokal` oder `privat` getaggt werden: Sie landen
+  beim Abgleich hier statt im eigenen Bag des Wikis und bleiben auch danach
+  hier, wenn der Tag später fehlt.
+
+**Später: Bags nachladen und geschützte Bags (für die Web-Fassung).** Sobald
+Wikis im Web veröffentlicht werden, soll nicht alles in eine Wiki-Datei:
+
+- *Nachladen:* Ein Bag kann als „nachladen“ markiert werden. Statt seiner
+  Tiddler kommt nur ein Platzhalter (Titel, Tags, Größe) ins Wiki, der Rest
+  wird bei Bedarf geholt, wie TiddlyWikis Lazy Loading (`_canonical_uri`
+  für Bilder, ausgelagerte Tiddler-Texte; beim MWS über `/bags/:b/tiddlers`).
+  Sinnvoll für große Bags (Bilder, Quellen, Archive).
+- *Geschützte Bags:* Ein Bag kann ein Passwort bekommen. Er wird
+  verschlüsselt ausgeliefert (TiddlyWiki kann Tiddler mit SJCL
+  verschlüsseln) oder erst nach Anmeldung vom Server geladen; ohne Passwort
+  bleibt nur der Hinweis, dass es ihn gibt.
+- Datenmodell: `BagInfo` bekommt dafür später `load: "inline" | "lazy"` und
+  `protected: bool`; Recipes und die Bag-Übersicht (Matrix, Graph, Ebenen)
+  zeigen diese Eigenschaften an.
+- Der Bag „lokal“ wird nie veröffentlicht; die Veröffentlichung lässt ihn
+  immer weg.
+
 ---
 
 ## 4. Roadmap
