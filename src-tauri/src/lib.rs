@@ -95,6 +95,29 @@ fn places() -> Vec<Place> {
         .collect()
 }
 
+#[tauri::command]
+fn volumes() -> Vec<Place> {
+    fsops::volumes()
+        .into_iter()
+        .map(|(name, p)| Place { name, path: p.to_string_lossy().to_string() })
+        .collect()
+}
+
+#[derive(Serialize)]
+struct Found {
+    entries: Vec<Entry>,
+    /// The search stopped early (too many hits or out of time).
+    more: bool,
+}
+
+/// Files and folders whose name contains `text`, below each of `roots`.
+#[tauri::command]
+async fn find(state: State<'_, Index>, roots: Vec<String>, text: String, include_hidden: bool, limit: usize) -> CmdResult<Found> {
+    let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).filter(|p| archive::split(&p.to_string_lossy()).is_none()).collect();
+    let (entries, more) = fsops::find(&roots, &text, include_hidden, limit, std::time::Duration::from_secs(4));
+    Ok(Found { entries: decorated(&state, entries)?, more })
+}
+
 // File-system commands run on the async pool so large folders don't block the UI thread.
 
 #[tauri::command]
@@ -839,6 +862,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             home_dir,
             places,
+            volumes,
+            find,
             list_dir,
             walk,
             transfer,

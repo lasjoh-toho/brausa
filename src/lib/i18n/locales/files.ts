@@ -1,4 +1,9 @@
 export const de = {
+  searchBelow: 'Suche in {folder} und Unterordnern',
+  searchEverywhere: 'Suche an allen Orten',
+  searching: 'sucht …',
+  searchMore: 'weitere Treffer – genauer suchen',
+  searchHere: 'Nur in {folder}',
   // Canvas
   'dupeExtras.one': '{n} überzählige Kopie',
   'dupeExtras.other': '{n} überzählige Kopien',
@@ -74,6 +79,11 @@ export const de = {
 };
 
 export const en: typeof de = {
+  searchBelow: 'Searching {folder} and its subfolders',
+  searchEverywhere: 'Searching in all places',
+  searching: 'searching …',
+  searchMore: 'more hits – narrow the search',
+  searchHere: 'Only in {folder}',
   'dupeExtras.one': '{n} extra copy',
   'dupeExtras.other': '{n} extra copies',
   'dupeGroups.one': '{n} group',

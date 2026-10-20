@@ -1,6 +1,9 @@
 export const de = {
   demoHint: 'Läuft im Browser mit Beispieldaten',
   places: 'Orte',
+  media: 'Medien',
+  mediaHint: 'Externe Laufwerke: USB-Sticks, Speicherkarten, Netzlaufwerke',
+  noMedia: 'Kein externes Laufwerk angeschlossen',
   projects: 'Projekte',
   newProject: 'Neues Projekt (frei benannt, Dateien von überall)',
   projectName: 'Projektname',
@@ -49,6 +52,9 @@ export const de = {
 export const en: typeof de = {
   demoHint: 'Running in the browser with sample data',
   places: 'Places',
+  media: 'Media',
+  mediaHint: 'External drives: USB sticks, memory cards, network drives',
+  noMedia: 'No external drive connected',
   projects: 'Projects',
   newProject: 'New project (any name, files from anywhere)',
   projectName: 'Project name',

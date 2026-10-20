@@ -37,6 +37,12 @@
   let accent = $state<{ color: string; light: boolean } | null>(null);
   const tagTargets = $derived(app.tagSource === 'staging' ? app.staging : app.selectedEntries);
 
+  // A search also looks below the folder (or everywhere) for matching names.
+  $effect(() => {
+    void [app.findText, app.cwd, app.everywhere, app.home];
+    app.scheduleFind();
+  });
+
   onMount(() => {
     app.init();
     updates.startup();

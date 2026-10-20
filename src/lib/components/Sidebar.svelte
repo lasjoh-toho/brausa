@@ -119,6 +119,28 @@
     </div>
   {/each}
 
+  <div class="section" title={t('sidebar.mediaHint')}>{t('sidebar.media')}</div>
+  {#each app.volumes as v (v.path)}
+    {@const hit = drag.active && drag.hit?.kind === 'folder' && drag.hit.path === v.path}
+    <div
+      class="place"
+      class:current={!app.project && app.cwd === v.path}
+      class:hit
+      data-drop="folder"
+      data-path={v.path}
+      role="button"
+      tabindex="0"
+      title={v.path}
+      onpointerdown={(e) => drag.begin(e, () => [{ ...homeEntry, path: v.path, name: v.name }], 'tree', () => app.navigate(v.path))}
+      onkeydown={(e) => e.key === 'Enter' && app.navigate(v.path)}
+    >
+      <Icon name="drive" size={15} />
+      {v.name}
+    </div>
+  {:else}
+    <div class="none-media">{t('sidebar.noMedia')}</div>
+  {/each}
+
   <div class="section with-action" title={t('sidebar.projectsEmpty')}>
     {t('sidebar.projects')}
     <button class="add" title={t('sidebar.newProject')} onclick={() => ((naming = ''), (renaming = null))}>
@@ -360,6 +382,11 @@
     color: var(--fg-faint);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+  }
+  .none-media {
+    padding: 2px 8px 4px;
+    font-size: 11.5px;
+    color: var(--fg-faint);
   }
   .place {
     display: flex;

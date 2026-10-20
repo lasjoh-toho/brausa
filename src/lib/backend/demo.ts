@@ -185,6 +185,28 @@ export class DemoBackend implements Backend {
     ];
   }
 
+  async volumes() {
+    return [{ name: 'USB-Stick', path: `${HOME}/Projekte` }];
+  }
+
+  async findNames(roots: string[], text: string, opts: { limit?: number } = {}) {
+    const needle = text.toLowerCase();
+    const limit = opts.limit ?? 2000;
+    const out: Entry[] = [];
+    for (const root of roots) {
+      const rec = (n: Node) => {
+        for (const c of n.children?.values() ?? []) {
+          if (out.length >= limit) return;
+          if (c.entry.name.toLowerCase().includes(needle)) out.push({ ...this.decorate(c.entry), relDir: relativeTo(dirname(c.entry.path), root) });
+          if (c.children) rec(c);
+        }
+      };
+      const n = this.find(root);
+      if (n) rec(n);
+    }
+    return { entries: out, more: out.length >= limit };
+  }
+
   async listDir(path: string): Promise<Entry[]> {
     const n = this.find(path);
     if (!n?.children) throw new Error(t('demo.notAFolder', { path }));

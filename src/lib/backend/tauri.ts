@@ -46,6 +46,15 @@ export class TauriBackend implements Backend {
     return invoke<{ name: string; path: string }[]>('places');
   }
 
+  volumes() {
+    return invoke<{ name: string; path: string }[]>('volumes');
+  }
+
+  async findNames(roots: string[], text: string, opts: { includeHidden?: boolean; limit?: number } = {}) {
+    const r = await invoke<{ entries: Entry[]; more: boolean }>('find', { roots, text, includeHidden: opts.includeHidden ?? false, limit: opts.limit ?? 2000 });
+    return { entries: r.entries.map(withThumb), more: r.more };
+  }
+
   async listDir(path: string, opts: { includeHidden?: boolean } = {}) {
     return (await invoke<Entry[]>('list_dir', { path, includeHidden: opts.includeHidden ?? false })).map(withThumb);
   }

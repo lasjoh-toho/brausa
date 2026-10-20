@@ -177,6 +177,10 @@ export interface Backend {
   homeDir(): Promise<string>;
   /** Places shown in the sidebar (home, desktop, pictures, …). */
   places(): Promise<{ name: string; path: string }[]>;
+  /** Mounted drives other than the system disk (USB sticks, memory cards, network shares). */
+  volumes(): Promise<{ name: string; path: string }[]>;
+  /** Files and folders whose name contains `text`, below each root (`more`: stopped early). */
+  findNames(roots: string[], text: string, opts?: { includeHidden?: boolean; limit?: number }): Promise<{ entries: Entry[]; more: boolean }>;
   listDir(path: string, opts?: { includeHidden?: boolean }): Promise<Entry[]>;
   /** Flattened recursive listing of files below root; `relDir` is set on each entry. */
   walk(root: string, opts?: WalkOptions): Promise<Entry[]>;
