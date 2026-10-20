@@ -6,9 +6,9 @@ import type { SmartFolder } from '../core/smart';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
+import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WebPreview, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
 import { WALK_LIMIT } from './types';
-import { addCard, addLink, newMap, type ProjectMap } from '../core/map';
+import { addCard, addLink, newMap, type NoteCard, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 import { t } from '../i18n/index.svelte';
 
@@ -531,6 +531,14 @@ export class DemoBackend implements Backend {
     return Object.values(this.readMaps(root)).map((m) => ({ id: m.id, title: m.title, updated: m.updated ?? null }));
   }
 
+  private notes = new Map<string, NoteCard[]>();
+  async loadNotes(root: string) {
+    return structuredClone(this.notes.get(root) ?? []);
+  }
+  async saveNotes(root: string, notes: NoteCard[]) {
+    this.notes.set(root, structuredClone(notes));
+  }
+
   async loadMap(root: string, id: string) {
     this.requireProject(root);
     const m = this.readMaps(root)[id];
@@ -595,6 +603,9 @@ export class DemoBackend implements Backend {
   }
   async webCollectImages(): Promise<number> {
     return 0;
+  }
+  async webPeek() {
+    return { y: 0, sel: false };
   }
   async webPlace() {}
   async webClose() {}
@@ -701,6 +712,21 @@ export class DemoBackend implements Backend {
   }
 
   /** Layers of a wiki, bottom first, with made-up titles where the demo has no tiddlers. */
+  async wikiWebFetch(): Promise<WebPreview> {
+    throw new Error(t('demo.webAppOnly'));
+  }
+  async wikiWebApply() {
+    return 0;
+  }
+  async wikiWebDiscard() {}
+  async wikiWebUpload() {
+    throw new Error(t('demo.webAppOnly'));
+  }
+  async wikiWebPassword() {}
+  async wikiWebHasPassword() {
+    return false;
+  }
+
   /** Demo bags hold no texts: titles of the generated placeholder tiddlers only. */
   async wikiSearch(query: string): Promise<WikiHit[]> {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);

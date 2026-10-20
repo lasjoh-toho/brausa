@@ -5,6 +5,8 @@
   import ProjectMap from './ProjectMap.svelte';
   import CardKanban from './CardKanban.svelte';
   import FilePanel from './FilePanel.svelte';
+  import NotesThread from './NotesThread.svelte';
+  import StoryPanel from './StoryPanel.svelte';
   import Icon from './Icon.svelte';
   import { t } from '../i18n/index.svelte';
 
@@ -48,6 +50,12 @@
   {/if}
   {#if project && board.panelOpen}
     <FilePanel {project} />
+  {/if}
+  {#if project && board.notesOpen && !board.presenting}
+    <NotesThread />
+  {/if}
+  {#if project && board.storiesOpen && board.mode === 'map' && !board.presenting}
+    <StoryPanel />
   {/if}
 </div>
 

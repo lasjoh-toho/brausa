@@ -14,6 +14,15 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.11
+
+- **Wikis on the web:** give a wiki its web address (when creating it or in its settings). "Compare" loads the web version into a temporary bag, lists new and changed tiddlers to take over (and plugins for the plugin folder), then removes the bag. With a stored password (kept only on this computer) brausa uploads the new version.
+- **Notes & snippets thread** next to the map and Kanban: snippets sent to a project land there; drag them onto the map or place them in the middle, put cards back, send items to another project.
+- **Map stories and presentation** as in TiddlyVisuals' Pinboard: several paths per map, stops as an outline (indent), fullscreen presentation. Stories go to the wiki as story tiddlers; cards that contain cards dive into their own board there.
+- **Kanban** as in TiddlyVisuals 0.4: column colors and views (full, foldable, compact), saved searches, lanes, card viewer, cards added right in a column.
+- **Web panel:** the bar scrolls away and comes back when scrolling up; "send to project" appears with a selection and asks which project; the picture collector is a red record button with a dialog (where, minimum size, formats). PDFs open in the side panel without the browser bar.
+- **Files open in the side panel**; right-click offers the default app. The **hamburger** next to the window buttons hides the sidebar. "Map" only appears in projects.
+
 ### New in 0.10
 
 - **No more freezes with many files.** Views draw page by page (more appear when scrolling); the photo map reads only photos. If the interface still hangs for 10 seconds, brausa restarts without that folder and offers to go on there **without subfolders**.
@@ -61,6 +70,14 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.11: Wikis im Web, Notizen-Thread, Geschichten und Präsentation, Kanban**
+- **Wikis im Web:** einem Wiki seine Webadresse geben (beim Anlegen oder im Zahnrad). „Abgleichen“ lädt die Web-Fassung in einen temporären Bag, zeigt neue und geänderte Tiddler zur Übernahme (und Plugins für den Plugin-Ordner) und entfernt den Bag wieder. Mit gespeichertem Passwort (nur auf diesem Rechner) lädt brausa die neue Fassung hoch.
+- **Notizen- & Snippets-Thread** neben Map und Kanban: an ein Projekt gesendete Snippets landen dort; auf die Map ziehen oder in die Mitte setzen, Karten zurücklegen, an ein anderes Projekt senden.
+- **Geschichten und Präsentation** wie im Pinboard von TiddlyVisuals: mehrere Pfade pro Map, Stationen als Gliederung (einrücken), Vollbild-Präsentation. Geschichten gehen als Story-Tiddler ins Wiki; Karten mit Karten darin führen dort in ihr eigenes Board.
+- **Kanban** wie in TiddlyVisuals 0.4: Spaltenfarben und -ansichten (ganz, faltbar, kompakt), gespeicherte Suchen, Bahnen, Kartenansicht, Karten direkt in einer Spalte anlegen.
+- **Web-Fenster:** die Leiste scrollt weg und kommt beim Hochscrollen zurück; „An Projekt senden“ erscheint bei einer Markierung und fragt nach dem Projekt; der Bildersammler ist ein roter Aufnahmeknopf mit Dialog (wohin, Mindestgröße, Formate). PDFs öffnen im Seitenfeld ohne Browserleiste.
+- **Dateien öffnen im Seitenfeld**, Rechtsklick bietet die Standard-App. Der **Hamburger** neben den Fensterknöpfen blendet die Seitenleiste aus. „Map“ gibt es nur in Projekten.
 
 **Neu in 0.10: kein Einfrieren, Ordner/Flach, Drag & Drop mit dem Finder, Projekt-Startseite**
 - **Kein Einfrieren mehr bei vielen Dateien:** Ansichten zeichnen seitenweise (beim Scrollen kommt mehr), die Foto-Karte liest nur Fotos. Hängt die Oberfläche trotzdem 10 Sekunden, startet brausa ohne diesen Ordner neu und bietet an, dort **ohne Unterordner** weiterzusuchen.

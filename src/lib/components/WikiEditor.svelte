@@ -25,6 +25,12 @@
         }
   );
   let error = $state('');
+  // The same wiki on the web: address, user, password (the password is only written, never read back).
+  let webUrl = $state(original?.web?.url ?? '');
+  let webUser = $state(original?.web?.user ?? '');
+  let webPassword = $state('');
+  let hasPassword = $state(false);
+  if (original) app.backend.wikiWebHasPassword(original.name).then((h) => (hasPassword = h)).catch(() => {});
   let plugins = $state<[string, string][]>([]);
   app.backend.wikiPlugins().then((p) => (plugins = p)).catch(() => {});
   let newBag = $state('');
@@ -60,7 +66,10 @@
     if (!r.name.trim() || !r.target.path.trim()) return void (error = t('wiki.missing'));
     try {
       const plain = $state.snapshot(r);
-      const saved = await wikis.save({ ...plain, name: plain.name.trim(), target: { ...plain.target, path: plain.target.path.trim() } }, original?.name ?? null);
+      const web = webUrl.trim() ? { url: webUrl.trim(), user: webUser.trim() } : null;
+      const saved = await wikis.save({ ...plain, web, name: plain.name.trim(), target: { ...plain.target, path: plain.target.path.trim() } }, original?.name ?? null);
+      if (webPassword) await app.backend.wikiWebPassword(saved.name, webPassword);
+      else if (!web && hasPassword) await app.backend.wikiWebPassword(saved.name, null);
       onclose();
       if (sync) await wikis.sync(saved.name);
     } catch (e) {
@@ -110,6 +119,18 @@
         {@html t('wiki.fileNote')}
       {/if}
     </p>
+
+    <div class="sec">{t('wiki.web')}</div>
+    <div class="row">
+      <input class="grow mono" bind:value={webUrl} placeholder={t('wiki.webUrl')} spellcheck="false" />
+    </div>
+    {#if webUrl.trim()}
+      <div class="row">
+        <label>{t('wiki.webUser')} <input bind:value={webUser} autocomplete="username" /></label>
+        <label class="grow">{t('wiki.webPassword')} <input type="password" bind:value={webPassword} placeholder={hasPassword ? t('wiki.webPasswordStored') : t('wiki.optional')} autocomplete="new-password" /></label>
+      </div>
+      <p class="muted">{t('wiki.webNote')}</p>
+    {/if}
 
     <label class="plugins">
       <input type="checkbox" bind:checked={r.plugins} />

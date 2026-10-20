@@ -84,6 +84,7 @@
 
 <aside class="sidebar">
   <div class="brand" data-tauri-drag-region>
+    <button class="gear burger" onclick={() => app.toggleSidebar()} title={t('sidebar.hide')} aria-label={t('sidebar.hide')}><Icon name="menu" size={15} /></button>
     brausa
     {#if app.backend.name === 'demo'}<span class="demo" title={t('sidebar.demoHint')}>Demo</span>{/if}
     <span class="grow"></span>
@@ -265,6 +266,9 @@
       <button class="rm" title={t('sidebar.openWiki')} onclick={(e) => (e.stopPropagation(), openTarget(w.target.path, w.target.kind))}>
         <Icon name="open" size={11} />
       </button>
+      {#if w.web?.url}
+        <button class="sync" class:spin={wikis.webBusy === w.name} title={t('sidebar.webSync')} onclick={(e) => (e.stopPropagation(), wikis.webCompare(w.name))}><Icon name="globe" size={12} /></button>
+      {/if}
       <button
         class="sync"
         class:spin={wikis.syncing === w.name}

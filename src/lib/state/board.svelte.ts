@@ -6,6 +6,19 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { app } from './app.svelte';
 import type { MapInfo } from '../backend/types';
 import {
+  activeStory,
+  indentStep,
+  liveSteps,
+  STORY_COLORS,
+  type Story,
+  addCard,
+  contextCard,
+  deleteCards,
+  toNote,
+  toPlane,
+  tidyStacks,
+  uid,
+  type NoteCard,
   bounds,
   fitRect,
   newMap,
@@ -43,6 +56,14 @@ class BoardState {
   loading = $state(false);
   mode = $state<'map' | 'kanban'>(store.get('boardMode', 'map'));
   panelOpen = $state(store.get('boardPanel', false));
+  /** The story panel (presentation paths) at the right of the map. */
+  storiesOpen = $state(false);
+  /** Playing a story: index of the stop shown. */
+  presenting = $state<{ i: number } | null>(null);
+
+  /** The project's notes & snippets thread (cards not on a map), shown at the right. */
+  notes = $state<NoteCard[]>([]);
+  notesOpen = $state(store.get('boardNotes', false));
   /** Document open in the reader next to the map (PDF, HTML, Markdown, text). */
   reader = $state<{ ref: CardRef; seq: number } | null>(null);
   readerWidth = $state(store.get('readerWidth', 520));
@@ -62,7 +83,8 @@ class BoardState {
     this.root = root;
     this.map = null;
     this.reset();
-    if (!root) return;
+    if (!root) return void (this.notes = []);
+    void this.loadNotes();
     this.loading = true;
     try {
       this.maps = await app.backend.listMaps(root);
@@ -97,6 +119,207 @@ class BoardState {
   togglePanel() {
     this.panelOpen = !this.panelOpen;
     store.set('boardPanel', this.panelOpen);
+  }
+
+  // ---------------------------------------------------------------- stories (presentation paths)
+
+  get story(): Story | null {
+    return this.map ? (this.map.stories?.find((s) => s.id === this.map!.story) ?? this.map.stories?.[0] ?? null) : null;
+  }
+
+  toggleStories(open = !this.storiesOpen) {
+    this.storiesOpen = open;
+    if (open) this.toggleNotes(false);
+  }
+
+  /** Selected cards (or, with none, the current view) become stops of the shown story. */
+  addStops() {
+    if (!this.map) return;
+    const ids = [...this.selection];
+    this.mutate((m) => {
+      const s = activeStory(m);
+      if (ids.length) for (const ref of ids) s.steps.push({ id: uid('t'), kind: 'card', ref });
+      else s.steps.push({ id: uid('t'), kind: 'view', cam: { ...this.cam } });
+    });
+  }
+
+  removeStep(id: string) {
+    this.mutate((m) => {
+      const s = activeStory(m);
+      s.steps = s.steps.filter((x) => x.id !== id);
+    });
+  }
+
+  moveStep(from: number, to: number) {
+    this.mutate((m) => {
+      const s = activeStory(m);
+      const [x] = s.steps.splice(from, 1);
+      s.steps.splice(Math.max(0, Math.min(to, s.steps.length)), 0, x);
+    });
+  }
+
+  indent(i: number, by: number) {
+    if (!this.map) return;
+    const s = activeStory(this.map);
+    const probe = s.steps.map((x) => ({ ...x }));
+    if (indentStep(probe, i, by)) this.mutate((m) => indentStep(activeStory(m).steps, i, by));
+  }
+
+  newStory() {
+    this.mutate((m) => {
+      m.stories ??= [];
+      const n = m.stories.length;
+      const s = { id: uid('s'), title: `Story ${n + 1}`, color: STORY_COLORS[n % STORY_COLORS.length], steps: [] };
+      m.stories.push(s);
+      m.story = s.id;
+    });
+  }
+
+  setStory(id: string) {
+    this.mutate((m) => (m.story = id));
+  }
+
+  renameStory(title: string) {
+    if (!title.trim()) return;
+    this.mutate((m) => (activeStory(m).title = title.trim()));
+  }
+
+  deleteStory() {
+    this.mutate((m) => {
+      if (!m.stories || m.stories.length < 2) return;
+      const s = activeStory(m);
+      m.stories = m.stories.filter((x) => x.id !== s.id);
+      m.story = m.stories[0].id;
+    });
+  }
+
+  /** Play the shown story full screen, from stop `from`. */
+  async present(from = 0) {
+    const s = this.story;
+    if (!this.map || !s || !liveSteps(this.map, s).length) return app.toast(t('board.story.empty'), true);
+    this.presenting = { i: from };
+    app.setPresenting(true);
+    // The canvas grows to the whole screen: wait for its new size before flying.
+    setTimeout(() => this.show(from), 250);
+  }
+
+  private show(i: number) {
+    const m = this.map;
+    const s = this.story;
+    if (!m || !s || !this.presenting) return;
+    const steps = liveSteps(m, s);
+    const k = Math.max(0, Math.min(i, steps.length - 1));
+    this.presenting = { i: k };
+    const st = steps[k];
+    this.selection.clear();
+    if (st.kind === 'view' && st.cam) this.flyTo(st.cam, 700);
+    else if (st.ref) this.flyTo(fitRect(worldRect(m, st.ref), this.vw, this.vh, 0.08), 700);
+  }
+
+  stepBy(by: number) {
+    if (this.presenting) this.show(this.presenting.i + by);
+  }
+
+  goStep(i: number) {
+    if (this.presenting) this.show(i);
+  }
+
+  endPresentation() {
+    this.presenting = null;
+    app.setPresenting(false);
+  }
+
+  // ---------------------------------------------------------------- notes & snippets thread
+
+  toggleNotes(open = !this.notesOpen) {
+    this.notesOpen = open;
+    store.set('boardNotes', open);
+    if (open) this.storiesOpen = false;
+  }
+
+  async loadNotes() {
+    const root = this.root;
+    if (!root) return void (this.notes = []);
+    const n = await app.backend.loadNotes(root).catch(() => []);
+    if (this.root === root) this.notes = n;
+  }
+
+  private saveNotes() {
+    if (!this.root) return;
+    void app.backend.saveNotes(this.root, $state.snapshot(this.notes) as NoteCard[]).catch((e) => app.toast(String(e), true));
+  }
+
+  /** Add to the thread of the project at `root` (this one, or another). */
+  async addNote(note: Omit<NoteCard, 'id' | 'at'> & { id?: string }, root = this.root) {
+    if (!root) return;
+    const n: NoteCard = { ...note, id: note.id ?? uid('n'), at: Date.now() };
+    if (root === this.root) {
+      this.notes = [...this.notes, n];
+      this.saveNotes();
+    } else {
+      const list = await app.backend.loadNotes(root).catch(() => []);
+      await app.backend.saveNotes(root, [...list, n]);
+    }
+  }
+
+  removeNote(id: string) {
+    this.notes = this.notes.filter((n) => n.id !== id);
+    this.saveNotes();
+  }
+
+  editNote(id: string, text: string) {
+    this.notes = this.notes.map((n) => (n.id === id ? { ...n, text } : n));
+    this.saveNotes();
+  }
+
+  /** Send a note to another project's thread. */
+  async sendNote(id: string, root: string, name: string) {
+    const n = this.notes.find((x) => x.id === id);
+    if (!n || root === this.root) return;
+    await this.addNote({ ...n, id: undefined }, root);
+    this.removeNote(id);
+    app.toast(t('board.notes.sent', { name }));
+  }
+
+  /** The card for a note, to place on the map at `at` (plane coordinates of `parent`). */
+  noteCard(n: NoteCard) {
+    return { kind: n.kind === 'snippet' ? ('snippet' as const) : undefined, title: n.title, text: n.text, refs: n.refs, color: n.color ?? null, w: n.w ?? 240, h: n.h ?? 140 };
+  }
+
+  /** Put a note in the middle of what the map shows, and take it out of the thread. */
+  placeNote(id: string) {
+    const n = this.notes.find((x) => x.id === id);
+    if (!n || !this.map) return;
+    const m = this.map;
+    const ctx = contextCard(m, this.cam, this.vw, this.vh);
+    const f = planeFrame(m, ctx);
+    const k = f.k * this.cam.z;
+    const c = toPlane(f, this.cam.x + this.vw / 2 / this.cam.z, this.cam.y + this.vh / 2 / this.cam.z);
+    const init = this.noteCard(n);
+    const w = init.w / k, h = init.h / k;
+    let made = '';
+    this.mutate((mm) => (made = addCard(mm, ctx, { x: c.x - w / 2, y: c.y - h / 2 }, { ...init, w, h }).id));
+    this.removeNote(id);
+    this.selection.clear();
+    if (made) this.selection.add(made);
+  }
+
+  /** Selected map cards go back into the thread (cards holding others stay: empty them first). */
+  toThread(ids: string[]) {
+    if (!this.map) return;
+    const m = this.map;
+    const movable = ids.filter((id) => m.cards[id] && !m.cards[id].children.length && m.cards[id].kind !== 'stack');
+    if (movable.length < ids.length) app.toast(t('board.notes.notContainers'), true);
+    if (!movable.length) return;
+    const notes = movable.map((id) => toNote(m.cards[id]));
+    this.mutate((mm) => {
+      deleteCards(mm, movable);
+      tidyStacks(mm);
+    });
+    this.selection.clear();
+    this.notes = [...this.notes, ...notes];
+    this.saveNotes();
+    this.toggleNotes(true);
   }
 
   /** Files may have moved or vanished since the map was saved: ask the index. */

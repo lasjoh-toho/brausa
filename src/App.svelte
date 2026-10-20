@@ -28,10 +28,12 @@
   import OverlayTool from './lib/components/OverlayTool.svelte';
   import BagOverview from './lib/components/BagOverview.svelte';
   import WikiSettings from './lib/components/WikiSettings.svelte';
+  import WebSync from './lib/components/WebSync.svelte';
+  import CollectDialog from './lib/components/CollectDialog.svelte';
   import { wikis } from './lib/state/wikis.svelte';
   import { t } from './lib/i18n/index.svelte';
 
-  let toolbar: Toolbar;
+  let toolbar = $state<Toolbar>();
   let accent = $state<{ color: string; light: boolean } | null>(null);
   const tagTargets = $derived(app.tagSource === 'staging' ? app.staging : app.selectedEntries);
 
@@ -50,7 +52,7 @@
   function key(e: KeyboardEvent) {
     const mod = isToggleKey(e);
     if (mod && e.key.toLowerCase() === 'f') {
-      toolbar.focusSearch();
+      toolbar?.focusSearch();
       e.preventDefault();
       return;
     }
@@ -104,12 +106,12 @@
 <svelte:window onkeydown={key} />
 
 <div class="app">
-  <Sidebar />
+  {#if app.sidebarOpen && !app.presenting}<Sidebar />{/if}
   <main>
-    <Toolbar bind:this={toolbar} {accent} />
+    {#if !app.presenting}<Toolbar bind:this={toolbar} {accent} />{/if}
     <div class="work">
       {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
-      {#if app.pane}<SidePane />{/if}
+      {#if app.pane && app.view !== 'board'}<SidePane />{/if}
       {#if web.open}<WebPane />{/if}
     </div>
     <Tray onTag={() => (app.tagSource = 'staging')} />
@@ -123,6 +125,8 @@
   {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
   {#if wikis.overviewOpen}<BagOverview onclose={() => (wikis.overviewOpen = false)} />{/if}
   {#if wikis.settingsOpen}<WikiSettings />{/if}
+  {#if wikis.webSync}<WebSync />{/if}
+  {#if web.collectDialog}<CollectDialog />{/if}
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
   {#if app.menu}<ContextMenu onTag={() => (app.tagSource = 'selection')} onPreview={openPreview} />{/if}
   {#if app.dialog}<Confirm />{/if}

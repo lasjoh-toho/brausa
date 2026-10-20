@@ -5,6 +5,8 @@
   import { drag } from '../state/drag.svelte';
   import type { Entry } from '../core/types';
   import {
+    type NoteCard,
+    liveSteps,
     HEADER,
     PAD,
     MIN_H,
@@ -196,6 +198,24 @@
 
   async function dropFiles(items: Entry[], x: number, y: number, data?: unknown) {
     if (!m) return;
+    // A note or snippet from the thread: becomes a card where it is dropped.
+    const note = (data as { note?: NoteCard } | undefined)?.note;
+    if (note) {
+      const tg = fileTarget(x, y, note.kind === 'snippet');
+      const stackOn = tg.id && (tg.zone === 'before' || tg.zone === 'after') ? { id: tg.id, where: tg.zone } : null;
+      const parent = stackOn ? null : tg.id && tg.zone !== 'link' ? tg.id : ctx;
+      const p = local({ clientX: x, clientY: y });
+      let id = '';
+      board.mutate((mm) => {
+        id = placeCard(mm, stackOn ? mm.cards[stackOn.id].parent : parent, p.x, p.y, 0.1, board.noteCard(note));
+        if (stackOn) stackInsert(mm, id, stackOn.id, stackOn.where);
+        if (parent) growToFit(mm, parent);
+      });
+      board.removeNote(note.id);
+      board.selection.clear();
+      board.selection.add(id);
+      return;
+    }
     const snippet = (data as { snippet?: Snippet } | undefined)?.snippet;
     const tg = fileTarget(x, y, !!snippet);
     let refs: CardRef[];
@@ -580,8 +600,28 @@
   const selLink = $derived(m && board.link ? m.links.find((l) => l.id === board.link) : null);
   const selLine = $derived(lines.find((x) => x.l.id === board.link));
 
+  /** Stop numbers of the shown story, by card (drawn while the story panel is open). */
+  const stops = $derived.by(() => {
+    const out = new Map<string, number[]>();
+    const s = board.storiesOpen && !board.presenting && m ? board.story : null;
+    s?.steps.forEach((st, i) => st.ref && out.set(st.ref, [...(out.get(st.ref) ?? []), i + 1]));
+    return out;
+  });
+  const total = $derived(m && board.story ? liveSteps(m, board.story).length : 0);
+
   function key(e: KeyboardEvent) {
     if (app.view !== 'board' || !m || board.editing) return;
+    if (board.presenting) {
+      if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) board.stepBy(1);
+      else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) board.stepBy(-1);
+      else if (e.key === 'Home') board.goStep(0);
+      else if (e.key === 'End') board.goStep(total - 1);
+      else if (e.key === 'Escape') board.endPresentation();
+      else if (e.key.toLowerCase() === 'o') board.overview();
+      else return;
+      e.preventDefault();
+      return;
+    }
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
     const mod = isToggleKey(e);
@@ -636,6 +676,7 @@
 
 <section
   class="board"
+  class:presenting={!!board.presenting}
   class:narrow={board.vw < 760}
   bind:this={el}
   bind:clientWidth={board.vw}
@@ -676,6 +717,7 @@
         style:height="{v.r.h}px"
         style:--c={c.color ?? 'var(--line)'}
       >
+        {#if stops.get(v.id)}<span class="stopno" style:--sc={board.story?.color ?? '#e0503f'}>{stops.get(v.id)!.join(' · ')}</span>{/if}
         {#if v.lod === 'full'}
           <div class="inner" style:width="{c.w}px" style:height="{c.h}px" style:transform="scale({v.k})">
             <div class="head" style:height="{HEADER}px">
@@ -829,6 +871,7 @@
         <button class="btn" class:on={selInKanban} title={selInKanban ? t('map.sel.fromKanban') : t('map.sel.toKanban')} onclick={toKanban}>
           <Icon name="kanban" size={14} /> Kanban
         </button>
+        <button class="btn icon" title={t('map.sel.toThread')} onclick={() => board.toThread([...board.selection])}><Icon name="doc" size={14} /></button>
         <button class="btn icon" title={t('map.sel.delete')} onclick={removeSelected}><Icon name="trash" size={14} /></button>
       </div>
     {/if}
@@ -836,6 +879,14 @@
     {#if !m.roots.length}
       <p class="hint-empty">{t('map.empty')}</p>
     {/if}
+  {/if}
+  {#if board.presenting}
+    <div class="present-bar">
+      <button class="btn icon" onclick={() => board.stepBy(-1)} aria-label={t('board.story.prev')}><Icon name="back" size={15} /></button>
+      <span class="count">{board.presenting.i + 1} / {total}</span>
+      <button class="btn icon" onclick={() => board.stepBy(1)} aria-label={t('board.story.next')}><Icon name="forward" size={15} /></button>
+      <button class="btn icon" onclick={() => board.endPresentation()} title={t('board.story.end')} aria-label={t('board.story.end')}><Icon name="x" size={15} /></button>
+    </div>
   {/if}
 </section>
 
@@ -1351,5 +1402,48 @@
     text-align: center;
     color: var(--fg-faint);
     pointer-events: none;
+  }
+  .board.presenting :global(.ui) {
+    display: none !important;
+  }
+  .stopno {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    z-index: 3;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 11px;
+    background: var(--sc);
+    color: #fff;
+    font: 600 11px/22px var(--font);
+    text-align: center;
+    pointer-events: none;
+  }
+  .present-bar {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-elev) 85%, transparent);
+    box-shadow: var(--shadow);
+    opacity: 0.35;
+    transition: opacity 0.2s;
+  }
+  .present-bar:hover {
+    opacity: 1;
+  }
+  .present-bar .count {
+    min-width: 54px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--fg-muted);
   }
 </style>

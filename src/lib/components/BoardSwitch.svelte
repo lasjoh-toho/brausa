@@ -12,6 +12,19 @@
     <Icon name="kanban" size={14} /><span class="lbl">Kanban</span>
   </button>
 </div>
-<button class="btn icon" class:on={board.panelOpen} onclick={() => board.togglePanel()} title={t('map.switch.files')}>
-  <Icon name="folder" size={15} />
+{#if board.mode === 'map'}
+  <button class="btn icon" class:on={board.storiesOpen} onclick={() => board.toggleStories()} title={t('board.story.title')}>
+    <Icon name="play" size={14} />
+  </button>
+{/if}
+<button class="btn icon" class:on={board.notesOpen} onclick={() => board.toggleNotes()} title={t('board.notes.title')}>
+  <Icon name="doc" size={15} />{#if board.notes.length}<span class="badge">{board.notes.length}</span>{/if}
 </button>
+
+<style>
+  .badge {
+    margin-left: 3px;
+    font-size: 10px;
+    color: var(--accent);
+  }
+</style>

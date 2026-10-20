@@ -76,7 +76,9 @@ pub fn ref_counts<'a>(roots: impl IntoIterator<Item = &'a Path>) -> HashMap<Stri
         for info in list(root) {
             let Ok(m) = load(root, &info.id) else { continue };
             let cards = m.get("cards").and_then(Value::as_object).into_iter().flat_map(|c| c.values());
-            for r in cards.filter_map(|c| c.get("refs")?.as_array()).flatten() {
+            let notes = load_notes(root);
+            let thread = notes.as_array().into_iter().flatten();
+            for r in cards.chain(thread).filter_map(|c| c.get("refs")?.as_array()).flatten() {
                 if r.get("kind").and_then(Value::as_str) == Some("file") {
                     if let Some(id) = r.get("id").and_then(Value::as_str) {
                         *out.entry(id.to_string()).or_insert(0) += 1;
@@ -86,6 +88,27 @@ pub fn ref_counts<'a>(roots: impl IntoIterator<Item = &'a Path>) -> HashMap<Stri
         }
     }
     out
+}
+
+/// The project's notes & snippets thread: cards not (or no longer) placed on a map,
+/// in `<project>/.brausa/notes.json` (a JSON list, newest last).
+fn notes_file(root: &Path) -> PathBuf {
+    root.join(SIDECAR_DIR).join("notes.json")
+}
+
+pub fn load_notes(root: &Path) -> Value {
+    fs::read(notes_file(root)).ok().and_then(|b| serde_json::from_slice(&b).ok()).filter(Value::is_array).unwrap_or(Value::Array(vec![]))
+}
+
+pub fn save_notes(root: &Path, notes: &Value) -> io::Result<()> {
+    if !notes.is_array() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "notes must be a list"));
+    }
+    let p = notes_file(root);
+    fs::create_dir_all(p.parent().unwrap())?;
+    let tmp = p.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_vec_pretty(notes)?)?;
+    fs::rename(tmp, p)
 }
 
 pub fn delete(root: &Path, id: &str) -> io::Result<()> {

@@ -8,7 +8,6 @@ import { board } from './board.svelte';
 import { store } from '../platform';
 import { t, tn } from '../i18n/index.svelte';
 import { basename, dirname } from '../core/paths';
-import { addCard, bounds } from '../core/map';
 import { decisionFor, remember, type ScriptDecisions } from '../core/htmlpreview';
 import type { WebBounds, WebEvent } from '../backend/types';
 import { addVisit, setTitle, toggleBookmark, toUrl, type WebLibrary, type WebPage } from '../core/web';
@@ -150,30 +149,74 @@ class WebState {
     if (this.started && !this.home && this.mode === 'web' && this.url) void this.show(this.url);
   }
 
-  setCollect(on: boolean) {
-    const dir = this.collectDir();
-    if (on && !dir) return app.toast(t('web.noFolder'), true);
-    this.collect = on;
+  /** Picture collector settings: where, from which size, which formats. */
+  collectCfg = $state<CollectCfg>(store.get('webCollect', { dir: '', min: 200, exts: ['jpg', 'png', 'webp', 'gif'] }));
+  /** The dialog asking where and what to collect. */
+  collectDialog = $state(false);
+
+  /** The record button: stop, or ask where and what before starting. */
+  toggleCollect() {
+    if (this.collect) return this.stopCollect();
+    if (!this.collectCfg.dir) this.collectCfg = { ...this.collectCfg, dir: this.target() ?? app.home };
+    this.collectDialog = true;
+  }
+
+  stopCollect() {
+    this.collect = false;
     if (this.collectTimer) clearInterval(this.collectTimer);
     this.collectTimer = null;
-    if (!on) return;
-    app.toast(t('web.collectOn', { folder: dir! }));
+  }
+
+  startCollect(cfg: CollectCfg) {
+    this.collectCfg = cfg;
+    store.set('webCollect', $state.snapshot(cfg));
+    this.collectDialog = false;
+    this.collect = true;
+    if (this.collectTimer) clearInterval(this.collectTimer);
+    app.toast(t('web.collectOn', { folder: cfg.dir }));
     const run = async () => {
-      const d = this.collectDir();
-      if (!d || !this.started || this.home || this.mode !== 'web' || this.local) return;
-      const n = await app.backend.webCollectImages(d).catch(() => 0);
+      const c = this.collectCfg;
+      if (!this.collect || !this.started || this.home || this.mode !== 'web' || this.local) return;
+      const n = await app.backend.webCollectImages(c.dir, c.min, c.exts).catch(() => 0);
       if (n) {
-        app.toast(tn('web.collected', n, { folder: basename(d) }));
-        if (dirname(d) === app.cwd || d === app.cwd) await app.refresh(true);
+        app.toast(tn('web.collected', n, { folder: basename(c.dir) }));
+        if (c.dir === app.cwd) await app.refresh(true);
       }
     };
     void run();
     this.collectTimer = setInterval(run, 5000);
   }
 
-  private collectDir(): string | null {
-    const dir = this.target();
-    return dir ? dir.replace(/[\/]+$/, '') + '/Web-Bilder' : null;
+  // ---------------------------------------------------------------- the page: scrolling and marked text
+
+  /** Text is marked in the page (the "send to project" button shows). */
+  hasSelection = $state(false);
+  /** The bars slide away while scrolling down, and come back when scrolling up. */
+  barsHidden = $state(false);
+  private lastY = 0;
+  private peeking: ReturnType<typeof setInterval> | null = null;
+
+  /** Watch the page while it is shown. */
+  watchPage(on: boolean) {
+    if (!on) {
+      if (this.peeking) clearInterval(this.peeking);
+      this.peeking = null;
+      this.hasSelection = false;
+      this.barsHidden = false;
+      return;
+    }
+    if (this.peeking) return;
+    this.peeking = setInterval(async () => {
+      if (!this.started || this.home || this.mode !== 'web') return;
+      const p = await app.backend.webPeek().catch(() => null);
+      if (!p) return;
+      this.hasSelection = p.sel;
+      const dy = p.y - this.lastY;
+      if (p.y < 40) this.barsHidden = false;
+      else if (dy > 12) this.barsHidden = true;
+      else if (dy < -12) this.barsHidden = false;
+      this.lastY = p.y;
+    }, 400);
   }
 
   /** Show the speed dial instead of the page. */
@@ -267,30 +310,28 @@ class WebState {
     if (app.project || dirname(path) === app.cwd) await app.refresh(true);
   }
 
-  /**
-   * The page, or the text marked in it, as a card on the project's map:
-   * a link back to the page, and the quote as a snippet.
-   */
-  async clip() {
-    const p = app.boardProject;
-    if (!p) return app.toast(t('web.noProject'), true);
+  /** The text marked in the page goes into a project's notes & snippets thread, with a link back. */
+  async sendTo(projectId: string) {
+    const p = app.projects.find((x) => x.id === projectId);
+    if (!p) return;
     try {
       const sel = await app.backend.webSelection();
-      if (board.root !== p.root || !board.map) await board.open(p.root);
       const quote = sel.text.trim();
-      const ref = { kind: 'url' as const, href: sel.url, title: sel.title || sel.url, name: sel.title || sel.url, ...(quote ? { quote } : {}) };
-      board.mutate((m) => {
-        const b = bounds(m, m.roots);
-        const at = { x: b ? b.x + b.w + 40 : 0, y: b ? b.y : 0 };
-        addCard(m, null, at, quote
-          ? { kind: 'snippet', title: sel.title || sel.url, text: quote, refs: [ref], w: 260, h: Math.min(420, Math.max(96, 70 + Math.ceil(quote.length / 34) * 19)) }
-          : { title: sel.title || sel.url, text: sel.url, refs: [ref] });
-      });
-      app.toast(t(quote ? 'web.clippedQuote' : 'web.clippedPage', { project: p.name }));
+      if (!quote) return app.toast(t('web.nothingMarked'), true);
+      const ref = { kind: 'url' as const, href: sel.url, title: sel.title || sel.url, name: sel.title || sel.url, quote };
+      await board.addNote({ kind: 'snippet', title: sel.title || sel.url, text: quote, refs: [ref] }, p.root);
+      app.toast(t('board.notes.added', { name: p.name }));
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
     }
   }
+}
+
+export interface CollectCfg {
+  dir: string;
+  /** Smallest width and height in pixels. */
+  min: number;
+  exts: string[];
 }
 
 export const web = new WebState();

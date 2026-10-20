@@ -6,7 +6,7 @@ import { app } from './app.svelte';
 import { store } from '../platform';
 import { board } from './board.svelte';
 import { t, tn } from '../i18n/index.svelte';
-import type { OverlayResolution, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
+import type { OverlayResolution, WebPreview, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
 
 class WikiState {
   recipes = $state<WikiRecipe[]>([]);
@@ -122,6 +122,56 @@ class WikiState {
   }
 
   /** Two-way sync. The open map is saved first and reloaded if the wiki changed it. */
+  /** Web comparison in progress (the dialog shows it). */
+  webSync = $state<{ name: string; preview: WebPreview } | null>(null);
+  webBusy = $state<string | null>(null);
+
+  /** Compare a wiki with its web version. */
+  async webCompare(name: string) {
+    if (this.webBusy) return;
+    this.webBusy = name;
+    try {
+      const preview = await app.backend.wikiWebFetch(name);
+      if (!preview.new.length && !preview.changed.length && !preview.plugins.some((p) => !p.have)) {
+        await app.backend.wikiWebDiscard(name);
+        app.toast(t('wikis.webSame', { name }));
+        if (preview.hasPassword) this.webSync = { name, preview };
+      } else this.webSync = { name, preview };
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    } finally {
+      this.webBusy = null;
+    }
+  }
+
+  /** Take the chosen changes, sync the wiki, and upload a new version if wanted. */
+  async webApply(titles: string[], plugins: string[], upload: boolean) {
+    const s = this.webSync;
+    if (!s) return;
+    this.webSync = null;
+    try {
+      const n = await app.backend.wikiWebApply(s.name, titles, plugins);
+      if (n || plugins.length) app.toast(t('wikis.webTaken', { n, name: s.name }));
+      await this.load();
+      await this.sync(s.name);
+      if (upload) {
+        this.webBusy = s.name;
+        await app.backend.wikiWebUpload(s.name);
+        app.toast(t('wikis.webUploaded', { name: s.name }));
+      }
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    } finally {
+      this.webBusy = null;
+    }
+  }
+
+  async webCancel() {
+    const s = this.webSync;
+    this.webSync = null;
+    if (s) await app.backend.wikiWebDiscard(s.name).catch(() => {});
+  }
+
   async sync(name: string) {
     if (this.syncing) return;
     this.syncing = name;

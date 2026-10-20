@@ -193,7 +193,7 @@
     const snippet = kind === 'pdf' ? pdfSnippet(range) : anchorText(textEl!, range);
     if (!snippet?.quote) return;
     const entry: Entry = { path: ref.path!, name: ref.name ?? '', ext: ref.ext ?? '', kind: 'file', size: 0, mtime: 0, ctime: 0, tags: [] };
-    drag.begin(e, () => [entry], 'reader', undefined, { data: { snippet }, accepts: ['board'], title: snippet.quote.slice(0, 200) });
+    drag.begin(e, () => [entry], 'reader', undefined, { data: { snippet }, accepts: ['board', 'project'], title: snippet.quote.slice(0, 200) });
   }
 
   function pdfSnippet(range: Range): Snippet | null {

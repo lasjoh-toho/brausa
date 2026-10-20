@@ -124,8 +124,11 @@ pub struct Web {
 /// Runs before every page when the ad blocker is on.
 const ADBLOCK: &str = include_str!("adblock.js");
 
-/// Pictures of the page worth keeping (no icons or spacers), as a JSON list of addresses.
-const IMAGES: &str = "JSON.stringify([...new Set([...document.images].filter(i => i.naturalWidth >= 160 && i.naturalHeight >= 160).map(i => i.currentSrc || i.src).filter(u => /^https?:/.test(u)))])";
+/// Pictures of the page at least MIN pixels wide and high, as a JSON list of addresses.
+const IMAGES: &str = "JSON.stringify([...new Set([...document.images].filter(i => i.naturalWidth >= MIN && i.naturalHeight >= MIN).map(i => i.currentSrc || i.src).filter(u => /^https?:/.test(u)))])";
+
+/// Scroll position and whether text is marked (the panel hides its bars and offers "send").
+const PEEK: &str = "JSON.stringify({y: Math.round(scrollY), sel: String(getSelection()).trim().length > 0})";
 
 fn token() -> String {
     let t = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
@@ -270,8 +273,8 @@ impl Web {
     }
 
     /// Saves the pictures of the shown page into `dir` that were not saved before; returns how many.
-    pub fn collect_images(&self, app: &AppHandle, dir: &Path) -> Result<usize, String> {
-        let raw = self.eval(app, IMAGES)?;
+    pub fn collect_images(&self, app: &AppHandle, dir: &Path, min: u32, exts: &[String]) -> Result<usize, String> {
+        let raw = self.eval(app, &IMAGES.replace("MIN", &min.to_string()))?;
         let inner: String = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
         let urls: Vec<String> = serde_json::from_str(&inner).map_err(|e| e.to_string())?;
         let fresh: Vec<String> = {
@@ -306,11 +309,22 @@ impl Web {
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| "bild".into());
             let name = if Path::new(&stem).extension().is_some() { stem } else { format!("{stem}.{ext}") };
+            let got = Path::new(&name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let got = if got == "jpeg" { "jpg".to_string() } else { got };
+            if !exts.is_empty() && !exts.iter().any(|x| *x == got) {
+                continue;
+            }
             if fs::write(free_path(dir, &safe_name(&name)), &bytes).is_ok() {
                 n += 1;
             }
         }
         Ok(n)
+    }
+
+    /// Scroll position and marked text of the shown page, as JSON.
+    pub fn peek(&self, app: &AppHandle) -> Result<String, String> {
+        let raw = self.eval(app, PEEK)?;
+        serde_json::from_str::<String>(&raw).map_err(|e| e.to_string())
     }
 
     /// Saves the page as it is shown now (HTML after scripts ran) into `dir`.

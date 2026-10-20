@@ -8,6 +8,7 @@
   import Icon from './Icon.svelte';
   import { CATEGORIES } from '../core/format';
   import { web } from '../state/web.svelte';
+  import { board } from '../state/board.svelte';
   import { t } from '../i18n/index.svelte';
 
   let { accent = null }: { accent?: { color: string; light: boolean } | null } = $props();
@@ -28,7 +29,8 @@
     { id: 'board', icon: 'nodes' }
   ];
   // The start page is a project's.
-  const views = $derived(allViews.filter((v) => v.id !== 'start' || app.project));
+  // Start page and map belong to projects.
+  const views = $derived(allViews.filter((v) => (v.id !== 'start' && v.id !== 'board') || app.project));
 
   // Sort menu: picking the current key again reverses the order.
   let sortMenu = $state<{ x: number; y: number } | null>(null);
@@ -72,7 +74,10 @@
   </div>
 {/if}
 
-<header data-tauri-drag-region class="toolbar" class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
+<header data-tauri-drag-region class="toolbar" class:bare={!app.sidebarOpen} class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
+  {#if !app.sidebarOpen}
+    <button class="btn icon menu-btn" onclick={() => app.toggleSidebar()} title={t('toolbar.showSidebar')} aria-label={t('toolbar.showSidebar')}><Icon name="menu" size={15} /></button>
+  {/if}
   <div class="nav">
     <button class="btn icon" onclick={() => app.back()} disabled={!app.history.length} title={t('toolbar.back')}>
       <Icon name="back" />
@@ -216,7 +221,13 @@
   <button class="btn icon" class:on={web.open} onclick={() => web.toggle()} title={t('toolbar.webHint')} aria-label={t('toolbar.web')}>
     <Icon name="globe" size={15} />
   </button>
-  <button class="btn icon" class:on={!!app.pane} onclick={() => app.setPane(app.pane ? null : app.cwd)} title={t('toolbar.paneHint')} aria-label={t('toolbar.pane')}>
+  <button
+    class="btn icon"
+    class:on={app.view === 'board' ? board.panelOpen : !!app.pane}
+    onclick={() => (app.view === 'board' ? board.togglePanel() : app.setPane(app.pane ? null : app.cwd))}
+    title={app.view === 'board' ? t('toolbar.projectFiles') : t('toolbar.paneHint')}
+    aria-label={t('toolbar.pane')}
+  >
     <Icon name="split" size={15} />
   </button>
   <button
@@ -439,5 +450,9 @@
   }
   .mode .btn {
     gap: 5px;
+  }
+  /* macOS: without the sidebar the window buttons sit over the toolbar. */
+  :global(:root[data-platform='mac']) .toolbar.bare {
+    padding-left: 78px;
   }
 </style>

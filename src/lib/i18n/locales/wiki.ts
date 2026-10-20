@@ -1,5 +1,11 @@
 // Wiki editor (recipes from bags) and the overlay tool.
 export const de = {
+  web: 'Im Web',
+  webUrl: 'Webadresse des Wikis (Einzeldatei), z. B. https://…/wiki.html',
+  webUser: 'Benutzer',
+  webPassword: 'Passwort zum Hochladen',
+  webPasswordStored: 'gespeichert – leer lassen behält es',
+  webNote: 'Abgleichen lädt die Web-Version in einen vorübergehenden Bag und zeigt neue und geänderte Tiddler zur Auswahl. Mit Passwort lädt brausa danach eine neue Version hoch (HTTP PUT, z. B. WebDAV). Das Passwort bleibt auf diesem Rechner.',
   readonlyBag: 'schreibgeschützt',
   'tiddlers.one': '{n} Tiddler',
   'tiddlers.other': '{n} Tiddler',
@@ -110,6 +116,12 @@ export const de = {
 };
 
 export const en: typeof de = {
+  web: 'On the web',
+  webUrl: 'Web address of the wiki (single file), e.g. https://…/wiki.html',
+  webUser: 'User',
+  webPassword: 'Password for uploading',
+  webPasswordStored: 'stored – leave empty to keep it',
+  webNote: 'Comparing loads the web version into a temporary bag and lists new and changed tiddlers to choose from. With a password brausa then uploads a new version (HTTP PUT, e.g. WebDAV). The password stays on this computer.',
   readonlyBag: 'read-only',
   'tiddlers.one': '{n} tiddler',
   'tiddlers.other': '{n} tiddlers',

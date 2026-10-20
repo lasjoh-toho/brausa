@@ -25,7 +25,7 @@ import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
 import { inRange, type DateField, type DateRange } from '../core/dates';
-import { extsOf, family, formatSize } from '../core/format';
+import { category, extsOf, family, formatSize } from '../core/format';
 
 export const TILE_MIN = 96;
 export const TILE_MAX = 360;
@@ -101,6 +101,21 @@ class AppState {
   desc = $state(this.recursive ? store.get('descFlat', false) : store.get('desc', false));
   /** Show system files (only offered inside a chosen folder or with a search of at least five characters). */
   showSystem = $state(false);
+  /** A story is being presented: no sidebar, no toolbar, the window full screen. */
+  presenting = $state(false);
+  setPresenting(on: boolean) {
+    this.presenting = on;
+    void import('@tauri-apps/api/window')
+      .then((w) => w.getCurrentWindow().setFullscreen(on))
+      .catch(() => {});
+  }
+
+  /** The sidebar is shown (the hamburger next to the window buttons hides it). */
+  sidebarOpen = $state(store.get('sidebarOpen', true));
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+    store.set('sidebarOpen', this.sidebarOpen);
+  }
   /** Width of the preview column in the three-panel view. */
   previewWidth = $state(store.get('previewWidth', 420));
   search = $state('');
@@ -633,8 +648,8 @@ class AppState {
     }
     this.cwd = path;
     this.setProject(null);
-    // The start page belongs to projects; folders show their files.
-    if (this.view === 'start') {
+    // Start page and map belong to projects; folders show their files.
+    if (this.view === 'start' || this.view === 'board') {
       this.view = 'stream';
       store.set('view', 'stream');
     }
@@ -1271,6 +1286,17 @@ class AppState {
     if (e.kind === 'dir') return this.navigate(e.path);
     // Archives open like folders (read only).
     if (isArchive(e.path) && !inArchive(e.path)) return this.navigate(archiveRoot(e.path));
+    // Documents brausa can show open in the side panel (snippets go from there onto the map).
+    if (!inArchive(e.path)) {
+      if (e.ext === 'html' || e.ext === 'htm') return (await import('./web.svelte')).web.openLocal(e.path);
+      const { board, READABLE } = await import('./board.svelte');
+      if (READABLE.has(e.ext) || category(e.ext) === 'text') return board.openReader({ kind: 'file', path: e.path, name: e.name, ext: e.ext });
+    }
+    return this.openExternal(e);
+  }
+
+  /** Open with the system's default app. */
+  async openExternal(e: Entry) {
     try {
       await this.backend.openDefault(e.path);
     } catch (err) {

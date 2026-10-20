@@ -1,6 +1,6 @@
 import type { SmartFolder } from '../core/smart';
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
-import type { ProjectMap } from '../core/map';
+import type { NoteCard, ProjectMap } from '../core/map';
 
 export interface OsDrag {
   type: 'enter' | 'over' | 'drop' | 'leave';
@@ -100,6 +100,25 @@ export interface WikiRecipe {
   local: boolean;
   /** Overlays kept on purpose as this wiki's own variant. */
   kept?: string[];
+  /** The same wiki as a single file on the web. */
+  web?: { url: string; user: string } | null;
+}
+
+/** A tiddler that is new or different in the web version. */
+export interface WebChange {
+  title: string;
+  webModified: string | null;
+  localModified: string | null;
+  webText: string;
+  localText: string;
+}
+
+/** What the web version of a wiki brings. */
+export interface WebPreview {
+  new: WebChange[];
+  changed: WebChange[];
+  plugins: { title: string; version: string; have: boolean }[];
+  hasPassword: boolean;
 }
 
 export type TiddlerFields = Record<string, string>;
@@ -231,6 +250,9 @@ export interface Backend {
   /** Project maps, stored in `<root>/.brausa/maps/`. `root` must be a project. */
   listMaps(root: string): Promise<MapInfo[]>;
   loadMap(root: string, id: string): Promise<ProjectMap>;
+  /** The project's notes & snippets thread. */
+  loadNotes(root: string): Promise<NoteCard[]>;
+  saveNotes(root: string, notes: NoteCard[]): Promise<void>;
   saveMap(root: string, map: ProjectMap): Promise<void>;
   deleteMap(root: string, id: string): Promise<void>;
   /** Stable index ids for files placed on a map (they follow the file when it moves). */
@@ -244,7 +266,9 @@ export interface Backend {
    */
   webOpen(url: string, b: WebBounds, adblock: boolean): Promise<void>;
   /** Save the pictures of the shown page into `dir` (each only once); returns how many. */
-  webCollectImages(dir: string): Promise<number>;
+  webCollectImages(dir: string, min: number, exts: string[]): Promise<number>;
+  /** Scroll position of the page and whether text is marked in it. */
+  webPeek(): Promise<{ y: number; sel: boolean }>;
   webPlace(b: WebBounds, visible: boolean): Promise<void>;
   webClose(): Promise<void>;
   webGo(how: 'back' | 'forward' | 'reload'): Promise<void>;
@@ -266,6 +290,16 @@ export interface Backend {
   putWikiRecipe(r: WikiRecipe): Promise<WikiRecipe>;
   deleteWikiRecipe(name: string): Promise<void>;
   syncWiki(name: string): Promise<WikiSyncReport>;
+  /** Load the web version into a temporary bag and list what differs. */
+  wikiWebFetch(name: string): Promise<WebPreview>;
+  /** Take chosen tiddlers (into the wiki's own bag) and plugins (into bag „plugins“); the temporary bag goes. */
+  wikiWebApply(name: string, titles: string[], plugins: string[]): Promise<number>;
+  wikiWebDiscard(name: string): Promise<void>;
+  /** Upload the wiki as a new version of its web file. */
+  wikiWebUpload(name: string): Promise<void>;
+  /** Store (or with null forget) the upload password. */
+  wikiWebPassword(name: string, password: string | null): Promise<void>;
+  wikiWebHasPassword(name: string): Promise<boolean>;
   wikiOverlays(): Promise<WikiOverlay[]>;
   /** The layers of a wiki in load order (bottom first, the last one wins): bag and its tiddler titles. */
   wikiLayers(recipe: string): Promise<WikiLayer[]>;

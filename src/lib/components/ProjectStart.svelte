@@ -19,7 +19,12 @@
   });
 
   const cards = $derived(board.root === p.root && board.map ? Object.values(board.map.cards) : []);
-  const snippets = $derived(cards.filter((c) => c.kind === 'snippet').slice(-6).reverse());
+  // The thread first (newest on top), then snippets placed on the open map.
+  const snippets = $derived(
+    [...(board.root === p.root ? board.notes : [])].reverse().map((n) => ({ id: n.id, text: n.text, title: n.title, thread: true }))
+      .concat(cards.filter((c) => c.kind === 'snippet').reverse().map((c) => ({ id: c.id, text: c.text, title: c.title, thread: false })))
+      .slice(0, 8)
+  );
   const statuses = $derived(board.map?.statuses ?? DEFAULT_STATUSES);
   const columns = $derived(statuses.map((s) => ({ s, n: cards.filter((c) => c.status === s).length })));
   const projectWikis = $derived(wikis.recipes.filter((r) => r.bags.some((b) => b.startsWith(`@map:${p.root}|`))));
@@ -64,7 +69,7 @@
       {#if snippets.length}
         <ul class="quotes">
           {#each snippets as c (c.id)}
-            <li><button onclick={() => openMap()} title={c.title}>„{(c.text || c.title).slice(0, 160)}“</button></li>
+            <li><button onclick={() => (c.thread && board.toggleNotes(true), openMap())} title={c.title}>{c.thread ? '' : '„'}{(c.text || c.title).slice(0, 160)}{c.thread ? '' : '“'}</button></li>
           {/each}
         </ul>
       {:else}
