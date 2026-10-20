@@ -28,6 +28,7 @@ import {
   worldRect,
   type Camera,
   type CardRef,
+  type MapCard,
   type ProjectMap
 } from '../core/map';
 import type { Entry } from '../core/types';
@@ -133,6 +134,34 @@ class BoardState {
   }
 
   /** Selected cards (or, with none, the current view) become stops of the shown story. */
+  /** Picking: the next clicked cards join the story (Esc or the button ends it). */
+  picking = $state(false);
+
+  addStop(id: string) {
+    if (!this.map?.cards[id]) return;
+    this.mutate((m) => void activeStory(m).steps.push({ id: uid('t'), kind: 'card', ref: id }));
+    app.toast(t('board.story.added', { title: this.map.cards[id].title || t('map.untitled') }));
+  }
+
+  /** The active object joins the story, or (nothing selected) the next clicked card. */
+  pickStop() {
+    if (this.selection.size) {
+      this.addStops();
+      this.picking = false;
+    } else this.picking = !this.picking;
+  }
+
+  /** The current view joins the story (a frame). */
+  addView() {
+    if (!this.map) return;
+    this.mutate((m) => void activeStory(m).steps.push({ id: uid('t'), kind: 'view', cam: { ...this.cam } }));
+  }
+
+  /** The bag a wiki uses for this map. */
+  mapBag(): string {
+    return this.map && this.root ? `@map:${this.root}|${this.map.id}` : '';
+  }
+
   addStops() {
     if (!this.map) return;
     const ids = [...this.selection];
@@ -284,6 +313,26 @@ class BoardState {
   /** The card for a note, to place on the map at `at` (plane coordinates of `parent`). */
   noteCard(n: NoteCard) {
     return { kind: n.kind === 'snippet' ? ('snippet' as const) : undefined, title: n.title, text: n.text, refs: n.refs, color: n.color ?? null, w: n.w ?? 240, h: n.h ?? 140 };
+  }
+
+  /** A new card in a Kanban column, below everything on the map. */
+  addToColumn(init: Partial<MapCard>, status: string, before: string | null = null) {
+    let id = '';
+    this.mutate((mm) => {
+      const b = bounds(mm, mm.roots);
+      const c = addCard(mm, null, { x: b ? b.x : 0, y: b ? b.y + b.h + 40 : 0 }, { ...init, status });
+      id = c.id;
+      const order = (mm.kanban ??= {}).order ?? [];
+      const at = before ? order.indexOf(before) : -1;
+      mm.kanban.order = at < 0 ? [...order, c.id] : [...order.slice(0, at), c.id, ...order.slice(at)];
+    });
+    return id;
+  }
+
+  /** A note from the thread into a Kanban column (it leaves the thread). */
+  noteToColumn(n: NoteCard, status: string, fromThread = true) {
+    this.addToColumn(this.noteCard(n), status);
+    if (fromThread) this.removeNote(n.id);
   }
 
   /** Put a note in the middle of what the map shows, and take it out of the thread. */

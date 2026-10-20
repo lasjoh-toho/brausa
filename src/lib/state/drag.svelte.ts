@@ -19,7 +19,7 @@ import { app } from './app.svelte';
 import type { NoteCard } from '../core/map';
 import { t } from '../i18n/index.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project' | 'notes' | 'kanban' | 'wiki';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
 export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
@@ -96,6 +96,12 @@ class DragController {
         return this.isFolderFunnel() ? t('drag.funnel') : this.source === 'canvas' ? '' : t('drag.moveHere');
       case 'column':
         return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? t('drag.removeTag') : t('drag.setTag', { tag: h.key ?? '' })) : t('drag.moveTo', { name: h.key ?? '' });
+      case 'notes':
+        return t('drag.toThread');
+      case 'wiki':
+        return t('drag.toWiki', { name: h.key ?? '' });
+      case 'kanban':
+        return t('drag.toColumn', { name: h.key ?? '' });
       case 'grid-trigger':
         return t('drag.openGrid');
       case 'grid-up':
@@ -215,6 +221,49 @@ class DragController {
 
   externalLeave() {
     if (this.source === 'external') this.reset();
+  }
+
+  // ------------------------------------------------ out of the web panel
+
+  /** Marked text, a picture or a link is dragged out of the web panel (brausa follows the page's pointer). */
+  webEnter(items: Entry[], data: unknown, accepts: DropKind[] | null, title: string) {
+    this.cleanup?.();
+    this.items = items;
+    this.source = 'web';
+    this.data = data;
+    this.accepts = accepts;
+    this.title = title;
+    this.copy = false;
+    this.active = true;
+    document.body.classList.add('dragging');
+  }
+
+  webOver(x: number, y: number) {
+    if (this.source !== 'web' || !this.active) return;
+    this.x = x;
+    this.y = y;
+    this.hitTest(x, y);
+  }
+
+  /** `resolve` turns the drag into what is dropped (a picture is downloaded only now). */
+  async webDrop(x: number, y: number, resolve: (hit: DropHit) => Promise<{ items: Entry[]; data?: unknown } | null>) {
+    if (this.source !== 'web') return;
+    this.hitTest(x, y);
+    const hit = this.hit;
+    this.reset();
+    if (!hit) return;
+    try {
+      const r = await resolve(hit);
+      if (!r) return;
+      if (hit.kind === 'board') await this.onBoardDrop?.(r.items, x, y, r.data);
+      else await performDrop(hit, r.items, 'web', false, r.data);
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    }
+  }
+
+  webCancel() {
+    if (this.source === 'web') this.reset();
   }
 
   // ------------------------------------------------ drop grid
@@ -359,6 +408,7 @@ class DragController {
 
   /** Out of an archive is unpacking; otherwise ⌥/Ctrl decides between copy and move. */
   private verb() {
+    if (this.source === 'web') return 'drag.saveTo';
     if (this.hit?.path && inArchive(this.hit.path)) return 'drag.packInto';
     return this.items.some((i) => inArchive(i.path)) ? 'drag.unpackTo' : this.copy ? 'drag.copyTo' : 'drag.moveTo';
   }
@@ -387,11 +437,14 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         break;
       case 'project': {
         // A snippet (or a note from a thread) goes into the project's thread.
-        const d = data as { snippet?: { quote: string; page?: number }; note?: NoteCard } | undefined;
+        const d = data as { snippet?: { quote: string; page?: number }; note?: NoteCard; fresh?: boolean } | undefined;
         const p = app.projects.find((x) => x.id === h.key);
         if (p && (d?.snippet || d?.note)) {
           const { board } = await import('./board.svelte');
-          if (d.note) {
+          if (d.note && d.fresh) {
+            await board.addNote({ ...d.note, id: undefined }, p.root);
+            app.toast(t('board.notes.added', { name: p.name }));
+          } else if (d.note) {
             if (p.root !== board.root) await board.sendNote(d.note.id, p.root, p.name);
           } else {
             const [ref] = await board.refsFor(items);
@@ -435,10 +488,56 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         else if (c?.path) await app.transfer(items, c.path, mode);
         break;
       }
+      case 'notes': {
+        // Into the project's notes & snippets thread.
+        const { board } = await import('./board.svelte');
+        const d = data as { snippet?: { quote: string; page?: number }; note?: NoteCard; fresh?: boolean } | undefined;
+        if (d?.note && d.fresh) await board.addNote({ ...d.note, id: undefined });
+        else if (d?.note) break;
+        else if (d?.snippet) {
+          const [ref] = await board.refsFor(items);
+          await board.addNote({ kind: 'snippet', title: items[0]?.name ?? '', text: d.snippet.quote, refs: ref ? [{ ...ref, ...d.snippet }] : [] });
+        } else {
+          const refs = await board.refsFor(items);
+          for (const r of refs) await board.addNote({ kind: 'note', title: r.name ?? '', text: '', refs: [r] });
+        }
+        break;
+      }
+      case 'kanban': {
+        // Into a Kanban column: a card with that status.
+        const { board } = await import('./board.svelte');
+        const d = data as { note?: NoteCard; fresh?: boolean } | undefined;
+        if (d?.note) board.noteToColumn(d.note, h.key!, !d.fresh);
+        else for (const r of await board.refsFor(items)) board.addToColumn({ title: r.name ?? '', refs: [r], h: board.isImage(r) ? 190 : 120 }, h.key!);
+        break;
+      }
+      case 'wiki': {
+        // A tiddler in the wiki's own bag: snippets with their source, files as links.
+        const d = data as { snippet?: { quote: string; page?: number }; note?: NoteCard } | undefined;
+        const name = h.key!;
+        const tiddlers: Record<string, string>[] = [];
+        if (d?.note) tiddlers.push(noteTiddler(d.note));
+        else if (d?.snippet)
+          tiddlers.push({ title: items[0]?.name ?? 'Snippet', text: `<<<\n${d.snippet.quote}\n<<< [ext[${items[0]?.name ?? ''}|file://${encodeURI(items[0]?.path ?? '')}]]`, tags: 'Snippet' });
+        else for (const e of items) tiddlers.push({ title: e.name, text: `[ext[${e.name}|file://${encodeURI(e.path)}]]`, tags: 'brausa' });
+        for (const f of tiddlers) {
+          const title = await app.backend.wikiAddTiddler(name, f);
+          app.toast(t('drag.wikiAdded', { title, name }));
+        }
+        break;
+      }
       case 'grid-trigger':
         break;
     }
   } catch (e) {
     app.toast(String(e), true);
   }
+}
+
+/** A note or snippet as a tiddler: the text, its source as a link, the kind as a tag. */
+export function noteTiddler(n: Pick<NoteCard, 'title' | 'text' | 'refs'> & { kind?: string }): Record<string, string> {
+  const ref = n.refs?.[0];
+  const src = ref?.href ? `[ext[${ref.title || ref.href}|${ref.href}]]` : ref?.path ? `[ext[${ref.name ?? ref.path}|file://${encodeURI(ref.path)}]]` : '';
+  const text = n.kind === 'snippet' ? `<<<\n${n.text}\n<<< ${src}` : `${n.text}${src ? `\n\n${src}` : ''}`;
+  return { title: n.title || n.text.slice(0, 60) || 'Snippet', text, tags: n.kind === 'snippet' ? 'Snippet' : 'Notiz', ...(ref?.href ? { source: ref.href } : {}) };
 }

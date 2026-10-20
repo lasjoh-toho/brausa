@@ -5,7 +5,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
 import { t } from '../i18n/index.svelte';
 import type { NoteCard, ProjectMap } from '../core/map';
-import { WALK_LIMIT, type OsDrag } from './types';
+import { WALK_LIMIT, type OsDrag, type WebDrag } from './types';
 import type {
   Backend,
   IndexReport,
@@ -44,6 +44,15 @@ export class TauriBackend implements Backend {
 
   places() {
     return invoke<{ name: string; path: string }[]>('places');
+  }
+
+  volumes() {
+    return invoke<{ name: string; path: string }[]>('volumes');
+  }
+
+  async findNames(roots: string[], text: string, opts: { includeHidden?: boolean; limit?: number } = {}) {
+    const r = await invoke<{ entries: Entry[]; more: boolean }>('find', { roots, text, includeHidden: opts.includeHidden ?? false, limit: opts.limit ?? 2000 });
+    return { entries: r.entries.map(withThumb), more: r.more };
   }
 
   async listDir(path: string, opts: { includeHidden?: boolean } = {}) {
@@ -237,7 +246,15 @@ export class TauriBackend implements Backend {
   }
 
   webPeek() {
-    return invoke<{ y: number; sel: boolean }>('web_peek');
+    return invoke<{ y: number; sel: boolean; drag: WebDrag | null }>('web_peek');
+  }
+
+  webFetchImage(url: string, dir: string) {
+    return invoke<string>('web_fetch_image', { url, dir });
+  }
+
+  webDragDone() {
+    return invoke<void>('web_drag_done');
   }
 
   webPlace(bounds: WebBounds, visible: boolean) {
@@ -363,6 +380,10 @@ export class TauriBackend implements Backend {
 
   wikiWebHasPassword(name: string) {
     return invoke<boolean>('tw_web_has_password', { name });
+  }
+
+  wikiAddTiddler(name: string, fields: Record<string, string>) {
+    return invoke<string>('tw_add_tiddler', { name, fields });
   }
 
   wikiSearch(query: string) {

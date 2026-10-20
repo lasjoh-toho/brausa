@@ -14,6 +14,17 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.12
+
+- **Search finds folders** and files in subfolders, not only in the folder shown. When nothing is found, **"Search in all places"** drops the folder and searches the whole home folder and all drives.
+- **Media** in the sidebar: external drives (USB sticks, memory cards, network drives) appear as soon as they are connected.
+- **Drag out of the web panel:** marked text, pictures and links can be dragged onto a project, the map, the notes & snippets thread, a Kanban column or a wiki. Pictures are saved only when dropped (into the folder they land on, else the project's folder).
+- **Thread and Kanban:** map and Kanban cards can be dragged back into the thread, thread items into a Kanban column.
+- **Card menu above the card** (also while editing), with a dropdown for the Kanban column, a **palette** with many more colours (and any other), and the choice to colour cards by their Kanban column. ▶ adds cards to the presentation; the story panel adds the view or the **next clicked cards**, and **"Open in the wiki"** opens the wiki holding the map (or creates one with this map as bag).
+- A selected card with a scrollbar **scrolls** with the wheel instead of zooming the map.
+- **Select by size** (right-click on the background): all pictures, videos or files from or up to a size.
+- Snippets, notes and cards can be **dropped onto a wiki** in the sidebar; they become tiddlers with their source.
+
 ### New in 0.11
 
 - **Wikis on the web:** give a wiki its web address (when creating it or in its settings). "Compare" loads the web version into a temporary bag, lists new and changed tiddlers to take over (and plugins for the plugin folder), then removes the bag. With a stored password (kept only on this computer) brausa uploads the new version.
@@ -70,6 +81,16 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.12: Ordnersuche, Medien, Ziehen aus dem Web-Fenster, Kartenmenü mit Palette**
+- **Die Suche findet Ordner** und Dateien in Unterordnern, nicht nur im gezeigten Ordner. Findet sie nichts, hebt **„An allen Orten suchen“** die Ordnerauswahl auf und sucht im ganzen Home-Ordner und auf allen Laufwerken.
+- **Medien** in der Seitenleiste: externe Laufwerke (USB-Sticks, Speicherkarten, Netzlaufwerke) erscheinen, sobald sie angeschlossen sind.
+- **Aus dem Web-Fenster ziehen:** markierten Text, Bilder und Links auf ein Projekt, die Map, den Notizen-&-Snippets-Thread, eine Kanban-Spalte oder ein Wiki ziehen. Bilder werden erst beim Ablegen gespeichert (in den Ordner, auf den sie fallen, sonst in den Projektordner).
+- **Thread und Kanban:** Karten der Map und des Kanbans lassen sich in den Thread zurückziehen, Einträge des Threads in eine Kanban-Spalte.
+- **Kartenmenü über der Karte** (auch beim Bearbeiten), mit Auswahlliste für die Kanban-Spalte, einer **Palette** mit viel mehr Farben (und jeder anderen) und der Wahl, Karten in der Farbe ihrer Kanban-Spalte zu zeigen. ▶ hängt Karten an die Präsentation; im Story-Feld kommen die Ansicht oder die **nächsten angeklickten Karten** dazu, und **„Im Wiki öffnen“** öffnet das Wiki mit dieser Map (oder legt eines mit dieser Map als Bag an).
+- Eine markierte Karte mit Scrollbalken **scrollt** mit dem Mausrad, statt die Map zu zoomen.
+- **Nach Größe markieren** (Rechtsklick auf die Fläche): alle Bilder, Videos oder Dateien ab oder bis zu einer Größe.
+- Snippets, Notizen und Karten lassen sich **auf ein Wiki** in der Seitenleiste ziehen; sie werden dort Tiddler mit ihrer Quelle.
 
 **Neu in 0.11: Wikis im Web, Notizen-Thread, Geschichten und Präsentation, Kanban**
 - **Wikis im Web:** einem Wiki seine Webadresse geben (beim Anlegen oder im Zahnrad). „Abgleichen“ lädt die Web-Fassung in einen temporären Bag, zeigt neue und geänderte Tiddler zur Übernahme (und Plugins für den Plugin-Ordner) und entfernt den Bag wieder. Mit gespeichertem Passwort (nur auf diesem Rechner) lädt brausa die neue Fassung hoch.

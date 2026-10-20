@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '../state/app.svelte';
+  import { basename } from '../core/paths';
   import { drag } from '../state/drag.svelte';
   import { tagColor } from '../core/tags';
   import { UNTAGGED, within } from '../core/views';
@@ -105,6 +106,14 @@
       <button class="btn primary" onclick={() => app.resumeStuck()}>{t('files.stuckResume', { place: app.stuckPlace(s) })}</button>
       <button class="btn" onclick={() => (app.stuck = null)}>{t('common.close')}</button>
     </div>
+  {/if}
+  {#if app.findText && !app.dupes && (app.everywhere || app.finding || app.foundMore)}
+    <p class="truncated">
+      <Icon name="search" size={13} />
+      {app.everywhere ? t('files.searchEverywhere') : t('files.searchBelow', { folder: basename(app.cwd) || app.cwd })}
+      {#if app.finding}<span class="muted">{t('files.searching')}</span>{:else if app.foundMore}<span class="muted">{t('files.searchMore')}</span>{/if}
+      {#if app.everywhere}<button class="btn" onclick={() => (app.everywhere = false)}>{t('files.searchHere', { folder: basename(app.cwd) || app.cwd })}</button>{/if}
+    </p>
   {/if}
   {#if app.truncated && !app.dupes}
     <p class="truncated"><Icon name="warn" size={13} />{t('files.truncated', { n: WALK_LIMIT.toLocaleString(loc()) })}</p>
@@ -237,6 +246,9 @@
   }
   .grow {
     flex: 1;
+  }
+  .truncated .muted {
+    color: var(--fg-faint);
   }
   .truncated {
     display: flex;

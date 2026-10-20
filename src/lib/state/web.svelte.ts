@@ -9,7 +9,10 @@ import { store } from '../platform';
 import { t, tn } from '../i18n/index.svelte';
 import { basename, dirname } from '../core/paths';
 import { decisionFor, remember, type ScriptDecisions } from '../core/htmlpreview';
-import type { WebBounds, WebEvent } from '../backend/types';
+import type { WebBounds, WebDrag, WebEvent } from '../backend/types';
+import { drag, type DropHit } from './drag.svelte';
+import type { Entry } from '../core/types';
+import type { NoteCard } from '../core/map';
 import { addVisit, setTitle, toggleBookmark, toUrl, type WebLibrary, type WebPage } from '../core/web';
 
 export { toUrl };
@@ -211,12 +214,69 @@ class WebState {
       const p = await app.backend.webPeek().catch(() => null);
       if (!p) return;
       this.hasSelection = p.sel;
+      if (p.drag && p.drag.id !== this.dragId) this.followDrag(p.drag);
       const dy = p.y - this.lastY;
       if (p.y < 40) this.barsHidden = false;
       else if (dy > 12) this.barsHidden = true;
       else if (dy < -12) this.barsHidden = false;
       this.lastY = p.y;
-    }, 400);
+    }, 150);
+  }
+
+  // ---------------------------------------------------------------- dragging out of the page
+
+  /** The page's drag being followed (or handled), by its id. */
+  private dragId = 0;
+
+  /** What a drag out of the page carries: a snippet or link as a note, a picture as a file-to-be. */
+  private dragPayload(d: WebDrag): { items: Entry[]; data?: unknown; title: string } {
+    const name = d.kind === 'image' ? (d.alt || decodeURIComponent((d.src ?? '').split(/[?#]/)[0].split('/').pop() || 'Bild')) : d.title || d.url;
+    const entry: Entry = { path: '', name, ext: '', kind: 'file', size: 0, mtime: 0, ctime: 0, tags: [] };
+    if (d.kind === 'image') return { items: [entry], title: name };
+    const href = d.kind === 'link' ? d.href! : d.url;
+    const text = d.kind === 'link' ? d.text || d.href! : d.text!;
+    const ref = { kind: 'url' as const, href, title: d.title || href, name: d.kind === 'link' ? text : d.title || href, ...(d.kind === 'text' ? { quote: text } : {}) };
+    const note: NoteCard = { id: '', kind: d.kind === 'text' ? 'snippet' : 'note', title: d.kind === 'link' ? text : d.title || d.url, text: d.kind === 'text' ? text : href, refs: [ref], at: Date.now() };
+    return { items: [entry], data: { note, fresh: true }, title: text.slice(0, 200) };
+  }
+
+  /** Follows the page's pointer while the button is down, then drops where it was let go. */
+  private async followDrag(first: WebDrag) {
+    this.dragId = first.id;
+    const p = this.dragPayload(first);
+    drag.webEnter(p.items, p.data, first.kind === 'image' ? null : ['board', 'project', 'notes', 'kanban', 'wiki'], p.title);
+    let d: WebDrag | null = first;
+    const at = (d: WebDrag) => ({ x: (this.rect?.x ?? 0) + d.x, y: (this.rect?.y ?? 0) + d.y });
+    while (d && d.id === first.id && d.down) {
+      const q = at(d);
+      drag.webOver(q.x, q.y);
+      await new Promise((r) => setTimeout(r, 30));
+      d = (await app.backend.webPeek().catch(() => null))?.drag ?? null;
+    }
+    await app.backend.webDragDone().catch(() => {});
+    if (!d || d.id !== first.id || d.cancel) return drag.webCancel();
+    const q = at(d);
+    await drag.webDrop(q.x, q.y, (hit) => this.resolveDrop(d!, hit));
+  }
+
+  /** A picture is downloaded only when it is dropped: into the folder it lands on, else the project's (or Downloads). */
+  private async resolveDrop(d: WebDrag, hit: DropHit): Promise<{ items: Entry[]; data?: unknown } | null> {
+    const p = this.dragPayload(d);
+    if (d.kind !== 'image') return p;
+    const dir = (hit.kind === 'folder' || hit.kind === 'crumb') && hit.path ? hit.path : this.target();
+    if (!dir) {
+      app.toast(t('web.noFolder'), true);
+      return null;
+    }
+    const path = await app.backend.webFetchImage(d.src!, dir);
+    const items = await app.backend.entries([path]);
+    if (hit.kind === 'folder' || hit.kind === 'crumb') {
+      // Already where it was dropped.
+      app.toast(t('web.downloaded', { name: basename(path), folder: basename(dir) }));
+      await app.refresh(true);
+      return null;
+    }
+    return { items };
   }
 
   /** Show the speed dial instead of the page. */

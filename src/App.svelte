@@ -30,12 +30,19 @@
   import WikiSettings from './lib/components/WikiSettings.svelte';
   import WebSync from './lib/components/WebSync.svelte';
   import CollectDialog from './lib/components/CollectDialog.svelte';
+  import SizeSelect from './lib/components/SizeSelect.svelte';
   import { wikis } from './lib/state/wikis.svelte';
   import { t } from './lib/i18n/index.svelte';
 
   let toolbar = $state<Toolbar>();
   let accent = $state<{ color: string; light: boolean } | null>(null);
   const tagTargets = $derived(app.tagSource === 'staging' ? app.staging : app.selectedEntries);
+
+  // A search also looks below the folder (or everywhere) for matching names.
+  $effect(() => {
+    void [app.findText, app.cwd, app.everywhere, app.home];
+    app.scheduleFind();
+  });
 
   onMount(() => {
     app.init();
@@ -121,7 +128,8 @@
   <DropGrid />
   {#if app.preview}<Preview onaccent={(c) => (accent = c)} />{/if}
   {#if app.tagSource && tagTargets.length}<TagBar targets={tagTargets} onclose={() => (app.tagSource = null)} />{/if}
-  {#if wikis.editing !== null}<WikiEditor onclose={() => (wikis.editing = null)} />{/if}
+  {#if app.sizeSelectOpen}<SizeSelect onclose={() => (app.sizeSelectOpen = false)} />{/if}
+  {#if wikis.editing !== null}<WikiEditor onclose={() => ((wikis.editing = null), (wikis.preset = null))} />{/if}
   {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
   {#if wikis.overviewOpen}<BagOverview onclose={() => (wikis.overviewOpen = false)} />{/if}
   {#if wikis.settingsOpen}<WikiSettings />{/if}

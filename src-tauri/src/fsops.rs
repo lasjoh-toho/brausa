@@ -231,6 +231,85 @@ pub fn walk(root: &Path, max_depth: usize, include_hidden: bool, limit: usize, e
     out
 }
 
+/// Files and folders below each root whose name contains `needle` (case-insensitive), at
+/// most `limit` and for at most `budget`; `rel_dir` is relative to the root they were found in.
+pub fn find(roots: &[PathBuf], needle: &str, include_hidden: bool, limit: usize, budget: std::time::Duration) -> (Vec<Entry>, bool) {
+    let needle = needle.to_lowercase();
+    let start = std::time::Instant::now();
+    let mut out = Vec::new();
+    for root in roots {
+        let it = WalkDir::new(root).min_depth(1).max_depth(32).into_iter().filter_entry(|e| {
+            let n = e.file_name().to_string_lossy();
+            n != SIDECAR_DIR && (include_hidden || !skip_walk(e))
+        });
+        for (i, e) in it.flatten().enumerate() {
+            if i % 256 == 0 && start.elapsed() > budget {
+                return (out, true);
+            }
+            if !e.file_name().to_string_lossy().to_lowercase().contains(&needle) {
+                continue;
+            }
+            let parent = e.path().parent().unwrap_or(root).to_path_buf();
+            if let Ok(mut entry) = make_entry(e.path()) {
+                entry.rel_dir = Some(parent.strip_prefix(root).unwrap_or(Path::new("")).to_string_lossy().replace('\\', "/"));
+                out.push(entry);
+                if out.len() >= limit {
+                    return (out, true);
+                }
+            }
+        }
+    }
+    (out, false)
+}
+
+/// Mounted drives other than the system disk: USB sticks, memory cards, network shares.
+pub fn volumes() -> Vec<(String, PathBuf)> {
+    let mut v: Vec<(String, PathBuf)> = Vec::new();
+    let mut add_children = |dir: &Path| {
+        if let Ok(rd) = fs::read_dir(dir) {
+            for e in rd.flatten() {
+                let p = e.path();
+                let name = e.file_name().to_string_lossy().to_string();
+                // macOS lists the system disk in /Volumes as a link to `/`.
+                if name.starts_with('.') || fs::canonicalize(&p).map(|c| c == Path::new("/")).unwrap_or(false) {
+                    continue;
+                }
+                if p.is_dir() && !v.iter().any(|(_, q)| *q == p) {
+                    v.push((name, p));
+                }
+            }
+        }
+    };
+    if cfg!(target_os = "macos") {
+        add_children(Path::new("/Volumes"));
+    } else if cfg!(windows) {
+        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()).to_uppercase();
+        for c in b'A'..=b'Z' {
+            let d = format!("{}:", c as char);
+            let root = PathBuf::from(format!("{d}\\"));
+            if d != system && root.is_dir() {
+                v.push((d, root));
+            }
+        }
+    } else {
+        // Only real mounts below the usual places, not every folder in /mnt.
+        let mounts = fs::read_to_string("/proc/mounts").unwrap_or_default();
+        for line in mounts.lines() {
+            let Some(target) = line.split_whitespace().nth(1) else { continue };
+            // Spaces in mount points are written as \040.
+            let target = target.replace("\\040", " ");
+            let p = PathBuf::from(&target);
+            let under = ["/media/", "/run/media/", "/mnt/"].iter().any(|r| target.starts_with(r));
+            if under && p.is_dir() && !v.iter().any(|(_, q)| *q == p) {
+                let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(target.clone());
+                v.push((name, p));
+            }
+        }
+    }
+    v.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    v
+}
+
 /// `name.ext` → `name 2.ext`, `name 3.ext`, … until free.
 pub fn unique_dest(dir: &Path, name: &str) -> PathBuf {
     let first = dir.join(name);
@@ -371,6 +450,12 @@ mod tests {
         let mut names: Vec<String> = walk(root, 10, false, 100, None).into_iter().map(|e| e.name).collect();
         names.sort();
         assert_eq!(names, ["a.jpg", "d.txt"]);
+        // Searching finds folders too, and skips the same places.
+        let (found, more) = find(&[root.to_path_buf()], "FOT", false, 100, std::time::Duration::from_secs(5));
+        assert!(!more);
+        assert_eq!(found.iter().map(|e| (e.name.as_str(), e.kind)).collect::<Vec<_>>(), [("Fotos", "dir")]);
+        let (found, _) = find(&[root.to_path_buf()], "c.js", false, 100, std::time::Duration::from_secs(5));
+        assert!(found.is_empty(), "program folders are not searched");
         // Listings hide system files but show program folders (they just are not walked into).
         let top: Vec<String> = list_dir(root, false).unwrap().into_iter().map(|e| e.name).collect();
         assert!(!top.iter().any(|n| n == "AppData" || n == "Thumbs.db" || n == ".cache"));

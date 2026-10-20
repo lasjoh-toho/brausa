@@ -18,7 +18,7 @@
       : {
           name: project?.name ?? '',
           description: '',
-          bags: wikis.maps.filter((m) => project && m.bag.startsWith(`@map:${project.root}|`)).map((m) => m.bag),
+          bags: wikis.preset ?? wikis.maps.filter((m) => project && m.bag.startsWith(`@map:${project.root}|`)).map((m) => m.bag),
           target: { kind: 'folder', path: project ? `${project.folders[0] ?? app.cwd}/${project.name}-wiki` : '' },
           plugins: true,
           local: true

@@ -29,6 +29,12 @@
       </button>
     {/each}
   </div>
+  {#if app.findText && !app.everywhere}
+    <button class="btn" onclick={() => app.searchEverywhere()} title={t('noresults.everywhereHint')}>
+      <Icon name="search" size={13} />
+      {t('noresults.everywhere')}
+    </button>
+  {/if}
   <button class="btn primary" onclick={() => app.clearFilters()}>
     <Icon name="x" size={13} />
     {app.activeFilters.length === 1 ? t('noresults.clearOne') : t('noresults.clearAll')}

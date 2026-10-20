@@ -7,7 +7,9 @@ export const de = {
   funnel: 'Nur Ordner: {folder}',
   removeOne: 'Diesen Filter entfernen',
   clearOne: 'Filter entfernen',
-  clearAll: 'Alle Filter entfernen'
+  clearAll: 'Alle Filter entfernen',
+  everywhere: 'An allen Orten suchen',
+  everywhereHint: 'Ordnerauswahl aufheben und im ganzen Home-Ordner und auf allen Laufwerken suchen'
 };
 
 export const en: typeof de = {
@@ -19,5 +21,7 @@ export const en: typeof de = {
   funnel: 'Only folder: {folder}',
   removeOne: 'Remove this filter',
   clearOne: 'Remove filter',
-  clearAll: 'Remove all filters'
+  clearAll: 'Remove all filters',
+  everywhere: 'Search in all places',
+  everywhereHint: 'Leave the folder and search the whole home folder and all drives'
 };

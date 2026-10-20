@@ -17,10 +17,10 @@ export interface Stuck {
   search: string;
   typeFilter: string | null;
 }
-import { parseCategories } from '../core/pattern';
+import { parseCategories, searchNeedle } from '../core/pattern';
 import { archiveName, archiveRoot, inArchive, isArchive } from '../core/archive';
 import type { ProjectInfo } from '../backend/types';
-import { filterEntries, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
+import { filterEntries, withFound, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
 import { basename, dirname, isWithin } from '../core/paths';
 import { selectByPattern } from '../core/pattern';
 import { uniqueTags } from '../core/tags';
@@ -83,6 +83,14 @@ class AppState {
   currentProject = $derived(this.projects.find((p) => p.id === this.project) ?? null);
   /** Last project worked on; the map view falls back to it. */
   lastProject = $state<string | null>(store.get('lastProject', null));
+  /** Mounted drives other than the system disk (sidebar "Media"). */
+  volumes = $state<{ name: string; path: string }[]>([]);
+
+  async loadVolumes() {
+    const v = await this.backend.volumes().catch(() => []);
+    if (JSON.stringify(v) !== JSON.stringify(this.volumes)) this.volumes = v;
+  }
+
   /** Standard places as the core names them (German); `places` shows them in the UI language. */
   private placesRaw = $state<{ name: string; path: string }[]>([]);
   places = $derived(this.placesRaw.map((p) => ({ ...p, name: t(`places.${p.name}`) === `places.${p.name}` ? p.name : t(`places.${p.name}`) })));
@@ -121,6 +129,56 @@ class AppState {
   search = $state('');
   searchMode = $state<'filter' | 'select'>('filter');
   systemAllowed = $derived((!this.project && !!this.cwd && this.cwd !== this.home) || this.search.trim().length >= 5);
+
+  // ---------------------------------------------------------------- searching below the folder
+
+  /** The name a search looks for in subfolders (null: no such search). */
+  findText = $derived(this.searchMode === 'filter' && !this.project ? searchNeedle(this.search) : null);
+  /** Files and folders below the folder (or everywhere) whose name matches the search. */
+  found = $state<Entry[]>([]);
+  /** The search below stopped early: there may be more. */
+  foundMore = $state(false);
+  finding = $state(false);
+  /** Search in all places (home and drives) instead of the current folder. */
+  everywhere = $state(false);
+  private findTimer: ReturnType<typeof setTimeout> | undefined;
+  private findSeq = 0;
+
+  /** Called whenever the search, folder or scope changes; searches after a short pause. */
+  scheduleFind() {
+    clearTimeout(this.findTimer);
+    const text = this.findText;
+    const roots = this.everywhere ? [this.home, ...this.volumes.map((v) => v.path)] : [this.cwd];
+    const includeHidden = this.showSystem && this.systemAllowed;
+    const seq = ++this.findSeq;
+    if (!text) {
+      this.found = [];
+      this.foundMore = false;
+      this.finding = false;
+      this.everywhere = false;
+      return;
+    }
+    this.findTimer = setTimeout(async () => {
+      this.finding = true;
+      try {
+        const r = await this.backend.findNames(roots, text, { includeHidden, limit: 2000 });
+        if (seq !== this.findSeq) return;
+        this.found = r.entries;
+        this.foundMore = r.more;
+      } catch {
+        if (seq === this.findSeq) this.found = [];
+      } finally {
+        if (seq === this.findSeq) this.finding = false;
+      }
+    }, 250);
+  }
+
+  /** "Search everywhere": drop the folder, keep the search. */
+  searchEverywhere() {
+    this.funnel = null;
+    this.everywhere = true;
+  }
+
   funnel = $state<string | null>(null);
   /** Type filter from the toolbar (Bilder, Videos, …); null shows everything. */
   typeFilter = $state<string | null>(store.get('typeFilter', null));
@@ -192,11 +250,12 @@ class AppState {
 
   /** Entries after all filters except the date range (the calendar shows these). */
   undated = $derived(
-    filterEntries(this.raw, {
+    filterEntries(this.everywhere ? this.found : withFound(this.raw, this.found), {
       search: this.searchMode === 'filter' ? this.search : '',
       funnel: this.funnel,
       cats: this.typeFilter ? parseCategories(this.typeFilter) : null,
-      showDirs: !this.recursive && !this.typeFilter && !this.project,
+      // A search shows the folders it finds, in Stream too.
+      showDirs: (!this.recursive || !!this.findText) && !this.typeFilter && !this.project,
       sort: this.sort,
       desc: this.desc
     })
@@ -264,6 +323,9 @@ class AppState {
     if (stuck) this.startPlain(stuck);
     this.heartbeat();
     this.placesRaw = await this.backend.places();
+    await this.loadVolumes();
+    // Drives come and go: look again every few seconds.
+    setInterval(() => void this.loadVolumes(), 5000);
     if (!this.gridConfig.cells.length) this.gridConfig = defaultGrid(this.places);
     const last = store.get<string>('cwd', '');
     await this.navigate(last || this.home, false).catch(() => this.navigate(this.home, false));
@@ -391,6 +453,7 @@ class AppState {
       this.future = [];
     }
     this.setProject(id);
+    this.everywhere = false;
     this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;
@@ -647,6 +710,7 @@ class AppState {
       this.future = [];
     }
     this.cwd = path;
+    this.everywhere = false;
     this.setProject(null);
     // Start page and map belong to projects; folders show their files.
     if (this.view === 'start' || this.view === 'board') {
@@ -988,6 +1052,9 @@ class AppState {
     if (!additive) this.selection.clear();
     for (const p of paths) this.selection.add(p);
   }
+
+  /** The "select by size" dialog is open. */
+  sizeSelectOpen = $state(false);
 
   selectAll() {
     this.setSelection(this.visible.map((e) => e.path));

@@ -177,6 +177,10 @@ export interface Backend {
   homeDir(): Promise<string>;
   /** Places shown in the sidebar (home, desktop, pictures, …). */
   places(): Promise<{ name: string; path: string }[]>;
+  /** Mounted drives other than the system disk (USB sticks, memory cards, network shares). */
+  volumes(): Promise<{ name: string; path: string }[]>;
+  /** Files and folders whose name contains `text`, below each root (`more`: stopped early). */
+  findNames(roots: string[], text: string, opts?: { includeHidden?: boolean; limit?: number }): Promise<{ entries: Entry[]; more: boolean }>;
   listDir(path: string, opts?: { includeHidden?: boolean }): Promise<Entry[]>;
   /** Flattened recursive listing of files below root; `relDir` is set on each entry. */
   walk(root: string, opts?: WalkOptions): Promise<Entry[]>;
@@ -268,7 +272,11 @@ export interface Backend {
   /** Save the pictures of the shown page into `dir` (each only once); returns how many. */
   webCollectImages(dir: string, min: number, exts: string[]): Promise<number>;
   /** Scroll position of the page and whether text is marked in it. */
-  webPeek(): Promise<{ y: number; sel: boolean }>;
+  webPeek(): Promise<{ y: number; sel: boolean; drag: WebDrag | null }>;
+  /** Downloads a picture dragged out of the web panel into `dir`; returns its path. */
+  webFetchImage(url: string, dir: string): Promise<string>;
+  /** The drag in the web panel was handled. */
+  webDragDone(): Promise<void>;
   webPlace(b: WebBounds, visible: boolean): Promise<void>;
   webClose(): Promise<void>;
   webGo(how: 'back' | 'forward' | 'reload'): Promise<void>;
@@ -305,7 +313,27 @@ export interface Backend {
   wikiLayers(recipe: string): Promise<WikiLayer[]>;
   /** Tiddlers in all bags whose title or text contains every word. */
   wikiSearch(query: string): Promise<WikiHit[]>;
+  /** A snippet, note or card dropped onto a wiki: a tiddler in its own bag; returns the title. */
+  wikiAddTiddler(name: string, fields: Record<string, string>): Promise<string>;
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;
+}
+
+/** Marked text, a picture or a link being dragged out of the web panel (see webdrag.js). */
+export interface WebDrag {
+  kind: 'text' | 'image' | 'link';
+  id: number;
+  /** Pointer in the page (CSS pixels of the panel). */
+  x: number;
+  y: number;
+  down: boolean;
+  cancel?: boolean;
+  url: string;
+  title: string;
+  text?: string;
+  html?: string;
+  src?: string;
+  alt?: string;
+  href?: string;
 }

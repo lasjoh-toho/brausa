@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { app } from '../state/app.svelte';
   import { board } from '../state/board.svelte';
-  import { drag } from '../state/drag.svelte';
+  import { drag, noteTiddler } from '../state/drag.svelte';
   import type { Entry } from '../core/types';
   import {
     type NoteCard,
@@ -36,6 +36,7 @@
     worldRect,
     zoomAt,
     DEFAULT_STATUSES,
+    cardColor,
     type CardRef,
     type Frame,
     type MapCard,
@@ -47,13 +48,13 @@
   import { isToggleKey, modLabel } from '../platform';
   import Icon from './Icon.svelte';
   import BoardSwitch from './BoardSwitch.svelte';
+  import ColorPalette from './ColorPalette.svelte';
   import { t, tn } from '../i18n/index.svelte';
 
   /** Default statuses are stored in German; show them in the UI language. */
   const STATUS_KEYS: Record<string, string> = { Offen: 'map.status.open', 'In Arbeit': 'map.status.doing', Erledigt: 'map.status.done' };
   const statusLabel = (s: string) => (STATUS_KEYS[s] ? t(STATUS_KEYS[s]) : s);
 
-  const COLORS = ['#0090ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'];
 
   interface Vis {
     id: string;
@@ -316,6 +317,11 @@
     }
     if (!id) return;
     board.link = null;
+    // Picking stops for the story: the clicked card joins it.
+    if (board.picking) {
+      board.addStop(id);
+      return;
+    }
     const ref = t.closest<HTMLElement>('[data-ref]')?.dataset.ref;
     if (ref !== undefined) {
       const r = m.cards[id].refs?.[Number(ref)];
@@ -358,6 +364,11 @@
     );
   }
 
+  /** A dragged card is over the notes & snippets thread. */
+  let overThread = false;
+  /** A dragged card is over a wiki in the sidebar. */
+  let overWiki: HTMLElement | null = null;
+
   function move(e: PointerEvent, grabbed: string) {
     const parent = m!.cards[grabbed].parent;
     const ids = [...board.selection].filter((id) => m!.cards[id]?.parent === parent);
@@ -381,6 +392,15 @@
           c.y = o.y + (p.y - s.y) / k;
           if (parent) (c.x = Math.max(0, c.x)), (c.y = Math.max(0, c.y));
         }
+        // Over the notes & snippets thread: the cards go back into it.
+        const thread = document.elementsFromPoint(ev.clientX, ev.clientY).find((n) => (n as HTMLElement).closest?.('[data-notes-thread]'));
+        overThread = !!thread;
+        document.querySelector('[data-notes-thread]')?.classList.toggle('hit', overThread);
+        // Over a wiki in the sidebar: the cards become tiddlers there (and stay on the map).
+        const w = document.elementsFromPoint(ev.clientX, ev.clientY).map((n) => (n as HTMLElement).closest?.<HTMLElement>('[data-drop="wiki"]')).find(Boolean) ?? null;
+        overWiki?.classList.remove('hit');
+        overWiki = w;
+        w?.classList.add('hit');
         // Over a file outside the map (tray, file list): link instead of moving.
         const f = fileAt(ev);
         linkTo?.classList.remove('link-target');
@@ -396,6 +416,34 @@
       },
       () => {
         const file = linkTo;
+        if (overWiki) {
+          const name = overWiki.dataset.key!;
+          overWiki.classList.remove('hit');
+          overWiki = null;
+          for (const id of ids) Object.assign(m!.cards[id], start.get(id));
+          moving = new Set();
+          drop = undefined;
+          stackHint = null;
+          void (async () => {
+            for (const id of ids) {
+              const title = await app.backend.wikiAddTiddler(name, noteTiddler(m!.cards[id])).catch((e) => (app.toast(String(e), true), null));
+              if (title) app.toast(t('drag.wikiAdded', { title, name }));
+            }
+          })();
+          return;
+        }
+        if (overThread) {
+          overThread = false;
+          document.querySelector('[data-notes-thread]')?.classList.remove('hit');
+          for (const id of ids) Object.assign(m!.cards[id], start.get(id));
+          linkTo?.classList.remove('link-target');
+          linkTo = null;
+          moving = new Set();
+          drop = undefined;
+          stackHint = null;
+          board.toThread(ids);
+          return;
+        }
         if (file) {
           file.classList.remove('link-target');
           linkTo = null;
@@ -462,8 +510,26 @@
     );
   }
 
+  /** Something inside a selected card (or the editor) that can scroll in the wheel's direction. */
+  function scrollerIn(e: WheelEvent): HTMLElement | null {
+    const t = e.target as HTMLElement;
+    const card = t.closest<HTMLElement>('[data-card]');
+    const inside = t.closest<HTMLElement>('.editor') ?? (card && board.selection.has(card.dataset.card!) ? card : null);
+    if (!inside) return null;
+    for (let n: HTMLElement | null = t; n && n !== inside.parentElement; n = n.parentElement) {
+      const o = getComputedStyle(n).overflowY;
+      if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight + 1) {
+        const atTop = n.scrollTop <= 0, atEnd = n.scrollTop + n.clientHeight >= n.scrollHeight - 1;
+        if ((e.deltaY < 0 && !atTop) || (e.deltaY > 0 && !atEnd)) return n;
+      }
+    }
+    return null;
+  }
+
   function wheel(e: WheelEvent) {
     if (!m) return;
+    // A selected card with a scrollbar scrolls instead of zooming the map.
+    if (!e.ctrlKey && scrollerIn(e)) return;
     e.preventDefault();
     const p = local(e);
     if (e.shiftKey) {
@@ -569,14 +635,41 @@
   });
 
   const statuses = $derived(m?.statuses ?? DEFAULT_STATUSES);
-  const selInKanban = $derived(m ? [...board.selection].every((id) => m.cards[id]?.status) : false);
+  /** The Kanban column of the selected cards ('' outside the Kanban, '*' when they differ). */
+  const selStatus = $derived.by(() => {
+    if (!m) return '';
+    const set = new Set([...board.selection].map((id) => m.cards[id]?.status ?? ''));
+    return set.size === 1 ? [...set][0] : '*';
+  });
+  const selColor = $derived(m && board.selection.size === 1 ? (m.cards[[...board.selection][0]]?.color ?? null) : null);
 
-  /** The Kanban is a view on the cards: sending a card there means giving it a status. */
-  function toKanban() {
-    const on = !selInKanban;
-    board.mutate((mm) => board.selection.forEach((id) => (mm.cards[id].status = on ? (mm.cards[id].status ?? statuses[0]) : null)));
-    app.toast(on ? t('map.toKanban', { status: statusLabel(statuses[0]) }) : t('map.fromKanban'));
+  /** The Kanban is a view on the cards: putting a card into a column means giving it that status. */
+  function setStatus(status: string) {
+    if (status === '*') return;
+    board.mutate((mm) => board.selection.forEach((id) => (mm.cards[id].status = status || null)));
+    app.toast(status ? t('map.toKanban', { status: statusLabel(status) }) : t('map.fromKanban'));
   }
+
+  function setColorMode(mode: 'own' | 'status') {
+    board.mutate((mm) => ((mm.kanban ??= {}).cardColors = mode));
+  }
+
+  /** Where the card menu sits: above the selected cards (or the editor), below them near the top. */
+  const selbarAt = $derived.by(() => {
+    if (!m || !board.selection.size || board.presenting) return null;
+    let r: Rect | null = null;
+    if (board.editing && editRect) r = { x: editRect.x, y: editRect.y, w: editRect.w, h: 240 };
+    else
+      for (const id of board.selection) {
+        if (!m.cards[id]) continue;
+        const q = byId.get(id)?.r ?? screenRect(id);
+        r = r ? { x: Math.min(r.x, q.x), y: Math.min(r.y, q.y), w: Math.max(r.x + r.w, q.x + q.w) - Math.min(r.x, q.x), h: Math.max(r.y + r.h, q.y + q.h) - Math.min(r.y, q.y) } : q;
+      }
+    if (!r) return null;
+    const above = r.y > 70;
+    const x = Math.min(Math.max(r.x + r.w / 2, 190), board.vw - 190);
+    return { x, y: above ? r.y - 10 : Math.min(r.y + r.h + 10, board.vh - 50), above };
+  });
 
   function setColor(color: string | null) {
     board.mutate((mm) => board.selection.forEach((id) => (mm.cards[id].color = color)));
@@ -637,7 +730,8 @@
     else if (e.key === 'F2' && board.selection.size === 1) startEdit([...board.selection][0]);
     else if (e.key === 'Enter' && board.selection.size === 1) flyInto([...board.selection][0]);
     else if (e.key === 'Escape') {
-      if (board.selection.size || board.link) {
+      if (board.picking) board.picking = false;
+      else if (board.selection.size || board.link) {
         board.selection.clear();
         board.link = null;
       } else up();
@@ -677,6 +771,7 @@
 <section
   class="board"
   class:presenting={!!board.presenting}
+  class:picking={board.picking}
   class:narrow={board.vw < 760}
   bind:this={el}
   bind:clientWidth={board.vw}
@@ -692,7 +787,7 @@
 >
   {#if m}
     {#if ctx}
-      <div class="backdrop" style:--c={m.cards[ctx].color ?? 'var(--fg-faint)'}></div>
+      <div class="backdrop" style:--c={cardColor(m, m.cards[ctx]) ?? 'var(--fg-faint)'}></div>
     {/if}
 
     {#each vis as v (v.id)}
@@ -715,7 +810,7 @@
         style:top="{v.r.y}px"
         style:width="{v.r.w}px"
         style:height="{v.r.h}px"
-        style:--c={c.color ?? 'var(--line)'}
+        style:--c={cardColor(m, c) ?? 'var(--line)'}
       >
         {#if stops.get(v.id)}<span class="stopno" style:--sc={board.story?.color ?? '#e0503f'}>{stops.get(v.id)!.join(' · ')}</span>{/if}
         {#if v.lod === 'full'}
@@ -857,25 +952,39 @@
       <button class="btn icon" onclick={() => board.redo()} disabled={!board.canRedo} title={t('map.tools.redo')}><Icon name="redo" size={15} /></button>
     </div>
 
-    {#if board.selection.size && !board.editing}
-      <div class="selbar ui">
-        {#each COLORS as col (col)}
-          <button class="swatch" style:background={col} onclick={() => setColor(col)} aria-label={t('map.sel.color', { color: col })}></button>
-        {/each}
-        <button class="swatch none" onclick={() => setColor(null)} aria-label={t('map.sel.noColor')}></button>
+    {#if selbarAt}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="selbar ui" class:below={!selbarAt.above} style:left="{selbarAt.x}px" style:top="{selbarAt.y}px" onpointerdown={(e) => e.stopPropagation()}>
+        <ColorPalette value={selColor} onpick={setColor} up={!selbarAt.above ? false : selbarAt.y > 330}>
+          {#snippet extra()}
+            <div class="colormode">
+              <span>{t('map.sel.colorMode')}</span>
+              <span class="seg">
+                <button class="btn" class:on={(m!.kanban?.cardColors ?? 'own') === 'own'} onclick={() => setColorMode('own')}>{t('map.sel.colorOwn')}</button>
+                <button class="btn" class:on={m!.kanban?.cardColors === 'status'} onclick={() => setColorMode('status')}>{t('map.sel.colorStatus')}</button>
+              </span>
+            </div>
+          {/snippet}
+        </ColorPalette>
         <span class="div"></span>
-        {#if board.selection.size === 1}
+        {#if board.selection.size === 1 && !board.editing}
           <button class="btn icon" title={t('map.sel.edit')} onclick={() => startEdit([...board.selection][0])}><Icon name="pencil" size={14} /></button>
           <button class="btn icon" title={t('map.zoomIn')} onclick={() => flyInto([...board.selection][0])}><Icon name="zoomIn" size={14} /></button>
         {/if}
-        <button class="btn" class:on={selInKanban} title={selInKanban ? t('map.sel.fromKanban') : t('map.sel.toKanban')} onclick={toKanban}>
-          <Icon name="kanban" size={14} /> Kanban
-        </button>
+        <select class="status" value={selStatus} title={t('map.sel.column')} onchange={(e) => setStatus(e.currentTarget.value)}>
+          {#if selStatus === '*'}<option value="*">{t('map.sel.mixed')}</option>{/if}
+          <option value="">{t('map.sel.noColumn')}</option>
+          {#each statuses as s (s)}<option value={s}>{statusLabel(s)}</option>{/each}
+        </select>
+        <button class="btn icon" title={t('map.sel.addStop', { story: board.story?.title ?? 'Story 1' })} onclick={() => board.addStops()}><Icon name="addstep" size={14} /></button>
         <button class="btn icon" title={t('map.sel.toThread')} onclick={() => board.toThread([...board.selection])}><Icon name="doc" size={14} /></button>
         <button class="btn icon" title={t('map.sel.delete')} onclick={removeSelected}><Icon name="trash" size={14} /></button>
       </div>
     {/if}
 
+    {#if board.picking}
+      <p class="pickhint ui">{t('board.story.picking', { story: board.story?.title ?? 'Story 1' })}</p>
+    {/if}
     {#if !m.roots.length}
       <p class="hint-empty">{t('map.empty')}</p>
     {/if}
@@ -903,6 +1012,19 @@
     background-size: 22px 22px;
     cursor: default;
     touch-action: none;
+  }
+  .board.picking :global([data-card]) {
+    cursor: copy;
+  }
+  .pickhint {
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12.5px;
   }
   .backdrop {
     position: absolute;
@@ -954,6 +1076,11 @@
     font-size: 12px;
     font-weight: 500;
     color: var(--fg-muted);
+  }
+  /* A selected card scrolls its text (the wheel scrolls it instead of zooming). */
+  .card.sel .text,
+  .card.sel .quote {
+    overflow: auto;
   }
   .quote {
     margin: 0;
@@ -1312,12 +1439,10 @@
     box-shadow: var(--shadow);
   }
   .selbar {
+    z-index: 12;
     max-width: calc(100% - 24px);
-    flex-wrap: wrap;
     justify-content: center;
-    left: 50%;
-    bottom: 16px;
-    transform: translateX(-50%);
+    transform: translate(-50%, -100%);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1325,6 +1450,35 @@
     border-radius: 10px;
     background: var(--bg-elev);
     box-shadow: var(--shadow);
+  }
+  .selbar.below {
+    transform: translateX(-50%);
+  }
+  .selbar .status {
+    height: 26px;
+    max-width: 140px;
+    padding: 0 6px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+  }
+  .colormode {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11.5px;
+    color: var(--fg-muted);
+  }
+  .colormode .seg {
+    display: flex;
+    gap: 2px;
+  }
+  .colormode .btn {
+    flex: 1;
+    font-size: 12px;
   }
   .swatch {
     width: 18px;

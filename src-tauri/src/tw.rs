@@ -906,6 +906,26 @@ impl Store {
         Ok(n)
     }
 
+    /// A snippet, note or card dropped onto a wiki: a tiddler in the wiki's own bag, under a free title.
+    pub fn add_to_wiki(&self, name: &str, mut f: Fields) -> io::Result<String> {
+        let r = self.recipe(name)?;
+        let own = r.bags.last().cloned().ok_or_else(|| err("Wiki ohne Bag"))?;
+        let have = self.bag_tiddlers(&own)?;
+        let base = f.get("title").map(|t| t.trim().replace(['[', ']', '|', '{', '}'], "")).filter(|t| !t.is_empty()).unwrap_or_else(|| "Snippet".into());
+        let mut title = base.clone();
+        let mut n = 2;
+        while have.contains_key(&title) {
+            title = format!("{base} {n}");
+            n += 1;
+        }
+        let now = chrono::Utc::now().format("%Y%m%d%H%M%S%3f").to_string();
+        f.insert("title".into(), title.clone());
+        f.entry("created".into()).or_insert_with(|| now.clone());
+        f.insert("modified".into(), now);
+        self.put_tiddler(&own, &f)?;
+        Ok(title)
+    }
+
     /// Throw the temporary bag of a web comparison away.
     pub fn web_discard(&self, name: &str) -> io::Result<()> {
         let d = self.bag_dir(&Self::tmp_bag(name))?;
@@ -1594,6 +1614,19 @@ mod tests {
         assert!(store.search("  ", 10).is_empty());
         store.put_tiddler("glossar", &f(&[("title", "Pinboard"), ("tags", "Glossar"), ("text", "")])).unwrap();
         assert_eq!(store.search("glossar", 10)[0].title, "Pinboard", "tags count too");
+    }
+
+    #[test]
+    fn dropped_snippets_go_into_the_wiki_bag_under_a_free_title() {
+        let (t, store, proj) = setup();
+        recipe(&store, "Uni", &proj, Target { kind: "folder".into(), path: t.path().join("out").to_string_lossy().to_string() });
+        let first = store.add_to_wiki("Uni", f(&[("title", "Zitat [1]"), ("text", "eins")])).unwrap();
+        let second = store.add_to_wiki("Uni", f(&[("title", "Zitat [1]"), ("text", "zwei")])).unwrap();
+        assert_eq!((first.as_str(), second.as_str()), ("Zitat 1", "Zitat 1 2"));
+        let own = store.recipe("Uni").unwrap().bags.last().cloned().unwrap();
+        let bag = store.bag_tiddlers(&own).unwrap();
+        assert_eq!(bag["Zitat 1 2"].0["text"], "zwei");
+        assert_eq!(bag["Zitat 1"].0["modified"].len(), 17, "TiddlyWiki date");
     }
 
     fn recipe(store: &Store, name: &str, proj: &Path, target: Target) -> Recipe {

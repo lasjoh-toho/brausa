@@ -242,3 +242,11 @@ export function selectByPattern(entries: Entry[], input: string, now = Date.now(
   if (!p.terms.length) return { paths: [], errors: p.errors };
   return { paths: entries.filter((e) => matches(e, p, now)).map((e) => e.path), errors: p.errors };
 }
+
+/** The word a name search below the folder looks for: the longest plain word of the search (2+ letters). */
+export function searchNeedle(input: string): string | null {
+  const words = parsePattern(input)
+    .terms.flatMap((t) => (t.type === 'text' && !t.neg ? [t.text] : []))
+    .sort((a, b) => b.length - a.length);
+  return words[0] && words[0].length >= 2 ? words[0] : null;
+}

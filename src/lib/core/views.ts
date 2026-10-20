@@ -135,3 +135,10 @@ export function tagCounts(entries: Entry[]): Map<string, number> {
   for (const e of entries) for (const t of indexTags(e.tags)) m.set(t, (m.get(t) ?? 0) + 1);
   return m;
 }
+
+/** The folder's entries plus what a search found below it (each path once). */
+export function withFound(raw: Entry[], found: Entry[]): Entry[] {
+  if (!found.length) return raw;
+  const have = new Set(raw.map((e) => e.path));
+  return raw.concat(found.filter((e) => !have.has(e.path)));
+}

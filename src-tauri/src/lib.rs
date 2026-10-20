@@ -95,6 +95,29 @@ fn places() -> Vec<Place> {
         .collect()
 }
 
+#[tauri::command]
+fn volumes() -> Vec<Place> {
+    fsops::volumes()
+        .into_iter()
+        .map(|(name, p)| Place { name, path: p.to_string_lossy().to_string() })
+        .collect()
+}
+
+#[derive(Serialize)]
+struct Found {
+    entries: Vec<Entry>,
+    /// The search stopped early (too many hits or out of time).
+    more: bool,
+}
+
+/// Files and folders whose name contains `text`, below each of `roots`.
+#[tauri::command]
+async fn find(state: State<'_, Index>, roots: Vec<String>, text: String, include_hidden: bool, limit: usize) -> CmdResult<Found> {
+    let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).filter(|p| archive::split(&p.to_string_lossy()).is_none()).collect();
+    let (entries, more) = fsops::find(&roots, &text, include_hidden, limit, std::time::Duration::from_secs(4));
+    Ok(Found { entries: decorated(&state, entries)?, more })
+}
+
 // File-system commands run on the async pool so large folders don't block the UI thread.
 
 #[tauri::command]
@@ -377,6 +400,26 @@ async fn web_collect_images(app: AppHandle, dir: String, min: u32, exts: Vec<Str
     tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().collect_images(&a, Path::new(&dir), min, &exts)).await.map_err(err)?
 }
 
+/// A picture dragged out of the web panel: downloaded into `dir`, so it can be dropped like a file.
+#[tauri::command]
+async fn web_fetch_image(url: String, dir: String) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(20)).build();
+        web::fetch_image(&agent, &url, Path::new(&dir), &[])
+            .map(|p| p.to_string_lossy().to_string())
+            .ok_or_else(|| tr!("Das Bild ließ sich nicht laden", "The picture could not be loaded").to_string())
+    })
+    .await
+    .map_err(err)?
+}
+
+/// The drag in the web panel was handled (dropped or cancelled).
+#[tauri::command]
+async fn web_drag_done(app: AppHandle) -> CmdResult<()> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().drag_done(&a)).await.map_err(err)?
+}
+
 /// Scroll position and marked text of the page in the web panel.
 #[tauri::command]
 async fn web_peek(app: AppHandle) -> CmdResult<serde_json::Value> {
@@ -505,6 +548,12 @@ async fn tw_web_has_password(w: State<'_, Wikis>, name: String) -> CmdResult<boo
 }
 
 /// Search titles and texts in all wiki bags.
+/// A snippet, note or card dropped onto a wiki; returns the tiddler's title.
+#[tauri::command]
+async fn tw_add_tiddler(w: State<'_, Wikis>, name: String, fields: tw::Fields) -> CmdResult<String> {
+    w.0.lock().map_err(err)?.add_to_wiki(&name, fields).map_err(err)
+}
+
 #[tauri::command]
 async fn tw_search(w: State<'_, Wikis>, query: String) -> CmdResult<Vec<tw::Hit>> {
     Ok(w.0.lock().map_err(err)?.search(&query, 200))
@@ -839,6 +888,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             home_dir,
             places,
+            volumes,
+            find,
             list_dir,
             walk,
             transfer,
@@ -888,6 +939,8 @@ pub fn run() {
             web_go,
             web_selection,
             web_collect_images,
+            web_fetch_image,
+            web_drag_done,
             web_peek,
             web_save_page,
             web_target,
@@ -901,6 +954,7 @@ pub fn run() {
             tw_sync,
             tw_overlays,
             tw_layers,
+            tw_add_tiddler,
             tw_search,
             tw_web_fetch,
             tw_web_apply,

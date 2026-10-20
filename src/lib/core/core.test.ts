@@ -10,9 +10,9 @@ import {
   parseFilenameTags,
   suggestTags
 } from './tags';
-import { parsePattern, selectByPattern } from './pattern';
+import { parsePattern, searchNeedle, selectByPattern } from './pattern';
 import { crumbs, dirname, isWithin, relativeTo } from './paths';
-import { filterEntries, groupEntries, UNTAGGED } from './views';
+import { filterEntries, groupEntries, UNTAGGED, withFound } from './views';
 import type { Entry } from './types';
 import { category } from './format';
 import { decisionFor, forget, hasScripts, remember, resolveLocal } from './htmlpreview';
@@ -468,5 +468,23 @@ describe('sorting', () => {
     expect(sortEntries([a, b, c, d], 'taken', true).map((x) => x.name)).toEqual(['Ordner', 'c.jpg', 'b.jpg', 'a.jpg']);
     // Without a creation date the modification date counts.
     expect(sortEntries([a, b, c], 'ctime').map((x) => x.name)).toEqual(['a.jpg', 'c.jpg', 'b.jpg']);
+  });
+});
+
+describe('searching below the folder', () => {
+  it('looks for the longest plain word', () => {
+    expect(searchNeedle('urlaub')).toBe('urlaub');
+    expect(searchNeedle('#Arbeit *.png > 5MB')).toBeNull();
+    expect(searchNeedle('a')).toBeNull();
+    expect(searchNeedle('rom urlaub -alt')).toBe('urlaub');
+  });
+
+  it('adds what was found below once', () => {
+    const e = (path: string, kind: 'file' | 'dir' = 'file'): Entry =>
+      ({ path, name: path.split('/').pop()!, ext: '', kind, size: 0, mtime: 0, ctime: 0, tags: [] }) as Entry;
+    const raw = [e('/h/Urlaub', 'dir'), e('/h/a.jpg')];
+    const merged = withFound(raw, [e('/h/Urlaub', 'dir'), e('/h/x/Urlaub 2024', 'dir')]);
+    expect(merged.map((x) => x.path)).toEqual(['/h/Urlaub', '/h/a.jpg', '/h/x/Urlaub 2024']);
+    expect(filterEntries(merged, { search: 'urlaub', showDirs: true }).map((x) => x.name)).toEqual(['Urlaub', 'Urlaub 2024']);
   });
 });
