@@ -382,6 +382,10 @@ export class TauriBackend implements Backend {
     return invoke<boolean>('tw_web_has_password', { name });
   }
 
+  wikiAddTiddler(name: string, fields: Record<string, string>) {
+    return invoke<string>('tw_add_tiddler', { name, fields });
+  }
+
   wikiSearch(query: string) {
     return invoke<WikiHit[]>('tw_search', { query });
   }

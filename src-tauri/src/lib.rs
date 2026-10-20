@@ -548,6 +548,12 @@ async fn tw_web_has_password(w: State<'_, Wikis>, name: String) -> CmdResult<boo
 }
 
 /// Search titles and texts in all wiki bags.
+/// A snippet, note or card dropped onto a wiki; returns the tiddler's title.
+#[tauri::command]
+async fn tw_add_tiddler(w: State<'_, Wikis>, name: String, fields: tw::Fields) -> CmdResult<String> {
+    w.0.lock().map_err(err)?.add_to_wiki(&name, fields).map_err(err)
+}
+
 #[tauri::command]
 async fn tw_search(w: State<'_, Wikis>, query: String) -> CmdResult<Vec<tw::Hit>> {
     Ok(w.0.lock().map_err(err)?.search(&query, 200))
@@ -948,6 +954,7 @@ pub fn run() {
             tw_sync,
             tw_overlays,
             tw_layers,
+            tw_add_tiddler,
             tw_search,
             tw_web_fetch,
             tw_web_apply,

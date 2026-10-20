@@ -1,5 +1,7 @@
 // What a drop will do, shown next to the drag ghost.
 export const de = {
+  toWiki: 'Ins Wiki „{name}“',
+  wikiAdded: '„{title}“ im Wiki „{name}“ angelegt',
   saveTo: 'Speichern in „{name}“',
   toThread: 'In Notizen & Snippets',
   toColumn: 'In die Spalte „{name}“',
@@ -22,6 +24,8 @@ export const de = {
 };
 
 export const en: typeof de = {
+  toWiki: 'Into the wiki “{name}”',
+  wikiAdded: '“{title}” added to the wiki “{name}”',
   saveTo: 'Save to “{name}”',
   toThread: 'Into notes & snippets',
   toColumn: 'Into the column “{name}”',

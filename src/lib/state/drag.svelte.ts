@@ -19,7 +19,7 @@ import { app } from './app.svelte';
 import type { NoteCard } from '../core/map';
 import { t } from '../i18n/index.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project' | 'notes' | 'kanban';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project' | 'notes' | 'kanban' | 'wiki';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
 export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
@@ -98,6 +98,8 @@ class DragController {
         return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? t('drag.removeTag') : t('drag.setTag', { tag: h.key ?? '' })) : t('drag.moveTo', { name: h.key ?? '' });
       case 'notes':
         return t('drag.toThread');
+      case 'wiki':
+        return t('drag.toWiki', { name: h.key ?? '' });
       case 'kanban':
         return t('drag.toColumn', { name: h.key ?? '' });
       case 'grid-trigger':
@@ -509,10 +511,33 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         else for (const r of await board.refsFor(items)) board.addToColumn({ title: r.name ?? '', refs: [r], h: board.isImage(r) ? 190 : 120 }, h.key!);
         break;
       }
+      case 'wiki': {
+        // A tiddler in the wiki's own bag: snippets with their source, files as links.
+        const d = data as { snippet?: { quote: string; page?: number }; note?: NoteCard } | undefined;
+        const name = h.key!;
+        const tiddlers: Record<string, string>[] = [];
+        if (d?.note) tiddlers.push(noteTiddler(d.note));
+        else if (d?.snippet)
+          tiddlers.push({ title: items[0]?.name ?? 'Snippet', text: `<<<\n${d.snippet.quote}\n<<< [ext[${items[0]?.name ?? ''}|file://${encodeURI(items[0]?.path ?? '')}]]`, tags: 'Snippet' });
+        else for (const e of items) tiddlers.push({ title: e.name, text: `[ext[${e.name}|file://${encodeURI(e.path)}]]`, tags: 'brausa' });
+        for (const f of tiddlers) {
+          const title = await app.backend.wikiAddTiddler(name, f);
+          app.toast(t('drag.wikiAdded', { title, name }));
+        }
+        break;
+      }
       case 'grid-trigger':
         break;
     }
   } catch (e) {
     app.toast(String(e), true);
   }
+}
+
+/** A note or snippet as a tiddler: the text, its source as a link, the kind as a tag. */
+export function noteTiddler(n: Pick<NoteCard, 'title' | 'text' | 'refs'> & { kind?: string }): Record<string, string> {
+  const ref = n.refs?.[0];
+  const src = ref?.href ? `[ext[${ref.title || ref.href}|${ref.href}]]` : ref?.path ? `[ext[${ref.name ?? ref.path}|file://${encodeURI(ref.path)}]]` : '';
+  const text = n.kind === 'snippet' ? `<<<\n${n.text}\n<<< ${src}` : `${n.text}${src ? `\n\n${src}` : ''}`;
+  return { title: n.title || n.text.slice(0, 60) || 'Snippet', text, tags: n.kind === 'snippet' ? 'Snippet' : 'Notiz', ...(ref?.href ? { source: ref.href } : {}) };
 }

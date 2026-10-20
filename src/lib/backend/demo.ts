@@ -754,6 +754,10 @@ export class DemoBackend implements Backend {
   }
 
   /** Demo bags hold no texts: titles of the generated placeholder tiddlers only. */
+  async wikiAddTiddler(_name: string, fields: Record<string, string>): Promise<string> {
+    return fields.title ?? 'Snippet';
+  }
+
   async wikiSearch(query: string): Promise<WikiHit[]> {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];

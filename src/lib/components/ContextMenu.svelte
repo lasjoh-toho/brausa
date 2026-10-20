@@ -57,6 +57,7 @@
       : [
           { label: t('menu.newFolder'), icon: 'folderPlus', key: `${modLabel}⇧N`, run: () => app.newFolder() },
           { label: t('menu.selectAll'), icon: 'select', key: `${modLabel}A`, run: () => app.selectAll() },
+          { label: t('sizeselect.menu'), icon: 'select', run: () => (app.sizeSelectOpen = true) },
           null,
           app.dupes
             ? { label: t('menu.endDuplicates'), icon: 'x', run: () => app.endDuplicates() }

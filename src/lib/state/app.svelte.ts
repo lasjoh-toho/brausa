@@ -1053,6 +1053,9 @@ class AppState {
     for (const p of paths) this.selection.add(p);
   }
 
+  /** The "select by size" dialog is open. */
+  sizeSelectOpen = $state(false);
+
   selectAll() {
     this.setSelection(this.visible.map((e) => e.path));
   }

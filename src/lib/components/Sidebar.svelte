@@ -277,6 +277,9 @@
   {#each wikis.recipes as w (w.name)}
     <div
       class="place project"
+      class:hit={drag.active && drag.hit?.kind === 'wiki' && drag.hit.key === w.name}
+      data-drop="wiki"
+      data-key={w.name}
       role="button"
       tabindex="0"
       title={w.target.path + '\n' + tn('sidebar.bags', w.bags.length) + (w.lastSync ? ' · ' + t('sidebar.lastSync', { date: new Date(w.lastSync).toLocaleString(loc()) }) : '')}

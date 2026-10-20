@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { app } from '../state/app.svelte';
   import { board } from '../state/board.svelte';
-  import { drag } from '../state/drag.svelte';
+  import { drag, noteTiddler } from '../state/drag.svelte';
   import type { Entry } from '../core/types';
   import {
     type NoteCard,
@@ -366,6 +366,8 @@
 
   /** A dragged card is over the notes & snippets thread. */
   let overThread = false;
+  /** A dragged card is over a wiki in the sidebar. */
+  let overWiki: HTMLElement | null = null;
 
   function move(e: PointerEvent, grabbed: string) {
     const parent = m!.cards[grabbed].parent;
@@ -394,6 +396,11 @@
         const thread = document.elementsFromPoint(ev.clientX, ev.clientY).find((n) => (n as HTMLElement).closest?.('[data-notes-thread]'));
         overThread = !!thread;
         document.querySelector('[data-notes-thread]')?.classList.toggle('hit', overThread);
+        // Over a wiki in the sidebar: the cards become tiddlers there (and stay on the map).
+        const w = document.elementsFromPoint(ev.clientX, ev.clientY).map((n) => (n as HTMLElement).closest?.<HTMLElement>('[data-drop="wiki"]')).find(Boolean) ?? null;
+        overWiki?.classList.remove('hit');
+        overWiki = w;
+        w?.classList.add('hit');
         // Over a file outside the map (tray, file list): link instead of moving.
         const f = fileAt(ev);
         linkTo?.classList.remove('link-target');
@@ -409,6 +416,22 @@
       },
       () => {
         const file = linkTo;
+        if (overWiki) {
+          const name = overWiki.dataset.key!;
+          overWiki.classList.remove('hit');
+          overWiki = null;
+          for (const id of ids) Object.assign(m!.cards[id], start.get(id));
+          moving = new Set();
+          drop = undefined;
+          stackHint = null;
+          void (async () => {
+            for (const id of ids) {
+              const title = await app.backend.wikiAddTiddler(name, noteTiddler(m!.cards[id])).catch((e) => (app.toast(String(e), true), null));
+              if (title) app.toast(t('drag.wikiAdded', { title, name }));
+            }
+          })();
+          return;
+        }
         if (overThread) {
           overThread = false;
           document.querySelector('[data-notes-thread]')?.classList.remove('hit');

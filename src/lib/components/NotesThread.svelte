@@ -30,7 +30,7 @@
   function down(e: PointerEvent, n: NoteCard) {
     if ((e.target as HTMLElement).closest('button, textarea')) return;
     const entry: Entry = { path: n.refs?.[0]?.path ?? '', name: n.title, ext: '', kind: 'file', size: 0, mtime: 0, ctime: 0, tags: [] };
-    drag.begin(e, () => [entry], 'notes', undefined, { data: { note: n }, accepts: ['board', 'project', 'kanban'], title: (n.text || n.title).slice(0, 200) });
+    drag.begin(e, () => [entry], 'notes', undefined, { data: { note: n }, accepts: ['board', 'project', 'kanban', 'wiki'], title: (n.text || n.title).slice(0, 200) });
   }
 
   const when = (ms: number) => new Date(ms).toLocaleString(loc(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });

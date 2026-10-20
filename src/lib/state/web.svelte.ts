@@ -244,7 +244,7 @@ class WebState {
   private async followDrag(first: WebDrag) {
     this.dragId = first.id;
     const p = this.dragPayload(first);
-    drag.webEnter(p.items, p.data, first.kind === 'image' ? null : ['board', 'project', 'notes', 'kanban'], p.title);
+    drag.webEnter(p.items, p.data, first.kind === 'image' ? null : ['board', 'project', 'notes', 'kanban', 'wiki'], p.title);
     let d: WebDrag | null = first;
     const at = (d: WebDrag) => ({ x: (this.rect?.x ?? 0) + d.x, y: (this.rect?.y ?? 0) + d.y });
     while (d && d.id === first.id && d.down) {

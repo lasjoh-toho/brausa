@@ -313,6 +313,8 @@ export interface Backend {
   wikiLayers(recipe: string): Promise<WikiLayer[]>;
   /** Tiddlers in all bags whose title or text contains every word. */
   wikiSearch(query: string): Promise<WikiHit[]>;
+  /** A snippet, note or card dropped onto a wiki: a tiddler in its own bag; returns the title. */
+  wikiAddTiddler(name: string, fields: Record<string, string>): Promise<string>;
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;
