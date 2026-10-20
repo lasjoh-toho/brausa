@@ -633,6 +633,9 @@ export class DemoBackend implements Backend {
     this.noWeb();
   }
   async webDragDone() {}
+  async webFind() {
+    return { n: -1, i: -1 };
+  }
   async webPlace() {}
   async webClose() {}
   async webGo() {}

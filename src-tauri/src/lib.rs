@@ -413,6 +413,14 @@ async fn web_fetch_image(url: String, dir: String) -> CmdResult<String> {
     .map_err(err)?
 }
 
+/// Find in the page of the web panel, with highlighting; returns hits and the current one.
+#[tauri::command]
+async fn web_find(app: AppHandle, query: String, dir: i32) -> CmdResult<serde_json::Value> {
+    let a = app.clone();
+    let raw = tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().find(&a, &query, dir)).await.map_err(err)??;
+    serde_json::from_str(&raw).map_err(err)
+}
+
 /// The drag in the web panel was handled (dropped or cancelled).
 #[tauri::command]
 async fn web_drag_done(app: AppHandle) -> CmdResult<()> {
@@ -940,6 +948,7 @@ pub fn run() {
             web_selection,
             web_collect_images,
             web_fetch_image,
+            web_find,
             web_drag_done,
             web_peek,
             web_save_page,

@@ -10,6 +10,7 @@
   import { wikis } from '../state/wikis.svelte';
   import { web } from '../state/web.svelte';
   import Icon from './Icon.svelte';
+  import FindBar from './FindBar.svelte';
   import { filterPages, shortUrl } from '../core/web';
   import { board } from '../state/board.svelte';
   // pdf.js is large: load the reader only when a document is opened.
@@ -102,6 +103,33 @@
   const docName = $derived(board.reader?.ref.name ?? '');
 
   const when = (ms: number) => new Date(ms).toLocaleString(loc(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  // ---------------------------------------------------------------- find in the page
+
+  let finding = $state(false);
+  let findQuery = '';
+  let found = $state({ n: 0, i: -1 });
+
+  async function find(q: string, dir: number) {
+    findQuery = q;
+    const r = await app.backend.webFind(q, dir).catch(() => ({ n: -1, i: -1 }));
+    if (r.n < 0) app.toast(t('find.unavailable'), true);
+    found = { n: Math.max(0, r.n), i: Math.max(0, r.i) };
+  }
+
+  function closeFind() {
+    finding = false;
+    found = { n: 0, i: -1 };
+    if (findQuery) void app.backend.webFind('', 0).catch(() => {});
+    findQuery = '';
+  }
+
+  // A new page: the old hits are gone.
+  $effect(() => {
+    void web.url;
+    found = { n: 0, i: -1 };
+    findQuery = '';
+  });
 </script>
 
 <aside class="web" style:width="{web.width}px">
@@ -150,6 +178,9 @@
     <button class="btn icon" class:on={web.listOpen === 'history'} onclick={() => openList('history')} title={t('webpane.historyOf', { scope: scopeName })} aria-label={t('webpane.history')}>
       <Icon name="clock" size={13} />
     </button>
+    <button class="btn icon" class:on={finding} disabled={!web.started || web.home} onclick={() => (finding ? closeFind() : (finding = true))} title={t('find.open')} aria-label={t('find.open')}>
+      <Icon name="search" size={13} />
+    </button>
     <button class="btn icon" class:on={web.adblock} onclick={() => web.setAdblock(!web.adblock)} title={web.adblock ? t('webpane.adblockOn') : t('webpane.adblockOff')} aria-label={t('webpane.adblock')}>
       <Icon name="shield" size={13} />
     </button>
@@ -168,6 +199,9 @@
       </span>
     {/if}
   </div>
+  {/if}
+  {#if finding && web.mode === 'web' && !web.home}
+    <FindBar count={found.n} current={found.i} onsearch={(q) => find(q, 0)} onstep={(by) => find(findQuery, by)} onclose={closeFind} />
   {/if}
   {#if board.reader}
     <div class="tabs" role="tablist">
