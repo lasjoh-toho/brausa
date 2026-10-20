@@ -17,6 +17,9 @@
   import { renderMarkdown } from '../core/markdown';
   import { anchorText, findQuote, sanitizeHtml, type Snippet } from '../core/snippets';
   import Icon from './Icon.svelte';
+  import FindBar from './FindBar.svelte';
+  import { findAll, matchRanges } from '../core/textsearch';
+  import { isToggleKey } from '../platform';
   import { t } from '../i18n/index.svelte';
 
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -50,6 +53,10 @@
   });
 
   async function load(path: string, k: string) {
+    pageTexts = null;
+    hitRects = [];
+    pageCounts = [];
+    textCount = 0;
     loading = true;
     error = '';
     pdf?.destroy();
@@ -127,6 +134,7 @@
       node.prepend(canvas);
       node.append(text);
       await new pdfjs.TextLayer({ textContentSource: p.streamTextContent(), container: text, viewport: vp }).render();
+      if (query.trim()) paint();
     }
 
     return {
@@ -179,6 +187,115 @@
     });
   });
 
+  // ---------------------------------------------------------------- search
+
+  let finding = $state(false);
+  let query = $state('');
+  /** Index of the current hit in the whole document. */
+  let cur = $state(0);
+  /** PDF: hits per page (from the pages' text, also those not drawn yet). */
+  let pageCounts = $state<number[]>([]);
+  let pageTexts: string[] | null = null;
+  let textCount = $state(0);
+  /** Highlights: PDF in fractions of the page, text in pixels of the text. */
+  let hitRects = $state<{ page: number | null; i: number; x: number; y: number; w: number; h: number }[]>([]);
+  const total = $derived(kind === 'pdf' ? pageCounts.reduce((a, b) => a + b, 0) : textCount);
+
+  async function search(q: string) {
+    query = q;
+    cur = 0;
+    if (kind === 'pdf' && pdf) {
+      if (!pageTexts) {
+        const d = pdf;
+        pageTexts = await Promise.all(
+          Array.from({ length: d.numPages }, async (_, i) => {
+            const c = await (await d.getPage(i + 1)).getTextContent();
+            return c.items.map((it) => ('str' in it ? it.str : '')).join('');
+          })
+        );
+      }
+      pageCounts = pageTexts.map((tx) => findAll(tx, q).length);
+    }
+    paint();
+    if (total) goTo(0);
+  }
+
+  /** Highlights the hits in what is drawn (PDF pages appear as they scroll into view). */
+  function paint() {
+    if (!scroller) return;
+    const q = query;
+    if (!q.trim()) {
+      hitRects = [];
+      textCount = 0;
+      return;
+    }
+    if (kind === 'pdf') {
+      const out: typeof hitRects = [];
+      let before = 0;
+      pageCounts.forEach((n, i) => {
+        const pageEl = scroller!.querySelector<HTMLElement>(`[data-page="${i + 1}"]`);
+        const layer = pageEl?.querySelector('.textLayer');
+        if (pageEl && layer && n) {
+          const b = pageEl.getBoundingClientRect();
+          matchRanges(layer, q).slice(0, n).forEach((r, j) => {
+            for (const c of r.getClientRects())
+              if (c.width > 0.5) out.push({ page: i + 1, i: before + j, x: (c.left - b.left) / b.width, y: (c.top - b.top) / b.height, w: c.width / b.width, h: c.height / b.height });
+          });
+        }
+        before += n;
+      });
+      hitRects = out;
+    } else if (textEl) {
+      const base = textEl.getBoundingClientRect();
+      const ranges = matchRanges(textEl, q);
+      textCount = ranges.length;
+      hitRects = ranges.flatMap((r, i) => [...r.getClientRects()].map((c) => ({ page: null, i, x: c.left - base.left, y: c.top - base.top, w: c.width, h: c.height })));
+    }
+  }
+
+  // New width: the pages are drawn anew, the text wraps differently.
+  $effect(() => {
+    void width;
+    if (query.trim()) requestAnimationFrame(() => paint());
+  });
+
+  function goTo(i: number) {
+    if (!total || !scroller) return;
+    cur = ((i % total) + total) % total;
+    const shown = hitRects.find((h) => h.i === cur);
+    if (kind === 'pdf') {
+      let page = 0;
+      for (let n = 0, k = 0; k < pageCounts.length; k++) {
+        if (cur < n + pageCounts[k]) {
+          page = k + 1;
+          break;
+        }
+        n += pageCounts[k];
+      }
+      const el = scroller.querySelector<HTMLElement>(`[data-page="${page}"]`);
+      if (el) scroller.scrollTo({ top: el.offsetTop + (shown ? shown.y * el.offsetHeight : 0) - 120, behavior: shown ? 'smooth' : 'auto' });
+      // A page drawn only now: highlight it, then come back to the hit.
+      if (!shown) setTimeout(() => (paint(), hitRects.some((h) => h.i === cur) && goTo(cur)), 400);
+    } else if (shown && textEl) {
+      scroller.scrollTo({ top: textEl.offsetTop + shown.y - 120, behavior: 'smooth' });
+    }
+  }
+
+  function closeFind() {
+    finding = false;
+    query = '';
+    hitRects = [];
+    pageCounts = [];
+    textCount = 0;
+  }
+
+  function findKey(e: KeyboardEvent) {
+    if (isToggleKey(e) && e.key.toLowerCase() === 'f' && doc) {
+      finding = true;
+      e.preventDefault();
+    }
+  }
+
   // ---------------------------------------------------------------- snippets
 
   /** Pressing on selected text drags it out as a snippet. */
@@ -224,15 +341,21 @@
   }
 </script>
 
+<svelte:window onkeydown={findKey} />
+
 {#if doc && ref}
   <aside class="reader" class:docked style:width={docked ? undefined : `${board.readerWidth}px`}>
     <header>
       <Icon name="doc" size={14} />
       <span class="name" title={ref.path}>{ref.name}</span>
       <span class="hint">{t('reader.hint')}</span>
+      <button class="btn icon" class:on={finding} title={t('find.open')} onclick={() => (finding ? closeFind() : (finding = true))}><Icon name="search" size={14} /></button>
       <button class="btn icon" title={t('reader.openExternal')} onclick={() => board.openExternal(ref.path!)}><Icon name="open" size={14} /></button>
       <button class="btn icon" title={t('reader.close')} onclick={() => board.closeReader()}><Icon name="x" size={14} /></button>
     </header>
+    {#if finding}
+      <FindBar count={total} current={cur} onsearch={search} onstep={(by) => goTo(cur + by)} onclose={closeFind} />
+    {/if}
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="scroll" bind:this={scroller} bind:clientWidth={width} onpointerdown={down}>
@@ -250,6 +373,9 @@
             style="--total-scale-factor: {scale}; --scale-round-x: 1px; --scale-round-y: 1px"
             use:page={{ n: i + 1, scale }}
           >
+            {#each hitRects.filter((h) => h.page === i + 1) as h, j (j)}
+              <div class="hit" class:cur={h.i === cur} style:left="{h.x * 100}%" style:top="{h.y * 100}%" style:width="{h.w * 100}%" style:height="{h.h * 100}%"></div>
+            {/each}
             {#each marks.filter((r) => r.page === i + 1) as r (r)}
               {#each r.rects ?? [] as q, j (j)}
                 <div
@@ -267,6 +393,9 @@
       {:else}
         <div class="text" bind:this={textEl}>
           {@html html}
+          {#each hitRects as h, j (j)}
+            <div class="hit" class:cur={h.i === cur} style:left="{h.x}px" style:top="{h.y}px" style:width="{h.w}px" style:height="{h.h}px"></div>
+          {/each}
           {#each textMarks as tm, j (j)}
             <div class="mark" class:flash={isFocus(tm.r)} style:left="{tm.x}px" style:top="{tm.y}px" style:width="{tm.w}px" style:height="{tm.h}px"></div>
           {/each}
@@ -350,6 +479,18 @@
     white-space: pre-wrap;
     font-family: var(--mono);
     font-size: 13px;
+  }
+  .hit {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(255, 170, 0, 0.35);
+    outline: 1px solid rgba(220, 120, 0, 0.6);
+    border-radius: 2px;
+    z-index: 3;
+  }
+  .hit.cur {
+    background: rgba(255, 110, 0, 0.55);
+    outline: 2px solid #e8590c;
   }
   .mark {
     position: absolute;

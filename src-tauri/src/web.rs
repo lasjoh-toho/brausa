@@ -292,6 +292,14 @@ impl Web {
         Ok(fresh.iter().filter(|u| fetch_image(&agent, u, dir, exts).is_some()).count())
     }
 
+    /// Finds `query` in the page and highlights every hit; `dir` 1/-1 steps, 0 starts over.
+    /// Returns `{"n": hits, "i": current}` as JSON.
+    pub fn find(&self, app: &AppHandle, query: &str, dir: i32) -> Result<String, String> {
+        let q = serde_json::to_string(query).map_err(|e| e.to_string())?;
+        let raw = self.eval(app, &format!("window.__brausaFind ? window.__brausaFind({q}, {dir}) : JSON.stringify({{n: -1, i: -1}})"))?;
+        serde_json::from_str::<String>(&raw).map_err(|e| e.to_string())
+    }
+
     /// The drag in the page has been handled: forget it.
     pub fn drag_done(&self, app: &AppHandle) -> Result<(), String> {
         self.eval(app, "window.__brausaDrag = null").map(|_| ())

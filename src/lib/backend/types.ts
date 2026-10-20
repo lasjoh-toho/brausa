@@ -275,6 +275,8 @@ export interface Backend {
   webPeek(): Promise<{ y: number; sel: boolean; drag: WebDrag | null }>;
   /** Downloads a picture dragged out of the web panel into `dir`; returns its path. */
   webFetchImage(url: string, dir: string): Promise<string>;
+  /** Find in the page of the web panel (dir 1/-1 steps, 0 starts over); n = -1: the page cannot be searched. */
+  webFind(query: string, dir: number): Promise<{ n: number; i: number }>;
   /** The drag in the web panel was handled. */
   webDragDone(): Promise<void>;
   webPlace(b: WebBounds, visible: boolean): Promise<void>;

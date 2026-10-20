@@ -1,6 +1,6 @@
 [package]
 name = "brausa"
-version = "0.12.2"
+version = "0.13.0"
 description = "Plattformunabhängiger visueller Datei-Browser"
 edition = "2021"
 license = "MIT"

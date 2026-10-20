@@ -14,6 +14,11 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.13
+
+- **Find in text** with highlighting in the web panel and in the PDF and document viewer: the search button (or ⌘/Ctrl+F in the viewer) opens a search bar; every hit is highlighted, the current one stronger, Enter / ⇧Enter step through them. In PDFs all pages count, also those not shown yet.
+- **TiddlyVisuals 1.19.0** built in (Pinboard 0.8.0): card tools in two rows right on the card; "+ Object" and "Frame ▾" (current view, draw) in the path panel; an existing tiddler can become the story tiddler (with a question before replacing its story); "Open as story" without a story tiddler.
+
 ### New in 0.12.2
 
 - **TiddlyVisuals 1.18.0** built in (Pinboard 0.7.0): in the wiki's Pinboard, "Open as story" works without a story tiddler; the story tiddler can be named before it is made and renamed later; the card menu (⋯) sets which board a card leads into; narrower card tools.
@@ -89,6 +94,10 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.13: Suche im Text, TiddlyVisuals 1.19**
+- **Im Text suchen** mit Hervorhebung im Web-Fenster und im PDF- und Dokumentbetrachter: Der Lupen-Knopf (oder ⌘/Strg+F im Betrachter) öffnet eine Suchleiste; alle Treffer werden markiert, der aktuelle stärker, ↵ / ⇧↵ springen weiter. In PDFs zählen alle Seiten, auch noch nicht angezeigte.
+- **TiddlyVisuals 1.19.0** eingebaut (Pinboard 0.8.0): Kartenwerkzeuge in zwei Reihen direkt an der Karte; „+ Object“ und „Frame ▾“ (aktuelle Ansicht, zeichnen) im Pfad-Feld; ein vorhandener Tiddler kann Story-Tiddler werden (mit Rückfrage, bevor seine Story ersetzt wird); „Open as story“ ohne Story-Tiddler.
 
 **Neu in 0.12.2**
 - **TiddlyVisuals 1.18.0** eingebaut (Pinboard 0.7.0): Im Pinboard des Wikis geht „Open as story“ auch ohne Story-Tiddler; der Story-Tiddler lässt sich vor dem Anlegen benennen und später umbenennen; im Kartenmenü (⋯) wird festgelegt, in welches Board eine Karte führt; schmalere Kartenwerkzeuge.

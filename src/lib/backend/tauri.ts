@@ -253,6 +253,10 @@ export class TauriBackend implements Backend {
     return invoke<string>('web_fetch_image', { url, dir });
   }
 
+  webFind(query: string, dir: number) {
+    return invoke<{ n: number; i: number }>('web_find', { query, dir });
+  }
+
   webDragDone() {
     return invoke<void>('web_drag_done');
   }
