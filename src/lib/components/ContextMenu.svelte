@@ -1,7 +1,5 @@
 <script lang="ts">
   import { web } from '../state/web.svelte';
-  import { board, READABLE } from '../state/board.svelte';
-  import { category } from '../core/format';
   import { app } from '../state/app.svelte';
   import { isMac, modLabel } from '../platform';
   import Icon from './Icon.svelte';
@@ -23,11 +21,9 @@
     m.entry
       ? [
           { label: t('common.open'), icon: 'open', key: `${modLabel}O`, run: () => targets.forEach((t) => app.open(t)) },
+          ...(one?.kind === 'file' ? [{ label: t('menu.openDefault'), icon: 'open', run: () => app.openExternal(one) }] : []),
           ...(one?.kind === 'file' ? [{ label: t('menu.preview'), icon: 'eye', key: t('menu.keySpace'), run: onPreview }] : []),
           ...(one && (one.ext === 'html' || one.ext === 'htm') ? [{ label: t('menu.openInWeb'), icon: 'globe', run: () => web.openLocal(one.path) }] : []),
-          ...(one?.kind === 'file' && (READABLE.has(one.ext) || category(one.ext) === 'text')
-            ? [{ label: t('menu.readInPanel'), icon: 'doc', run: () => board.openReader({ kind: 'file', path: one.path, name: one.name, ext: one.ext }) }]
-            : []),
           ...(one ? [{ label: isMac ? t('menu.revealFinder') : t('menu.revealFiles'), icon: 'folder', run: () => app.reveal(one) }] : []),
           null,
           ...(one ? [{ label: t('common.rename'), icon: 'pencil', key: isMac ? '↵' : 'F2', run: () => (app.renaming = one.path) }] : []),

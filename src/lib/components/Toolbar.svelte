@@ -28,7 +28,8 @@
     { id: 'board', icon: 'nodes' }
   ];
   // The start page is a project's.
-  const views = $derived(allViews.filter((v) => v.id !== 'start' || app.project));
+  // Start page and map belong to projects.
+  const views = $derived(allViews.filter((v) => (v.id !== 'start' && v.id !== 'board') || app.project));
 
   // Sort menu: picking the current key again reverses the order.
   let sortMenu = $state<{ x: number; y: number } | null>(null);
@@ -72,7 +73,10 @@
   </div>
 {/if}
 
-<header data-tauri-drag-region class="toolbar" class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
+<header data-tauri-drag-region class="toolbar" class:bare={!app.sidebarOpen} class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
+  {#if !app.sidebarOpen}
+    <button class="btn icon menu-btn" onclick={() => app.toggleSidebar()} title={t('toolbar.showSidebar')} aria-label={t('toolbar.showSidebar')}><Icon name="menu" size={15} /></button>
+  {/if}
   <div class="nav">
     <button class="btn icon" onclick={() => app.back()} disabled={!app.history.length} title={t('toolbar.back')}>
       <Icon name="back" />
@@ -439,5 +443,9 @@
   }
   .mode .btn {
     gap: 5px;
+  }
+  /* macOS: without the sidebar the window buttons sit over the toolbar. */
+  :global(:root[data-platform='mac']) .toolbar.bare {
+    padding-left: 78px;
   }
 </style>

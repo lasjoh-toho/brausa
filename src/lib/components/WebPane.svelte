@@ -95,6 +95,7 @@
 
 <aside class="web" style:width="{web.width}px">
   <div class="grip" onpointerdown={resize} role="separator" aria-orientation="vertical" aria-label={t('webpane.resize')}></div>
+  {#if web.mode !== 'doc' || !board.reader}
   <div class="bar">
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('back')} aria-label={t('webpane.back')}><Icon name="back" size={14} /></button>
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('forward')} aria-label={t('webpane.forward')}><Icon name="forward" size={14} /></button>
@@ -154,6 +155,7 @@
       </span>
     {/if}
   </div>
+  {/if}
   {#if board.reader}
     <div class="tabs" role="tablist">
       <button class:on={web.mode === 'web'} role="tab" aria-selected={web.mode === 'web'} onclick={() => (web.mode = 'web')}><Icon name="globe" size={12} />{t('webpane.tabWeb')}</button>

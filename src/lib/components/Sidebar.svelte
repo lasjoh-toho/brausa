@@ -84,6 +84,7 @@
 
 <aside class="sidebar">
   <div class="brand" data-tauri-drag-region>
+    <button class="gear burger" onclick={() => app.toggleSidebar()} title={t('sidebar.hide')} aria-label={t('sidebar.hide')}><Icon name="menu" size={15} /></button>
     brausa
     {#if app.backend.name === 'demo'}<span class="demo" title={t('sidebar.demoHint')}>Demo</span>{/if}
     <span class="grow"></span>

@@ -104,7 +104,7 @@
 <svelte:window onkeydown={key} />
 
 <div class="app">
-  <Sidebar />
+  {#if app.sidebarOpen}<Sidebar />{/if}
   <main>
     <Toolbar bind:this={toolbar} {accent} />
     <div class="work">
