@@ -106,6 +106,25 @@ export interface Rect {
 
 export const IDENTITY: Frame = { ox: 0, oy: 0, k: 1 };
 
+/** A card in a project's notes & snippets thread (not placed on a map). */
+export interface NoteCard {
+  id: string;
+  kind?: 'snippet' | 'note';
+  title: string;
+  text: string;
+  refs?: CardRef[];
+  color?: string | null;
+  w?: number;
+  h?: number;
+  /** ms: when it came into the thread */
+  at: number;
+}
+
+/** A map card as it goes into the thread (its children stay on the map). */
+export function toNote(c: MapCard): NoteCard {
+  return { id: c.id, kind: c.kind === 'snippet' ? 'snippet' : 'note', title: c.title, text: c.text, refs: c.refs, color: c.color ?? null, w: c.w, h: c.h, at: Date.now() };
+}
+
 export function uid(prefix: string): string {
   return prefix + '_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
 }

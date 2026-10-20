@@ -1,5 +1,6 @@
 // Built-in browser state: toasts.
 export const de = {
+  nothingMarked: 'Auf der Seite ist kein Text markiert.',
   collectOn: 'Bilder der besuchten Seiten werden gespeichert in {folder}',
   'collected.one': '1 Bild gespeichert in {folder}',
   'collected.other': '{n} Bilder gespeichert in {folder}',
@@ -13,6 +14,7 @@ export const de = {
 };
 
 export const en: typeof de = {
+  nothingMarked: 'No text is marked on the page.',
   collectOn: 'Pictures of visited pages are saved to {folder}',
   'collected.one': '1 picture saved to {folder}',
   'collected.other': '{n} pictures saved to {folder}',

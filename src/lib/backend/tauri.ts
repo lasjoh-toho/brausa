@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
 import { t } from '../i18n/index.svelte';
-import type { ProjectMap } from '../core/map';
+import type { NoteCard, ProjectMap } from '../core/map';
 import { WALK_LIMIT, type OsDrag } from './types';
 import type {
   Backend,
@@ -231,8 +231,12 @@ export class TauriBackend implements Backend {
     return invoke<void>('web_open', { url, bounds, adblock });
   }
 
-  webCollectImages(dir: string) {
-    return invoke<number>('web_collect_images', { dir });
+  webCollectImages(dir: string, min: number, exts: string[]) {
+    return invoke<number>('web_collect_images', { dir, min, exts });
+  }
+
+  webPeek() {
+    return invoke<{ y: number; sel: boolean }>('web_peek');
   }
 
   webPlace(bounds: WebBounds, visible: boolean) {
@@ -278,6 +282,14 @@ export class TauriBackend implements Backend {
 
   listMaps(root: string) {
     return invoke<MapInfo[]>('list_maps', { root });
+  }
+
+  loadNotes(root: string) {
+    return invoke<NoteCard[]>('load_notes', { root });
+  }
+
+  saveNotes(root: string, notes: NoteCard[]) {
+    return invoke<void>('save_notes', { root, notes });
   }
 
   loadMap(root: string, id: string) {

@@ -5,6 +5,7 @@
   import { drag } from '../state/drag.svelte';
   import type { Entry } from '../core/types';
   import {
+    type NoteCard,
     HEADER,
     PAD,
     MIN_H,
@@ -196,6 +197,24 @@
 
   async function dropFiles(items: Entry[], x: number, y: number, data?: unknown) {
     if (!m) return;
+    // A note or snippet from the thread: becomes a card where it is dropped.
+    const note = (data as { note?: NoteCard } | undefined)?.note;
+    if (note) {
+      const tg = fileTarget(x, y, note.kind === 'snippet');
+      const stackOn = tg.id && (tg.zone === 'before' || tg.zone === 'after') ? { id: tg.id, where: tg.zone } : null;
+      const parent = stackOn ? null : tg.id && tg.zone !== 'link' ? tg.id : ctx;
+      const p = local({ clientX: x, clientY: y });
+      let id = '';
+      board.mutate((mm) => {
+        id = placeCard(mm, stackOn ? mm.cards[stackOn.id].parent : parent, p.x, p.y, 0.1, board.noteCard(note));
+        if (stackOn) stackInsert(mm, id, stackOn.id, stackOn.where);
+        if (parent) growToFit(mm, parent);
+      });
+      board.removeNote(note.id);
+      board.selection.clear();
+      board.selection.add(id);
+      return;
+    }
     const snippet = (data as { snippet?: Snippet } | undefined)?.snippet;
     const tg = fileTarget(x, y, !!snippet);
     let refs: CardRef[];
@@ -829,6 +848,7 @@
         <button class="btn" class:on={selInKanban} title={selInKanban ? t('map.sel.fromKanban') : t('map.sel.toKanban')} onclick={toKanban}>
           <Icon name="kanban" size={14} /> Kanban
         </button>
+        <button class="btn icon" title={t('map.sel.toThread')} onclick={() => board.toThread([...board.selection])}><Icon name="doc" size={14} /></button>
         <button class="btn icon" title={t('map.sel.delete')} onclick={removeSelected}><Icon name="trash" size={14} /></button>
       </div>
     {/if}

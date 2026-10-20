@@ -17,6 +17,17 @@
   import { t, loc } from '../i18n/index.svelte';
 
   let view = $state<HTMLElement>();
+  /** Choosing the project for the marked text. */
+  let sendOpen = $state(false);
+
+  // Watch the page (scrolling, marked text) while it is shown.
+  $effect(() => {
+    web.watchPage(web.open && web.started && !web.home && web.mode === 'web');
+    return () => web.watchPage(false);
+  });
+  $effect(() => {
+    if (!web.hasSelection) sendOpen = false;
+  });
   let address = $state(web.url);
   let editing = $state(false);
 
@@ -26,7 +37,7 @@
 
   // Anything brausa draws over the panel must not end up under the native page.
   const covered = $derived(
-    !!web.listOpen || web.suggest || !!app.preview || !!app.menu || !!app.dialog || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || wikis.settingsOpen || drag.active
+    !!web.listOpen || web.suggest || sendOpen || web.collectDialog || !!app.preview || !!app.menu || !!app.dialog || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || wikis.settingsOpen || drag.active
   );
 
   function measure() {
@@ -96,7 +107,7 @@
 <aside class="web" style:width="{web.width}px">
   <div class="grip" onpointerdown={resize} role="separator" aria-orientation="vertical" aria-label={t('webpane.resize')}></div>
   {#if web.mode !== 'doc' || !board.reader}
-  <div class="bar">
+  <div class="bar" class:gone={web.barsHidden && !web.suggest}>
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('back')} aria-label={t('webpane.back')}><Icon name="back" size={14} /></button>
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('forward')} aria-label={t('webpane.forward')}><Icon name="forward" size={14} /></button>
     <button class="btn icon" disabled={!web.started} onclick={() => web.nav('reload')} aria-label={t('webpane.reload')}><Icon name="sync" size={14} /></button>
@@ -124,10 +135,12 @@
     </form>
     <button class="btn icon" onclick={() => web.toggle(false)} aria-label={t('webpane.closePane')}><Icon name="x" size={14} /></button>
   </div>
-  <div class="bar tools">
-    <button class="btn" disabled={!web.started} onclick={() => web.clip()} title={t('webpane.clipTitle')}>
-      <Icon name="nodes" size={13} /> {t('webpane.clip')}
-    </button>
+  <div class="bar tools" class:gone={web.barsHidden && !web.suggest}>
+    {#if web.hasSelection && app.projects.length}
+      <button class="btn send-btn" class:on={sendOpen} onclick={() => (sendOpen = !sendOpen)} title={t('webpane.sendTitle')}>
+        <Icon name="forward" size={13} /> {t('webpane.send')}
+      </button>
+    {/if}
     <button class="btn" disabled={!web.started} onclick={() => web.savePage()} title={t('webpane.saveTitle')}>
       <Icon name="tray" size={13} /> {t('common.save')}
     </button>
@@ -140,8 +153,8 @@
     <button class="btn icon" class:on={web.adblock} onclick={() => web.setAdblock(!web.adblock)} title={web.adblock ? t('webpane.adblockOn') : t('webpane.adblockOff')} aria-label={t('webpane.adblock')}>
       <Icon name="shield" size={13} />
     </button>
-    <button class="btn icon" class:on={web.collect} onclick={() => web.setCollect(!web.collect)} title={web.collect ? t('webpane.collectOn') : t('webpane.collectOff')} aria-label={t('webpane.collect')}>
-      <Icon name="image" size={13} />
+    <button class="btn icon rec-btn" class:rec={web.collect} onclick={() => web.toggleCollect()} title={web.collect ? t('webpane.collectOn') : t('webpane.collectOff')} aria-label={t('webpane.collect')}>
+      <span class="dot"></span>
     </button>
     <span class="grow"></span>
     {#if web.local}
@@ -163,7 +176,14 @@
     </div>
   {/if}
   <div class="view" bind:this={view}>
-    {#if web.mode === 'doc' && board.reader}
+    {#if sendOpen}
+      <div class="sendto">
+        <b>{t('webpane.sendWhere')}</b>
+        {#each app.projects as p (p.id)}
+          <button class="chip" onclick={() => ((sendOpen = false), web.sendTo(p.id))}><Icon name="kanban" size={12} />{p.name}</button>
+        {/each}
+      </div>
+    {:else if web.mode === 'doc' && board.reader}
       {#await loadReader() then R}<R.default docked />{/await}
     {:else if web.suggest && suggestions.length}
       <ul class="suggest">
@@ -563,5 +583,57 @@
     color: var(--accent);
     font-weight: 700;
     font-size: 17px;
+  }
+  .bar {
+    transition:
+      margin-top 0.18s,
+      opacity 0.18s;
+  }
+  .bar.gone {
+    margin-top: -38px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .rec-btn .dot {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid var(--fg-muted);
+  }
+  .rec-btn.rec .dot {
+    border-color: var(--danger);
+    background: var(--danger);
+    animation: rec 1.2s ease-in-out infinite;
+  }
+  @keyframes rec {
+    50% {
+      opacity: 0.4;
+    }
+  }
+  .send-btn {
+    color: var(--accent);
+  }
+  .sendto {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 16px;
+    background: var(--bg);
+  }
+  .sendto .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 9px;
+    background: var(--bg-elev);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .sendto .chip:hover {
+    box-shadow: 0 0 0 2px var(--accent);
   }
 </style>

@@ -65,6 +65,7 @@ export const de = {
   'sel.edit': 'Bearbeiten (F2)',
   'sel.fromKanban': 'Aus dem Kanban nehmen',
   'sel.toKanban': 'Ins Kanban schicken',
+  'sel.toThread': 'In den Thread „Notizen & Snippets“ legen (bleibt erhalten)',
   'sel.delete': 'Löschen (Entf)',
 
   empty: 'Doppelklick legt eine Karte an. Karten auf andere ziehen macht sie zu Unterkarten, der Punkt am rechten Rand zieht Pfeile.'
@@ -136,6 +137,7 @@ export const en: typeof de = {
   'sel.edit': 'Edit (F2)',
   'sel.fromKanban': 'Remove from the kanban',
   'sel.toKanban': 'Send to the kanban',
+  'sel.toThread': 'Put into the "Notes & snippets" thread (kept)',
   'sel.delete': 'Delete (Del)',
 
   empty: 'Double-click to create a card. Drag cards onto others to make them sub-cards; the dot on the right edge draws arrows.'

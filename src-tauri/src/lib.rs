@@ -252,6 +252,17 @@ async fn save_map(state: State<'_, Index>, projs: State<'_, Projs>, root: String
 }
 
 #[tauri::command]
+async fn load_notes(state: State<'_, Index>, projs: State<'_, Projs>, root: String) -> CmdResult<serde_json::Value> {
+    Ok(maps::load_notes(&project_root(&state, &projs, &root)?))
+}
+
+#[tauri::command]
+async fn save_notes(state: State<'_, Index>, projs: State<'_, Projs>, root: String, notes: serde_json::Value) -> CmdResult<()> {
+    maps::save_notes(&project_root(&state, &projs, &root)?, &notes).map_err(err)?;
+    sync_refs(&state, &projs)
+}
+
+#[tauri::command]
 async fn delete_map(state: State<'_, Index>, projs: State<'_, Projs>, root: String, id: String) -> CmdResult<()> {
     maps::delete(&project_root(&state, &projs, &root)?, &id).map_err(err)?;
     sync_refs(&state, &projs)
@@ -360,9 +371,17 @@ async fn web_open(app: AppHandle, web: State<'_, web::Web>, url: String, bounds:
 
 /// Saves the pictures of the page shown in the web panel into `dir` (each only once).
 #[tauri::command]
-async fn web_collect_images(app: AppHandle, dir: String) -> CmdResult<usize> {
+async fn web_collect_images(app: AppHandle, dir: String, min: u32, exts: Vec<String>) -> CmdResult<usize> {
     let a = app.clone();
-    tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().collect_images(&a, Path::new(&dir))).await.map_err(err)?
+    tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().collect_images(&a, Path::new(&dir), min, &exts)).await.map_err(err)?
+}
+
+/// Scroll position and marked text of the page in the web panel.
+#[tauri::command]
+async fn web_peek(app: AppHandle) -> CmdResult<serde_json::Value> {
+    let a = app.clone();
+    let raw = tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().peek(&a)).await.map_err(err)??;
+    serde_json::from_str(&raw).map_err(err)
 }
 
 #[tauri::command]
@@ -804,6 +823,8 @@ pub fn run() {
             load_map,
             save_map,
             delete_map,
+            load_notes,
+            save_notes,
             link_files,
             locate_files,
             projects,
@@ -830,6 +851,7 @@ pub fn run() {
             web_go,
             web_selection,
             web_collect_images,
+            web_peek,
             web_save_page,
             web_target,
             web_serve,

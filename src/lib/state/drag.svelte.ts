@@ -16,6 +16,7 @@ import { UNTAGGED } from '../core/views';
 import { isCopyKey } from '../platform';
 import { archiveRoot, inArchive } from '../core/archive';
 import { app } from './app.svelte';
+import type { NoteCard } from '../core/map';
 import { t } from '../i18n/index.svelte';
 
 export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project';
@@ -146,7 +147,7 @@ class DragController {
       end();
       if (wasActive) {
         if (snap.hit?.kind === 'board') void this.onBoardDrop?.(snap.items, ev.clientX, ev.clientY, snap.data);
-        else if (snap.hit) void performDrop(snap.hit, snap.items, snap.source, snap.copy);
+        else if (snap.hit) void performDrop(snap.hit, snap.items, snap.source, snap.copy, snap.data);
       } else onClick?.(ev);
     };
 
@@ -370,7 +371,7 @@ class DragController {
 export const drag = new DragController();
 
 /** Executes a drop with a snapshot of the gesture (the controller resets synchronously on pointerup). */
-export async function performDrop(h: DropHit, items: Entry[], source: string, copy: boolean) {
+export async function performDrop(h: DropHit, items: Entry[], source: string, copy: boolean, data?: unknown) {
   const mode = copy ? 'copy' : 'move';
   try {
     switch (h.kind) {
@@ -384,9 +385,22 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
       case 'tray':
         if (source !== 'tray') app.stage(items);
         break;
-      case 'project':
-        await app.addToProject(h.key!, items);
+      case 'project': {
+        // A snippet (or a note from a thread) goes into the project's thread.
+        const d = data as { snippet?: { quote: string; page?: number }; note?: NoteCard } | undefined;
+        const p = app.projects.find((x) => x.id === h.key);
+        if (p && (d?.snippet || d?.note)) {
+          const { board } = await import('./board.svelte');
+          if (d.note) {
+            if (p.root !== board.root) await board.sendNote(d.note.id, p.root, p.name);
+          } else {
+            const [ref] = await board.refsFor(items);
+            await board.addNote({ kind: 'snippet', title: items[0]?.name ?? '', text: d.snippet!.quote, refs: ref ? [{ ...ref, ...d.snippet }] : [] }, p.root);
+            app.toast(t('board.notes.added', { name: p.name }));
+          }
+        } else await app.addToProject(h.key!, items);
         break;
+      }
       case 'canvas': {
         if (app.project) {
           // In a project the drop adds to it; nothing moves.

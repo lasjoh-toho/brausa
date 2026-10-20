@@ -8,6 +8,7 @@
   import Icon from './Icon.svelte';
   import { CATEGORIES } from '../core/format';
   import { web } from '../state/web.svelte';
+  import { board } from '../state/board.svelte';
   import { t } from '../i18n/index.svelte';
 
   let { accent = null }: { accent?: { color: string; light: boolean } | null } = $props();
@@ -220,7 +221,13 @@
   <button class="btn icon" class:on={web.open} onclick={() => web.toggle()} title={t('toolbar.webHint')} aria-label={t('toolbar.web')}>
     <Icon name="globe" size={15} />
   </button>
-  <button class="btn icon" class:on={!!app.pane} onclick={() => app.setPane(app.pane ? null : app.cwd)} title={t('toolbar.paneHint')} aria-label={t('toolbar.pane')}>
+  <button
+    class="btn icon"
+    class:on={app.view === 'board' ? board.panelOpen : !!app.pane}
+    onclick={() => (app.view === 'board' ? board.togglePanel() : app.setPane(app.pane ? null : app.cwd))}
+    title={app.view === 'board' ? t('toolbar.projectFiles') : t('toolbar.paneHint')}
+    aria-label={t('toolbar.pane')}
+  >
     <Icon name="split" size={15} />
   </button>
   <button

@@ -1,6 +1,6 @@
 import type { SmartFolder } from '../core/smart';
 import type { Entry, Geo, MetaPatch, TransferMode } from '../core/types';
-import type { ProjectMap } from '../core/map';
+import type { NoteCard, ProjectMap } from '../core/map';
 
 export interface OsDrag {
   type: 'enter' | 'over' | 'drop' | 'leave';
@@ -231,6 +231,9 @@ export interface Backend {
   /** Project maps, stored in `<root>/.brausa/maps/`. `root` must be a project. */
   listMaps(root: string): Promise<MapInfo[]>;
   loadMap(root: string, id: string): Promise<ProjectMap>;
+  /** The project's notes & snippets thread. */
+  loadNotes(root: string): Promise<NoteCard[]>;
+  saveNotes(root: string, notes: NoteCard[]): Promise<void>;
   saveMap(root: string, map: ProjectMap): Promise<void>;
   deleteMap(root: string, id: string): Promise<void>;
   /** Stable index ids for files placed on a map (they follow the file when it moves). */
@@ -244,7 +247,9 @@ export interface Backend {
    */
   webOpen(url: string, b: WebBounds, adblock: boolean): Promise<void>;
   /** Save the pictures of the shown page into `dir` (each only once); returns how many. */
-  webCollectImages(dir: string): Promise<number>;
+  webCollectImages(dir: string, min: number, exts: string[]): Promise<number>;
+  /** Scroll position of the page and whether text is marked in it. */
+  webPeek(): Promise<{ y: number; sel: boolean }>;
   webPlace(b: WebBounds, visible: boolean): Promise<void>;
   webClose(): Promise<void>;
   webGo(how: 'back' | 'forward' | 'reload'): Promise<void>;
