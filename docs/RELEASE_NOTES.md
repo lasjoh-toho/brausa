@@ -14,6 +14,10 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.12.2
+
+- **TiddlyVisuals 1.18.0** built in (Pinboard 0.7.0): in the wiki's Pinboard, "Open as story" works without a story tiddler; the story tiddler can be named before it is made and renamed later; the card menu (⋯) sets which board a card leads into; narrower card tools.
+
 ### New in 0.12.1
 
 - **TiddlyVisuals 1.17.0** built in (Pinboard 0.6.0): in the wiki, a card that holds other cards leads into its own board (dive button), with a breadcrumb back; boards never nest inside themselves.
@@ -85,6 +89,9 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.12.2**
+- **TiddlyVisuals 1.18.0** eingebaut (Pinboard 0.7.0): Im Pinboard des Wikis geht „Open as story“ auch ohne Story-Tiddler; der Story-Tiddler lässt sich vor dem Anlegen benennen und später umbenennen; im Kartenmenü (⋯) wird festgelegt, in welches Board eine Karte führt; schmalere Kartenwerkzeuge.
 
 **Neu in 0.12.1**
 - **TiddlyVisuals 1.17.0** eingebaut (Pinboard 0.6.0): Im Wiki führt eine Karte, die Karten enthält, in ihr eigenes Board (Eintauchen-Knopf), mit Brotkrumen zurück; Boards verschachteln sich nie in sich selbst.
