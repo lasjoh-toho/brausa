@@ -9,12 +9,12 @@
   import { app } from '../state/app.svelte';
   import { board } from '../state/board.svelte';
   import { drag } from '../state/drag.svelte';
-  import { DEFAULT_STATUSES, ancestors, addCard, bounds, kanbanOrder, type MapCard } from '../core/map';
+  import { DEFAULT_STATUSES, ancestors, addCard, bounds, columnColor, kanbanOrder, type MapCard } from '../core/map';
+  import ColorPalette from './ColorPalette.svelte';
   import BoardSwitch from './BoardSwitch.svelte';
   import Icon from './Icon.svelte';
   import { t, tn } from '../i18n/index.svelte';
 
-  const COLORS = ['#64748b', '#0090ff', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
   const m = $derived(board.map);
   const k = $derived(m?.kanban ?? {});
 
@@ -238,7 +238,7 @@
     <div class="heads" style:--n={statuses.length}>
       {#each statuses as s (s)}
         {@const col = colOf(s)}
-        <div class="colhead" style:--cc={col.color ?? 'var(--fg-faint)'} ondblclick={() => (settings = s)} role="presentation">
+        <div class="colhead" style:--cc={m ? columnColor(m, s) : 'var(--fg-faint)'} ondblclick={() => (settings = s)} role="presentation">
           <span class="dot"></span>
           <span class="name">{statusLabel(s)}</span>
           <span class="n">{cards.filter((c) => c.status === s).length}</span>
@@ -248,7 +248,7 @@
             <div class="pop colset">
               <input value={s} onchange={(e) => renameColumn(s, e.currentTarget.value)} />
               <div class="swatches">
-                {#each COLORS as c (c)}<button class="sw" class:on={col.color === c} style:background={c} aria-label={c} onclick={() => setColumn(s, { color: c })}></button>{/each}
+                <ColorPalette value={m ? columnColor(m, s) : null} allowNone={false} onpick={(c) => c && setColumn(s, { color: c })} />
               </div>
               <div class="seg">
                 {#each ['full', 'fold', 'compact'] as const as v (v)}
@@ -285,7 +285,7 @@
             data-status={s}
             data-drop="kanban"
             data-key={s}
-            style:--cc={col.color ?? 'var(--fg-faint)'}
+            style:--cc={m ? columnColor(m, s) : 'var(--fg-faint)'}
           >
             {#if newCard?.status === s && lane.key === lanes[0].key}
               <input class="newcard" use:autofocus bind:value={newCard.title} placeholder={t('map.kanban.cardTitle')} onkeydown={(e) => (e.key === 'Enter' ? createCard() : e.key === 'Escape' && (newCard = null))} onblur={createCard} />
@@ -349,7 +349,7 @@
             <option value="">{t('map.kanban.notOnBoard')}</option>
           </select>
           <div class="swatches">
-            {#each COLORS as c (c)}<button class="sw" class:on={viewed.color === c} style:background={c} aria-label={c} onclick={() => board.mutate((mm) => (mm.cards[viewed.id].color = c))}></button>{/each}
+            <ColorPalette value={viewed.color ?? null} onpick={(c) => board.mutate((mm) => (mm.cards[viewed.id].color = c))} />
           </div>
         </div>
         <textarea rows="10" value={viewed.text} onchange={(e) => board.mutate((mm) => (mm.cards[viewed.id].text = e.currentTarget.value))}></textarea>

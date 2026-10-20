@@ -127,7 +127,7 @@
   <DropGrid />
   {#if app.preview}<Preview onaccent={(c) => (accent = c)} />{/if}
   {#if app.tagSource && tagTargets.length}<TagBar targets={tagTargets} onclose={() => (app.tagSource = null)} />{/if}
-  {#if wikis.editing !== null}<WikiEditor onclose={() => (wikis.editing = null)} />{/if}
+  {#if wikis.editing !== null}<WikiEditor onclose={() => ((wikis.editing = null), (wikis.preset = null))} />{/if}
   {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
   {#if wikis.overviewOpen}<BagOverview onclose={() => (wikis.overviewOpen = false)} />{/if}
   {#if wikis.settingsOpen}<WikiSettings />{/if}

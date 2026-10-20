@@ -1,5 +1,8 @@
 // Words used in many places.
 export const de = {
+  palette: 'Farbe',
+  noColor: 'Keine',
+  customColor: 'Eigene …',
   undo: 'Rückgängig',
   cancel: 'Abbrechen',
   ok: 'OK',
@@ -18,6 +21,9 @@ export const de = {
 };
 
 export const en: typeof de = {
+  palette: 'Colour',
+  noColor: 'None',
+  customColor: 'Custom …',
   undo: 'Undo',
   cancel: 'Cancel',
   ok: 'OK',

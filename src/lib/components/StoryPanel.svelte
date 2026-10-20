@@ -6,6 +6,8 @@
    * tiddler (`story`, `pinboard-levels`) that the Pinboard shows.
    */
   import { board } from '../state/board.svelte';
+  import { wikis } from '../state/wikis.svelte';
+  import type { WikiRecipe } from '../backend/types';
   import { liveSteps, STORY_COLORS } from '../core/map';
   import Icon from './Icon.svelte';
   import { t, tn } from '../i18n/index.svelte';
@@ -22,6 +24,18 @@
     const c = st.ref ? m?.cards[st.ref] : null;
     return c ? c.title || c.text.slice(0, 40) || t('map.untitled') : t('board.story.gone');
   };
+
+  /** The wikis holding this map: open the one (sync first), choose among several, or make one. */
+  let choosing = $state<WikiRecipe[] | null>(null);
+  async function openInWiki() {
+    const bag = board.mapBag();
+    if (!bag) return;
+    await wikis.load();
+    const list = wikis.recipes.filter((r) => r.bags.includes(bag));
+    if (!list.length) wikis.createFor(bag);
+    else if (list.length === 1) void wikis.openStory(list[0].name);
+    else choosing = choosing ? null : list;
+  }
 
   function stepKey(e: KeyboardEvent, i: number) {
     if (e.key === 'Tab') {
@@ -62,9 +76,14 @@
         {/each}
       </div>
     {/if}
-    <button class="btn add" onclick={() => board.addStops()}>
-      <Icon name="plus" size={12} />{board.selection.size ? tn('board.story.addCards', board.selection.size) : t('board.story.addView')}
-    </button>
+    <div class="adds">
+      <button class="btn add" title={t('board.story.addViewHint')} onclick={() => board.addView()}>
+        <Icon name="fit" size={12} />{t('board.story.addView')}
+      </button>
+      <button class="btn add" class:on={board.picking} title={t('board.story.pickHint')} onclick={() => board.pickStop()}>
+        <Icon name="pick" size={12} />{board.selection.size ? tn('board.story.addCards', board.selection.size) : board.picking ? t('board.story.pickingShort') : t('board.story.pick')}
+      </button>
+    </div>
     <ol>
       {#each steps as st, i (st.id)}
         <li
@@ -107,11 +126,45 @@
     <button class="btn primary play" disabled={!s || !liveSteps(m, s).length} onclick={() => board.present(0)}>
       <Icon name="play" size={13} />{t('board.story.present')}
     </button>
+    <div class="wiki">
+      <button class="btn" onclick={openInWiki} title={t('board.story.inWikiHint')}><Icon name="book" size={13} />{t('board.story.inWiki')}</button>
+      {#if choosing}
+        <div class="choose">
+          {#each choosing as w (w.name)}
+            <button class="btn" onclick={() => ((choosing = null), wikis.openStory(w.name))}><Icon name="book" size={12} />{w.name}</button>
+          {/each}
+          <button class="btn" onclick={() => ((choosing = null), wikis.createFor(board.mapBag()))}><Icon name="plus" size={12} />{t('board.story.newWiki')}</button>
+        </div>
+      {/if}
+    </div>
     <p class="hint">{t('board.story.hint')}</p>
   {/if}
 </aside>
 
 <style>
+  .adds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .adds .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .adds .btn.on {
+    background: var(--accent);
+    color: #fff;
+  }
+  .wiki {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .choose {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
   .stories {
     flex: none;
     display: flex;

@@ -62,8 +62,31 @@ class WikiState {
     app.toast(tn('wikis.discarded', n));
   }
 
+  /** Bags a new wiki starts with (null: all maps of the project). */
+  preset = $state<string[] | null>(null);
+  /** After saving the new wiki: sync and open it (asked for from a story). */
+  openAfterSave = false;
+
+  /** A new wiki with this map as its bag; opened once saved. */
+  async createFor(bag: string) {
+    this.preset = bag ? [bag] : null;
+    this.openAfterSave = true;
+    await this.open('', true);
+  }
+
+  /** Sync a wiki, then open it (TiddlyDesktop or the browser shows the story there). */
+  async openStory(name: string) {
+    await this.sync(name);
+    const r = this.recipes.find((x) => x.name === name);
+    if (r) await app.backend.openDefault(r.target.path).catch((e) => app.toast(String(e).replace(/^Error: /, ''), true));
+  }
+
   /** Open the editor with fresh lists (maps may have been created since). */
-  async open(name: string) {
+  async open(name: string, keepPreset = false) {
+    if (!keepPreset) {
+      this.preset = null;
+      this.openAfterSave = false;
+    }
     await board.flush(true);
     await this.load();
     this.editing = name;
@@ -79,6 +102,11 @@ class WikiState {
     const saved = await app.backend.putWikiRecipe(r);
     if (previous && previous !== r.name) await app.backend.deleteWikiRecipe(previous);
     await this.load();
+    this.preset = null;
+    if (this.openAfterSave) {
+      this.openAfterSave = false;
+      void this.openStory(r.name);
+    }
     return saved;
   }
 

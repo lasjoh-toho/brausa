@@ -87,6 +87,13 @@ export const de = {
   'sel.toKanban': 'Ins Kanban schicken',
   'sel.toThread': 'In den Thread „Notizen & Snippets“ legen (bleibt erhalten)',
   'sel.delete': 'Löschen (Entf)',
+  'sel.colorMode': 'Kartenfarben auf der Map',
+  'sel.colorOwn': 'Eigene',
+  'sel.colorStatus': 'Kanban-Spalte',
+  'sel.column': 'Kanban-Spalte: wohin die Karte kommt',
+  'sel.mixed': 'verschieden',
+  'sel.noColumn': 'Nicht im Kanban',
+  'sel.addStop': 'An die Präsentation „{story}“ anhängen',
 
   empty: 'Doppelklick legt eine Karte an. Karten auf andere ziehen macht sie zu Unterkarten, der Punkt am rechten Rand zieht Pfeile.'
 };
@@ -179,6 +186,13 @@ export const en: typeof de = {
   'sel.toKanban': 'Send to the kanban',
   'sel.toThread': 'Put into the "Notes & snippets" thread (kept)',
   'sel.delete': 'Delete (Del)',
+  'sel.colorMode': 'Card colours on the map',
+  'sel.colorOwn': 'Own',
+  'sel.colorStatus': 'Kanban column',
+  'sel.column': 'Kanban column: where the card goes',
+  'sel.mixed': 'mixed',
+  'sel.noColumn': 'Not in the Kanban',
+  'sel.addStop': 'Add to the presentation “{story}”',
 
   empty: 'Double-click to create a card. Drag cards onto others to make them sub-cards; the dot on the right edge draws arrows.'
 };

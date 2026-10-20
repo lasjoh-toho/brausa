@@ -98,6 +98,8 @@ export interface KanbanSettings {
   searches?: string[];
   /** Swimlanes: one per card holding the cards (on the map). */
   lanes?: boolean;
+  /** Cards on the map show their own colour, or the colour of their Kanban column. */
+  cardColors?: 'own' | 'status';
 }
 
 /** Cards in Kanban order: as listed in `order`, the rest after them. */
@@ -125,6 +127,29 @@ export interface Story {
 }
 
 export const MAX_LEVEL = 5;
+/** Colours offered by the palette button: six hues in four shades, plus greys. */
+export const PALETTE = [
+  '#fecaca', '#fed7aa', '#fef08a', '#bbf7d0', '#bfdbfe', '#ddd6fe', '#fbcfe8',
+  '#f87171', '#fb923c', '#facc15', '#4ade80', '#60a5fa', '#a78bfa', '#f472b6',
+  '#ef4444', '#f59e0b', '#eab308', '#10b981', '#0090ff', '#8b5cf6', '#ec4899',
+  '#b91c1c', '#c2410c', '#a16207', '#047857', '#1d4ed8', '#6d28d9', '#be185d',
+  '#f1f5f9', '#cbd5e1', '#94a3b8', '#64748b', '#475569', '#1e293b', '#14b8a6'
+];
+
+/** Column colours before one is chosen: open, doing, done, then the palette. */
+const STATUS_DEFAULTS = ['#64748b', '#f59e0b', '#10b981', '#0090ff', '#8b5cf6', '#ec4899', '#ef4444'];
+
+export function columnColor(m: ProjectMap, status: string): string {
+  const i = (m.statuses ?? DEFAULT_STATUSES).indexOf(status);
+  return m.kanban?.columns?.[status]?.color ?? STATUS_DEFAULTS[(i < 0 ? 0 : i) % STATUS_DEFAULTS.length];
+}
+
+/** The colour a card shows on the map: its own, or its column's when the map says so. */
+export function cardColor(m: ProjectMap, c: MapCard): string | null {
+  if (m.kanban?.cardColors === 'status' && c.status) return columnColor(m, c.status);
+  return c.color ?? null;
+}
+
 export const STORY_COLORS = ['#e0503f', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#1f2937'];
 
 /** The story shown (created when the map has none). */

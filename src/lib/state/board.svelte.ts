@@ -134,6 +134,34 @@ class BoardState {
   }
 
   /** Selected cards (or, with none, the current view) become stops of the shown story. */
+  /** Picking: the next clicked cards join the story (Esc or the button ends it). */
+  picking = $state(false);
+
+  addStop(id: string) {
+    if (!this.map?.cards[id]) return;
+    this.mutate((m) => void activeStory(m).steps.push({ id: uid('t'), kind: 'card', ref: id }));
+    app.toast(t('board.story.added', { title: this.map.cards[id].title || t('map.untitled') }));
+  }
+
+  /** The active object joins the story, or (nothing selected) the next clicked card. */
+  pickStop() {
+    if (this.selection.size) {
+      this.addStops();
+      this.picking = false;
+    } else this.picking = !this.picking;
+  }
+
+  /** The current view joins the story (a frame). */
+  addView() {
+    if (!this.map) return;
+    this.mutate((m) => void activeStory(m).steps.push({ id: uid('t'), kind: 'view', cam: { ...this.cam } }));
+  }
+
+  /** The bag a wiki uses for this map. */
+  mapBag(): string {
+    return this.map && this.root ? `@map:${this.root}|${this.map.id}` : '';
+  }
+
   addStops() {
     if (!this.map) return;
     const ids = [...this.selection];
