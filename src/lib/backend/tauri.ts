@@ -5,7 +5,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
 import { t } from '../i18n/index.svelte';
 import type { NoteCard, ProjectMap } from '../core/map';
-import { WALK_LIMIT, type OsDrag } from './types';
+import { WALK_LIMIT, type OsDrag, type WebDrag } from './types';
 import type {
   Backend,
   IndexReport,
@@ -246,7 +246,15 @@ export class TauriBackend implements Backend {
   }
 
   webPeek() {
-    return invoke<{ y: number; sel: boolean }>('web_peek');
+    return invoke<{ y: number; sel: boolean; drag: WebDrag | null }>('web_peek');
+  }
+
+  webFetchImage(url: string, dir: string) {
+    return invoke<string>('web_fetch_image', { url, dir });
+  }
+
+  webDragDone() {
+    return invoke<void>('web_drag_done');
   }
 
   webPlace(bounds: WebBounds, visible: boolean) {

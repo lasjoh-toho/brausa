@@ -1,5 +1,8 @@
 // What a drop will do, shown next to the drag ghost.
 export const de = {
+  saveTo: 'Speichern in „{name}“',
+  toThread: 'In Notizen & Snippets',
+  toColumn: 'In die Spalte „{name}“',
   assignAttributes: 'Attribute von „{name}“ zuweisen',
   packInto: 'Einpacken in „{name}“',
   unpackTo: 'Auspacken nach „{name}“',
@@ -19,6 +22,9 @@ export const de = {
 };
 
 export const en: typeof de = {
+  saveTo: 'Save to “{name}”',
+  toThread: 'Into notes & snippets',
+  toColumn: 'Into the column “{name}”',
   assignAttributes: 'Apply attributes of “{name}”',
   packInto: 'Pack into “{name}”',
   unpackTo: 'Unpack to “{name}”',

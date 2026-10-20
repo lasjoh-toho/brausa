@@ -37,7 +37,7 @@
 
   // Anything brausa draws over the panel must not end up under the native page.
   const covered = $derived(
-    !!web.listOpen || web.suggest || sendOpen || web.collectDialog || !!app.preview || !!app.menu || !!app.dialog || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || wikis.settingsOpen || !!wikis.webSync || drag.active
+    !!web.listOpen || web.suggest || sendOpen || web.collectDialog || !!app.preview || !!app.menu || !!app.dialog || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || wikis.settingsOpen || !!wikis.webSync || (drag.active && drag.source !== 'web')
   );
 
   function measure() {

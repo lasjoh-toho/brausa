@@ -400,6 +400,26 @@ async fn web_collect_images(app: AppHandle, dir: String, min: u32, exts: Vec<Str
     tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().collect_images(&a, Path::new(&dir), min, &exts)).await.map_err(err)?
 }
 
+/// A picture dragged out of the web panel: downloaded into `dir`, so it can be dropped like a file.
+#[tauri::command]
+async fn web_fetch_image(url: String, dir: String) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(20)).build();
+        web::fetch_image(&agent, &url, Path::new(&dir), &[])
+            .map(|p| p.to_string_lossy().to_string())
+            .ok_or_else(|| tr!("Das Bild ließ sich nicht laden", "The picture could not be loaded").to_string())
+    })
+    .await
+    .map_err(err)?
+}
+
+/// The drag in the web panel was handled (dropped or cancelled).
+#[tauri::command]
+async fn web_drag_done(app: AppHandle) -> CmdResult<()> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || a.state::<web::Web>().drag_done(&a)).await.map_err(err)?
+}
+
 /// Scroll position and marked text of the page in the web panel.
 #[tauri::command]
 async fn web_peek(app: AppHandle) -> CmdResult<serde_json::Value> {
@@ -913,6 +933,8 @@ pub fn run() {
             web_go,
             web_selection,
             web_collect_images,
+            web_fetch_image,
+            web_drag_done,
             web_peek,
             web_save_page,
             web_target,

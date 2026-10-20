@@ -8,6 +8,7 @@
   import { tick } from 'svelte';
   import { app } from '../state/app.svelte';
   import { board } from '../state/board.svelte';
+  import { drag } from '../state/drag.svelte';
   import { DEFAULT_STATUSES, ancestors, addCard, bounds, kanbanOrder, type MapCard } from '../core/map';
   import BoardSwitch from './BoardSwitch.svelte';
   import Icon from './Icon.svelte';
@@ -57,6 +58,8 @@
   let dragging = $state<{ id: string; x: number; y: number; status: string | null; before: string | null } | null>(null);
   let folded = $state(new Set<string>());
 
+  let overThread = false;
+
   function down(e: PointerEvent, c: MapCard) {
     if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
@@ -75,6 +78,8 @@
         before = ev.clientY < r.top + r.height / 2 ? under.dataset.kcard! : (under.nextElementSibling as HTMLElement | null)?.dataset.kcard ?? '__end';
       }
       dragging = { id: c.id, x: ev.clientX, y: ev.clientY, status: col?.dataset.status ?? null, before };
+      overThread = !!el?.closest('[data-notes-thread]');
+      document.querySelector('[data-notes-thread]')?.classList.toggle('hit', overThread);
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -82,6 +87,12 @@
       const d = dragging;
       dragging = null;
       if (!active) return void (viewing = c.id);
+      // Onto the notes & snippets thread: the card goes back into it.
+      if (overThread) {
+        overThread = false;
+        document.querySelector('[data-notes-thread]')?.classList.remove('hit');
+        return board.toThread([c.id]);
+      }
       if (!d?.status) return;
       const status = d.status === '__none' ? null : d.status;
       board.mutate((mm) => {
@@ -268,7 +279,14 @@
       <div class="row-cells" style:--n={statuses.length}>
         {#each statuses as s (s)}
           {@const col = colOf(s)}
-          <div class="cell" class:over={dragging?.status === s} data-status={s} style:--cc={col.color ?? 'var(--fg-faint)'}>
+          <div
+            class="cell"
+            class:over={dragging?.status === s || (drag.active && drag.hit?.kind === 'kanban' && drag.hit.key === s)}
+            data-status={s}
+            data-drop="kanban"
+            data-key={s}
+            style:--cc={col.color ?? 'var(--fg-faint)'}
+          >
             {#if newCard?.status === s && lane.key === lanes[0].key}
               <input class="newcard" use:autofocus bind:value={newCard.title} placeholder={t('map.kanban.cardTitle')} onkeydown={(e) => (e.key === 'Enter' ? createCard() : e.key === 'Escape' && (newCard = null))} onblur={createCard} />
             {/if}

@@ -358,6 +358,9 @@
     );
   }
 
+  /** A dragged card is over the notes & snippets thread. */
+  let overThread = false;
+
   function move(e: PointerEvent, grabbed: string) {
     const parent = m!.cards[grabbed].parent;
     const ids = [...board.selection].filter((id) => m!.cards[id]?.parent === parent);
@@ -381,6 +384,10 @@
           c.y = o.y + (p.y - s.y) / k;
           if (parent) (c.x = Math.max(0, c.x)), (c.y = Math.max(0, c.y));
         }
+        // Over the notes & snippets thread: the cards go back into it.
+        const thread = document.elementsFromPoint(ev.clientX, ev.clientY).find((n) => (n as HTMLElement).closest?.('[data-notes-thread]'));
+        overThread = !!thread;
+        document.querySelector('[data-notes-thread]')?.classList.toggle('hit', overThread);
         // Over a file outside the map (tray, file list): link instead of moving.
         const f = fileAt(ev);
         linkTo?.classList.remove('link-target');
@@ -396,6 +403,18 @@
       },
       () => {
         const file = linkTo;
+        if (overThread) {
+          overThread = false;
+          document.querySelector('[data-notes-thread]')?.classList.remove('hit');
+          for (const id of ids) Object.assign(m!.cards[id], start.get(id));
+          linkTo?.classList.remove('link-target');
+          linkTo = null;
+          moving = new Set();
+          drop = undefined;
+          stackHint = null;
+          board.toThread(ids);
+          return;
+        }
         if (file) {
           file.classList.remove('link-target');
           linkTo = null;

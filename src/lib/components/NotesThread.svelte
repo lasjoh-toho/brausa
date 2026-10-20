@@ -30,13 +30,13 @@
   function down(e: PointerEvent, n: NoteCard) {
     if ((e.target as HTMLElement).closest('button, textarea')) return;
     const entry: Entry = { path: n.refs?.[0]?.path ?? '', name: n.title, ext: '', kind: 'file', size: 0, mtime: 0, ctime: 0, tags: [] };
-    drag.begin(e, () => [entry], 'notes', undefined, { data: { note: n }, accepts: ['board', 'project'], title: (n.text || n.title).slice(0, 200) });
+    drag.begin(e, () => [entry], 'notes', undefined, { data: { note: n }, accepts: ['board', 'project', 'kanban'], title: (n.text || n.title).slice(0, 200) });
   }
 
   const when = (ms: number) => new Date(ms).toLocaleString(loc(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 </script>
 
-<aside class="thread" data-notes-thread>
+<aside class="thread" class:hit={drag.active && drag.hit?.kind === 'notes'} data-notes-thread data-drop="notes">
   <div class="head">
     <Icon name="doc" size={14} />
     <b>{t('board.notes.title')}</b>
@@ -94,6 +94,9 @@
     padding: 10px;
     border-left: 1px solid var(--line);
     background: var(--bg-sunken);
+  }
+  .thread.hit {
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
   .head {
     display: flex;

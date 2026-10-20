@@ -627,8 +627,12 @@ export class DemoBackend implements Backend {
     return 0;
   }
   async webPeek() {
-    return { y: 0, sel: false };
+    return { y: 0, sel: false, drag: null };
   }
+  async webFetchImage(): Promise<string> {
+    this.noWeb();
+  }
+  async webDragDone() {}
   async webPlace() {}
   async webClose() {}
   async webGo() {}

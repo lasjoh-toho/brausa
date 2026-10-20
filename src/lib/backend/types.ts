@@ -272,7 +272,11 @@ export interface Backend {
   /** Save the pictures of the shown page into `dir` (each only once); returns how many. */
   webCollectImages(dir: string, min: number, exts: string[]): Promise<number>;
   /** Scroll position of the page and whether text is marked in it. */
-  webPeek(): Promise<{ y: number; sel: boolean }>;
+  webPeek(): Promise<{ y: number; sel: boolean; drag: WebDrag | null }>;
+  /** Downloads a picture dragged out of the web panel into `dir`; returns its path. */
+  webFetchImage(url: string, dir: string): Promise<string>;
+  /** The drag in the web panel was handled. */
+  webDragDone(): Promise<void>;
   webPlace(b: WebBounds, visible: boolean): Promise<void>;
   webClose(): Promise<void>;
   webGo(how: 'back' | 'forward' | 'reload'): Promise<void>;
@@ -312,4 +316,22 @@ export interface Backend {
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;
+}
+
+/** Marked text, a picture or a link being dragged out of the web panel (see webdrag.js). */
+export interface WebDrag {
+  kind: 'text' | 'image' | 'link';
+  id: number;
+  /** Pointer in the page (CSS pixels of the panel). */
+  x: number;
+  y: number;
+  down: boolean;
+  cancel?: boolean;
+  url: string;
+  title: string;
+  text?: string;
+  html?: string;
+  src?: string;
+  alt?: string;
+  href?: string;
 }

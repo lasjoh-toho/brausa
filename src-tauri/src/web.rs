@@ -123,12 +123,14 @@ pub struct Web {
 
 /// Runs before every page when the ad blocker is on.
 const ADBLOCK: &str = include_str!("adblock.js");
+/// Lets marked text, pictures and links be dragged out of the panel (see webdrag.js).
+const DRAG: &str = include_str!("webdrag.js");
 
 /// Pictures of the page at least MIN pixels wide and high, as a JSON list of addresses.
 const IMAGES: &str = "JSON.stringify([...new Set([...document.images].filter(i => i.naturalWidth >= MIN && i.naturalHeight >= MIN).map(i => i.currentSrc || i.src).filter(u => /^https?:/.test(u)))])";
 
 /// Scroll position and whether text is marked (the panel hides its bars and offers "send").
-const PEEK: &str = "JSON.stringify({y: Math.round(scrollY), sel: String(getSelection()).trim().length > 0})";
+const PEEK: &str = "JSON.stringify({y: Math.round(scrollY), sel: String(getSelection()).trim().length > 0, drag: window.__brausaDrag || null})";
 
 fn token() -> String {
     let t = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
@@ -224,6 +226,7 @@ impl Web {
                 }
                 true
             });
+        builder = builder.initialization_script(DRAG);
         if adblock {
             builder = builder.initialization_script(ADBLOCK);
         }
@@ -286,41 +289,47 @@ impl Web {
         }
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(20)).build();
-        let mut n = 0;
-        for u in fresh {
-            let Ok(resp) = agent.get(&u).call() else { continue };
-            let ext = match resp.content_type() {
-                "image/png" => "png",
-                "image/gif" => "gif",
-                "image/webp" => "webp",
-                "image/avif" => "avif",
-                "image/svg+xml" => "svg",
-                t if t.starts_with("image/") => "jpg",
-                _ => continue,
-            };
-            let mut bytes = Vec::new();
-            if resp.into_reader().take(40 << 20).read_to_end(&mut bytes).is_err() {
-                continue;
-            }
-            let parsed = Url::parse(&u).ok();
-            let stem = parsed
-                .as_ref()
-                .and_then(|p| p.path_segments().and_then(|mut s| s.next_back()).map(String::from))
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "bild".into());
-            let name = if Path::new(&stem).extension().is_some() { stem } else { format!("{stem}.{ext}") };
-            let got = Path::new(&name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
-            let got = if got == "jpeg" { "jpg".to_string() } else { got };
-            if !exts.is_empty() && !exts.iter().any(|x| *x == got) {
-                continue;
-            }
-            if fs::write(free_path(dir, &safe_name(&name)), &bytes).is_ok() {
-                n += 1;
-            }
-        }
-        Ok(n)
+        Ok(fresh.iter().filter(|u| fetch_image(&agent, u, dir, exts).is_some()).count())
     }
 
+    /// The drag in the page has been handled: forget it.
+    pub fn drag_done(&self, app: &AppHandle) -> Result<(), String> {
+        self.eval(app, "window.__brausaDrag = null").map(|_| ())
+    }
+}
+
+/// Downloads one picture into `dir` (any format when `exts` is empty); returns its path.
+pub fn fetch_image(agent: &ureq::Agent, u: &str, dir: &Path, exts: &[String]) -> Option<PathBuf> {
+    let resp = agent.get(u).call().ok()?;
+    let ext = match resp.content_type() {
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/avif" => "avif",
+        "image/svg+xml" => "svg",
+        t if t.starts_with("image/") => "jpg",
+        _ => return None,
+    };
+    let mut bytes = Vec::new();
+    resp.into_reader().take(40 << 20).read_to_end(&mut bytes).ok()?;
+    let stem = Url::parse(u)
+        .ok()
+        .and_then(|p| p.path_segments().and_then(|mut s| s.next_back()).map(String::from))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "bild".into());
+    let name = if Path::new(&stem).extension().is_some() { stem } else { format!("{stem}.{ext}") };
+    let got = Path::new(&name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let got = if got == "jpeg" { "jpg".to_string() } else { got };
+    if !exts.is_empty() && !exts.iter().any(|x| *x == got) {
+        return None;
+    }
+    fs::create_dir_all(dir).ok()?;
+    let path = free_path(dir, &safe_name(&name));
+    fs::write(&path, &bytes).ok()?;
+    Some(path)
+}
+
+impl Web {
     /// Scroll position and marked text of the shown page, as JSON.
     pub fn peek(&self, app: &AppHandle) -> Result<String, String> {
         let raw = self.eval(app, PEEK)?;
