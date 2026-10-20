@@ -266,6 +266,9 @@
       <button class="rm" title={t('sidebar.openWiki')} onclick={(e) => (e.stopPropagation(), openTarget(w.target.path, w.target.kind))}>
         <Icon name="open" size={11} />
       </button>
+      {#if w.web?.url}
+        <button class="sync" class:spin={wikis.webBusy === w.name} title={t('sidebar.webSync')} onclick={(e) => (e.stopPropagation(), wikis.webCompare(w.name))}><Icon name="globe" size={12} /></button>
+      {/if}
       <button
         class="sync"
         class:spin={wikis.syncing === w.name}

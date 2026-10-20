@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use crate::maps;
@@ -366,7 +366,52 @@ pub struct Recipe {
     /// Overlays the user decided to keep as this wiki's own variant.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kept: Vec<String>,
+    /// The same wiki as a single file on the web (compared and uploaded on request).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web: Option<WebLink>,
 }
+
+/// Address of a wiki on the web; the password is kept apart (`web-secrets.json`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WebLink {
+    pub url: String,
+    #[serde(default)]
+    pub user: String,
+}
+
+/// A tiddler that is new or different on the web.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebChange {
+    pub title: String,
+    pub web_modified: Option<String>,
+    pub local_modified: Option<String>,
+    /// Start of the text on the web and here (here: empty for new tiddlers).
+    pub web_text: String,
+    pub local_text: String,
+}
+
+/// A plugin of the web wiki that brausa does not bring.
+#[derive(Debug, Clone, Serialize)]
+pub struct WebPlugin {
+    pub title: String,
+    pub version: String,
+    /// Already in the bag `plugins` (same version).
+    pub have: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebPreview {
+    pub new: Vec<WebChange>,
+    pub changed: Vec<WebChange>,
+    pub plugins: Vec<WebPlugin>,
+    pub has_password: bool,
+}
+
+/// Writable bag for plugins of one's own (from web wikis), right above `@plugins`.
+pub const OWN_PLUGINS: &str = "plugins";
 
 fn yes() -> bool {
     true
@@ -661,6 +706,185 @@ impl Store {
     pub fn layers(&self, name: &str) -> io::Result<Vec<(String, Vec<String>)>> {
         let r = self.recipes().into_iter().find(|x| x.name == name).ok_or_else(|| err(crate::tr!(format!("Wiki „{name}“ gibt es nicht"), format!("There is no wiki “{name}”"))))?;
         Self::layer_names(&r).into_iter().map(|b| Ok((b.clone(), self.layer(&b).map(|l| l.into_keys().collect()).unwrap_or_default()))).collect()
+    }
+
+    // ------------------------------------------------------------ wikis on the web
+
+    fn recipe(&self, name: &str) -> io::Result<Recipe> {
+        self.recipes().into_iter().find(|x| x.name == name).ok_or_else(|| err(crate::tr!(format!("Wiki „{name}“ gibt es nicht"), format!("There is no wiki “{name}”"))))
+    }
+
+    fn secrets_file(&self) -> PathBuf {
+        self.dir.join("web-secrets.json")
+    }
+
+    fn secrets(&self) -> BTreeMap<String, String> {
+        fs::read(self.secrets_file()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    /// Store (or with `None` forget) the password for uploading a wiki to the web.
+    pub fn set_web_password(&self, name: &str, password: Option<&str>) -> io::Result<()> {
+        let mut s = self.secrets();
+        match password.filter(|p| !p.is_empty()) {
+            Some(p) => s.insert(name.to_string(), p.to_string()),
+            None => s.remove(name),
+        };
+        let f = self.secrets_file();
+        fs::write(&f, serde_json::to_vec(&s)?)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&f, fs::Permissions::from_mode(0o600));
+        }
+        Ok(())
+    }
+
+    pub fn has_web_password(&self, name: &str) -> bool {
+        self.secrets().contains_key(name)
+    }
+
+    fn web_cache(&self, name: &str) -> PathBuf {
+        self.dir.join("web").join(format!("{}.html", filename(name)))
+    }
+
+    fn tmp_bag(name: &str) -> String {
+        format!("web-tmp-{name}")
+    }
+
+    fn download(url: &str) -> io::Result<String> {
+        let resp = ureq::get(url)
+            .timeout(std::time::Duration::from_secs(60))
+            .call()
+            .map_err(|e| err(crate::tr!(format!("Web-Wiki nicht erreichbar: {e}"), format!("Web wiki not reachable: {e}"))))?;
+        let mut s = String::new();
+        resp.into_reader().take(200 << 20).read_to_string(&mut s)?;
+        Ok(s)
+    }
+
+    /// Load the web version into a temporary bag and list what is new or different there.
+    pub fn web_fetch(&self, name: &str) -> io::Result<WebPreview> {
+        let r = self.recipe(name)?;
+        let link = r.web.clone().ok_or_else(|| err(crate::tr!("Für dieses Wiki ist keine Webadresse eingetragen", "No web address is set for this wiki")))?;
+        let html = Self::download(&link.url)?;
+        let web = crate::webwiki::tiddlers(&html);
+        if web.is_empty() {
+            return Err(err(crate::tr!("Unter der Adresse liegt kein TiddlyWiki", "There is no TiddlyWiki at that address")));
+        }
+        let cache = self.web_cache(name);
+        fs::create_dir_all(cache.parent().unwrap())?;
+        fs::write(&cache, &html)?;
+        // The temporary bag holds the web tiddlers until the user decided.
+        let tmp = Self::tmp_bag(name);
+        let _ = fs::remove_dir_all(self.bag_dir(&tmp)?);
+        self.put_bag(&BagInfo { name: tmp.clone(), description: crate::tr!("Web-Version (vorübergehend)", "Web version (temporary)").into(), hidden: true, ..Default::default() })?;
+        let here = self.merged(&r)?;
+        let bundled = self.layer(PLUGINS)?;
+        let own_plugins = self.bag_tiddlers(OWN_PLUGINS).unwrap_or_default();
+        let short = |s: &str| s.chars().take(400).collect::<String>();
+        let mut preview = WebPreview { new: vec![], changed: vec![], plugins: vec![], has_password: self.has_web_password(name) };
+        for (title, f) in &web {
+            if crate::webwiki::ephemeral(title) {
+                continue;
+            }
+            if f.contains_key("plugin-type") {
+                if bundled.contains_key(title) {
+                    continue;
+                }
+                let version = f.get("version").cloned().unwrap_or_default();
+                let have = own_plugins.get(title).is_some_and(|(o, _)| o.get("version") == f.get("version"));
+                self.put_tiddler(&tmp, f)?;
+                preview.plugins.push(WebPlugin { title: title.clone(), version, have });
+                continue;
+            }
+            let change = |local: Option<&Fields>| WebChange {
+                title: title.clone(),
+                web_modified: f.get("modified").cloned(),
+                local_modified: local.and_then(|l| l.get("modified").cloned()),
+                web_text: short(f.get("text").map(String::as_str).unwrap_or("")),
+                local_text: local.map(|l| short(l.get("text").map(String::as_str).unwrap_or(""))).unwrap_or_default(),
+            };
+            match here.get(title) {
+                None => {
+                    self.put_tiddler(&tmp, f)?;
+                    preview.new.push(change(None));
+                }
+                Some((l, _)) if ["text", "tags", "type", "caption"].iter().any(|k| l.get(*k).map(String::as_str).unwrap_or("") != f.get(*k).map(String::as_str).unwrap_or("")) => {
+                    self.put_tiddler(&tmp, f)?;
+                    preview.changed.push(change(Some(l)));
+                }
+                _ => {}
+            }
+        }
+        Ok(preview)
+    }
+
+    /// Take the chosen tiddlers into the wiki's own bag and the chosen plugins into `plugins`;
+    /// the temporary bag goes away. Returns how many tiddlers came over.
+    pub fn web_apply(&self, name: &str, titles: &[String], plugins: &[String]) -> io::Result<usize> {
+        let mut r = self.recipe(name)?;
+        let tmp = self.bag_tiddlers(&Self::tmp_bag(name))?;
+        let own = r.bags.last().cloned().ok_or_else(|| err("Wiki ohne Bag"))?;
+        let mut n = 0;
+        for t in titles {
+            if let Some((f, _)) = tmp.get(t) {
+                self.put_tiddler(&own, f)?;
+                n += 1;
+            }
+        }
+        if !plugins.is_empty() {
+            if !self.bag_dir(OWN_PLUGINS)?.exists() {
+                self.put_bag(&BagInfo { name: OWN_PLUGINS.into(), description: crate::tr!("Eigene Plugins (aus Web-Wikis), über den mitgelieferten", "Own plugins (from web wikis), above the bundled ones").into(), ..Default::default() })?;
+            }
+            for t in plugins {
+                if let Some((f, _)) = tmp.get(t) {
+                    self.put_tiddler(OWN_PLUGINS, f)?;
+                }
+            }
+            if !r.bags.iter().any(|b| b == OWN_PLUGINS) {
+                r.bags.insert(0, OWN_PLUGINS.into());
+                self.put_recipe(r)?;
+            }
+        }
+        self.web_discard(name)?;
+        Ok(n)
+    }
+
+    /// Throw the temporary bag of a web comparison away.
+    pub fn web_discard(&self, name: &str) -> io::Result<()> {
+        let d = self.bag_dir(&Self::tmp_bag(name))?;
+        if d.exists() {
+            fs::remove_dir_all(d)?;
+        }
+        Ok(())
+    }
+
+    /// Upload the wiki as a new version of the web file (HTTP PUT, e.g. WebDAV) with the stored password.
+    /// Notes of the bag `lokal` and tiddlers tagged lokal/privat stay on this computer.
+    pub fn web_upload(&self, name: &str) -> io::Result<()> {
+        let r = self.recipe(name)?;
+        let link = r.web.clone().ok_or_else(|| err(crate::tr!("Für dieses Wiki ist keine Webadresse eingetragen", "No web address is set for this wiki")))?;
+        let password = self.secrets().get(name).cloned().ok_or_else(|| err(crate::tr!("Kein Passwort gespeichert: nur abgleichen, nicht hochladen", "No password stored: compare only, no upload")))?;
+        let cache = self.web_cache(name);
+        let html = match fs::read_to_string(&cache) {
+            Ok(h) => h,
+            Err(_) => Self::download(&link.url)?,
+        };
+        let mut all = crate::webwiki::tiddlers(&html);
+        for (title, (f, bag)) in self.merged(&r)? {
+            let private = bag == LOCAL || parse_list(f.get("tags").map(String::as_str).unwrap_or("")).iter().any(|t| LOCAL_TAGS.contains(&t.to_lowercase().as_str()));
+            if !private {
+                all.insert(title, f);
+            }
+        }
+        let out = crate::webwiki::with_tiddlers(&html, &all).ok_or_else(|| err(crate::tr!("Das Web-Wiki hat ein unbekanntes Format", "The web wiki has an unknown format")))?;
+        ureq::put(&link.url)
+            .timeout(std::time::Duration::from_secs(120))
+            .set("Authorization", &crate::webwiki::basic_auth(&link.user, &password))
+            .set("Content-Type", "text/html;charset=utf-8")
+            .send_string(&out)
+            .map_err(|e| err(crate::tr!(format!("Hochladen fehlgeschlagen: {e}"), format!("Upload failed: {e}"))))?;
+        fs::write(cache, out)?;
+        Ok(())
     }
 
     // ------------------------------------------------------------ bag „lokal“
@@ -1217,6 +1441,62 @@ mod tests {
     }
 
     #[test]
+    fn compares_with_the_web_version_and_uploads() {
+        let (_t, store, proj) = setup();
+        // A tiny web server: serves the wiki file and takes the upload.
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let store_tag = "<script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">";
+        let html = format!(
+            "<html>{store_tag}[{{\"title\":\"ZUI\",\"text\":\"Zoomable UI, im Web ergänzt\"}},{{\"title\":\"Neu\",\"text\":\"aus dem Web\"}},{{\"title\":\"$:/StoryList\",\"list\":\"Neu\"}},{{\"title\":\"$:/plugins/x/y\",\"plugin-type\":\"plugin\",\"version\":\"1.0\",\"text\":\"{{}}\"}}]</script></html>"
+        );
+        let uploaded = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let up = uploaded.clone();
+        let h = html.clone();
+        std::thread::spawn(move || {
+            for mut req in server.incoming_requests() {
+                if req.method() == &tiny_http::Method::Put {
+                    let auth = req.headers().iter().find(|x| x.field.equiv("Authorization")).map(|x| x.value.to_string()).unwrap_or_default();
+                    let mut body = String::new();
+                    req.as_reader().read_to_string(&mut body).unwrap();
+                    *up.lock().unwrap() = format!("{auth}\n{body}");
+                    let _ = req.respond(tiny_http::Response::empty(204));
+                } else {
+                    let _ = req.respond(tiny_http::Response::from_string(h.clone()));
+                }
+            }
+        });
+        let mut r = recipe(&store, "W", &proj, Target { kind: "folder".into(), path: proj.join("wiki").display().to_string() });
+        r.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/wiki.html"), user: "ich".into() });
+        store.put_recipe(r.clone()).unwrap();
+
+        let p = store.web_fetch("W").unwrap();
+        assert_eq!(p.new.iter().map(|c| c.title.as_str()).collect::<Vec<_>>(), ["Neu"]);
+        assert_eq!(p.changed.iter().map(|c| c.title.as_str()).collect::<Vec<_>>(), ["ZUI"]);
+        assert_eq!(p.plugins.len(), 1);
+        assert!(!p.has_password);
+        assert!(store.bag_dir("web-tmp-W").unwrap().exists());
+
+        assert_eq!(store.web_apply("W", &["Neu".into()], &["$:/plugins/x/y".into()]).unwrap(), 1);
+        assert!(!store.bag_dir("web-tmp-W").unwrap().exists(), "temporary bag is gone");
+        let own = store.recipe("W").unwrap();
+        assert_eq!(own.bags[0], OWN_PLUGINS, "plugins bag sits right above @plugins");
+        assert!(store.bag_tiddlers(own.bags.last().unwrap()).unwrap().contains_key("Neu"));
+        assert!(store.bag_tiddlers(OWN_PLUGINS).unwrap().contains_key("$:/plugins/x/y"));
+
+        assert!(store.web_upload("W").is_err(), "no password, no upload");
+        store.set_web_password("W", Some("geheim")).unwrap();
+        store.put_tiddler(LOCAL, &f(&[("title", "Privat"), ("text", "bleibt hier")])).unwrap();
+        store.web_upload("W").unwrap();
+        let sent = uploaded.lock().unwrap().clone();
+        assert!(sent.starts_with(&crate::webwiki::basic_auth("ich", "geheim")));
+        let t = crate::webwiki::tiddlers(&sent);
+        assert!(t.contains_key("Neu"));
+        assert_eq!(t["ZUI"]["text"], "Zoomable UI", "the wiki's version goes up");
+        assert!(!t.contains_key("Privat"), "lokal stays on this computer");
+    }
+
+    #[test]
     fn searches_titles_and_texts_in_all_bags() {
         let (_t, store, _) = setup();
         store.put_tiddler("glossar", &f(&[("title", "Kanban"), ("text", "Spalten für den Status einer Karte")])).unwrap();
@@ -1242,6 +1522,7 @@ mod tests {
                 plugins: true,
                 local: false,
                 kept: vec![],
+                web: None,
             })
             .unwrap()
     }

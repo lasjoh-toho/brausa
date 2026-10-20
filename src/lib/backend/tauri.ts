@@ -19,6 +19,7 @@ import type {
   WalkOptions,
   OverlayResolution,
   WikiBag,
+  WebPreview,
   WikiHit,
   WikiLayer,
   WikiOverlay,
@@ -338,6 +339,30 @@ export class TauriBackend implements Backend {
 
   syncWiki(name: string) {
     return invoke<WikiSyncReport>('tw_sync', { name });
+  }
+
+  wikiWebFetch(name: string) {
+    return invoke<WebPreview>('tw_web_fetch', { name });
+  }
+
+  wikiWebApply(name: string, titles: string[], plugins: string[]) {
+    return invoke<number>('tw_web_apply', { name, titles, plugins });
+  }
+
+  wikiWebDiscard(name: string) {
+    return invoke<void>('tw_web_discard', { name });
+  }
+
+  wikiWebUpload(name: string) {
+    return invoke<void>('tw_web_upload', { name });
+  }
+
+  wikiWebPassword(name: string, password: string | null) {
+    return invoke<void>('tw_web_password', { name, password });
+  }
+
+  wikiWebHasPassword(name: string) {
+    return invoke<boolean>('tw_web_has_password', { name });
   }
 
   wikiSearch(query: string) {

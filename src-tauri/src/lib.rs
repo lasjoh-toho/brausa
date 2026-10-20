@@ -4,6 +4,7 @@ mod i18n;
 mod smart;
 mod fsops;
 mod watchdog;
+mod webwiki;
 mod library;
 mod maps;
 mod tw;
@@ -467,6 +468,42 @@ async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
     w.0.lock().map_err(err)?.overlays().map_err(err)
 }
 
+/// Compare a wiki with its web version (loaded into a temporary bag).
+#[tauri::command]
+async fn tw_web_fetch(app: AppHandle, name: String) -> CmdResult<tw::WebPreview> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || a.state::<Wikis>().0.lock().map_err(err)?.web_fetch(&name).map_err(err)).await.map_err(err)?
+}
+
+/// Take chosen tiddlers and plugins from the web version; the temporary bag goes.
+#[tauri::command]
+async fn tw_web_apply(w: State<'_, Wikis>, name: String, titles: Vec<String>, plugins: Vec<String>) -> CmdResult<usize> {
+    w.0.lock().map_err(err)?.web_apply(&name, &titles, &plugins).map_err(err)
+}
+
+#[tauri::command]
+async fn tw_web_discard(w: State<'_, Wikis>, name: String) -> CmdResult<()> {
+    w.0.lock().map_err(err)?.web_discard(&name).map_err(err)
+}
+
+/// Upload the wiki as a new version of its web file (needs the stored password).
+#[tauri::command]
+async fn tw_web_upload(app: AppHandle, name: String) -> CmdResult<()> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || a.state::<Wikis>().0.lock().map_err(err)?.web_upload(&name).map_err(err)).await.map_err(err)?
+}
+
+/// Store or forget the upload password of a wiki (never sent back to the interface).
+#[tauri::command]
+async fn tw_web_password(w: State<'_, Wikis>, name: String, password: Option<String>) -> CmdResult<()> {
+    w.0.lock().map_err(err)?.set_web_password(&name, password.as_deref()).map_err(err)
+}
+
+#[tauri::command]
+async fn tw_web_has_password(w: State<'_, Wikis>, name: String) -> CmdResult<bool> {
+    Ok(w.0.lock().map_err(err)?.has_web_password(&name))
+}
+
 /// Search titles and texts in all wiki bags.
 #[tauri::command]
 async fn tw_search(w: State<'_, Wikis>, query: String) -> CmdResult<Vec<tw::Hit>> {
@@ -865,6 +902,12 @@ pub fn run() {
             tw_overlays,
             tw_layers,
             tw_search,
+            tw_web_fetch,
+            tw_web_apply,
+            tw_web_discard,
+            tw_web_upload,
+            tw_web_password,
+            tw_web_has_password,
             tw_resolve_overlay,
             tw_plugins
         ])

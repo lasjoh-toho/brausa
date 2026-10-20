@@ -28,6 +28,7 @@
   import OverlayTool from './lib/components/OverlayTool.svelte';
   import BagOverview from './lib/components/BagOverview.svelte';
   import WikiSettings from './lib/components/WikiSettings.svelte';
+  import WebSync from './lib/components/WebSync.svelte';
   import CollectDialog from './lib/components/CollectDialog.svelte';
   import { wikis } from './lib/state/wikis.svelte';
   import { t } from './lib/i18n/index.svelte';
@@ -124,6 +125,7 @@
   {#if wikis.overlaysOpen}<OverlayTool onclose={() => (wikis.overlaysOpen = false)} />{/if}
   {#if wikis.overviewOpen}<BagOverview onclose={() => (wikis.overviewOpen = false)} />{/if}
   {#if wikis.settingsOpen}<WikiSettings />{/if}
+  {#if wikis.webSync}<WebSync />{/if}
   {#if web.collectDialog}<CollectDialog />{/if}
   {#if app.gridEditorOpen}<GridEditor onclose={() => (app.gridEditorOpen = false)} />{/if}
   {#if app.menu}<ContextMenu onTag={() => (app.tagSource = 'selection')} onPreview={openPreview} />{/if}
