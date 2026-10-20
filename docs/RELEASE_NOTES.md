@@ -14,6 +14,10 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.12.1
+
+- **TiddlyVisuals 1.17.0** built in (Pinboard 0.6.0): in the wiki, a card that holds other cards leads into its own board (dive button), with a breadcrumb back; boards never nest inside themselves.
+
 ### New in 0.12
 
 - **Search finds folders** and files in subfolders, not only in the folder shown. When nothing is found, **"Search in all places"** drops the folder and searches the whole home folder and all drives.
@@ -81,6 +85,9 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.12.1**
+- **TiddlyVisuals 1.17.0** eingebaut (Pinboard 0.6.0): Im Wiki führt eine Karte, die Karten enthält, in ihr eigenes Board (Eintauchen-Knopf), mit Brotkrumen zurück; Boards verschachteln sich nie in sich selbst.
 
 **Neu in 0.12: Ordnersuche, Medien, Ziehen aus dem Web-Fenster, Kartenmenü mit Palette**
 - **Die Suche findet Ordner** und Dateien in Unterordnern, nicht nur im gezeigten Ordner. Findet sie nichts, hebt **„An allen Orten suchen“** die Ordnerauswahl auf und sucht im ganzen Home-Ordner und auf allen Laufwerken.
