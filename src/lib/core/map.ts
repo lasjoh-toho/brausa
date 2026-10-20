@@ -81,10 +81,29 @@ export interface ProjectMap {
   /** Last camera, restored when the map is opened again. */
   view?: Camera;
   updated?: string;
+  /** Kanban settings, as in TiddlyVisuals' Kanban: per column look, card order, saved searches. */
+  kanban?: KanbanSettings;
   /** Presentation paths, as in TiddlyVisuals' Pinboard (exported to the wiki as stories). */
   stories?: Story[];
   /** The story shown and played. */
   story?: string;
+}
+
+export interface KanbanSettings {
+  /** By status: colour and how its cards look. */
+  columns?: Record<string, { color?: string; view?: 'full' | 'fold' | 'compact' }>;
+  /** Card ids in board order (cards not listed follow). */
+  order?: string[];
+  /** Saved searches. */
+  searches?: string[];
+  /** Swimlanes: one per card holding the cards (on the map). */
+  lanes?: boolean;
+}
+
+/** Cards in Kanban order: as listed in `order`, the rest after them. */
+export function kanbanOrder(m: ProjectMap, cards: MapCard[]): MapCard[] {
+  const pos = new Map((m.kanban?.order ?? []).map((id, i) => [id, i]));
+  return [...cards].sort((a, b) => (pos.get(a.id) ?? 1e9) - (pos.get(b.id) ?? 1e9));
 }
 
 /** A stop of a story: a card, or a view of the map. `level` makes it a sub-point (outline). */
