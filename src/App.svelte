@@ -33,7 +33,7 @@
   import { wikis } from './lib/state/wikis.svelte';
   import { t } from './lib/i18n/index.svelte';
 
-  let toolbar: Toolbar;
+  let toolbar = $state<Toolbar>();
   let accent = $state<{ color: string; light: boolean } | null>(null);
   const tagTargets = $derived(app.tagSource === 'staging' ? app.staging : app.selectedEntries);
 
@@ -52,7 +52,7 @@
   function key(e: KeyboardEvent) {
     const mod = isToggleKey(e);
     if (mod && e.key.toLowerCase() === 'f') {
-      toolbar.focusSearch();
+      toolbar?.focusSearch();
       e.preventDefault();
       return;
     }
@@ -106,9 +106,9 @@
 <svelte:window onkeydown={key} />
 
 <div class="app">
-  {#if app.sidebarOpen}<Sidebar />{/if}
+  {#if app.sidebarOpen && !app.presenting}<Sidebar />{/if}
   <main>
-    <Toolbar bind:this={toolbar} {accent} />
+    {#if !app.presenting}<Toolbar bind:this={toolbar} {accent} />{/if}
     <div class="work">
       {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
       {#if app.pane && app.view !== 'board'}<SidePane />{/if}

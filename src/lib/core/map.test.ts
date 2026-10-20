@@ -12,6 +12,10 @@ import {
   contentRect,
   newMap,
   normalizeMap,
+  activeStory,
+  indentStep,
+  liveSteps,
+  type Step,
   ancestors,
   reparent,
   stackInsert,
@@ -127,6 +131,29 @@ describe('map mutations', () => {
     const m = normalizeMap({ id: 'm_c', title: 'c', cards: { a: card('a', 'b'), b: card('b', 'a'), c: card('c', 'a') } } as never);
     expect(m.roots.length).toBeGreaterThan(0);
     for (const id of Object.keys(m.cards)) expect(ancestors(m, id).length).toBeLessThan(3);
+  });
+});
+
+describe('stories', () => {
+  it('keeps an outline: a step is at most one level below the one before', () => {
+    const steps: Step[] = [{ id: 'a', kind: 'card', ref: 'x' }, { id: 'b', kind: 'card', ref: 'y' }, { id: 'c', kind: 'card', ref: 'z' }];
+    expect(indentStep(steps, 0, 1)).toBe(false);
+    expect(indentStep(steps, 1, 1)).toBe(true);
+    expect(indentStep(steps, 1, 1)).toBe(false);
+    expect(indentStep(steps, 2, 1)).toBe(true);
+    expect(indentStep(steps, 2, 1)).toBe(true);
+    expect(steps.map((s) => s.level ?? 0)).toEqual([0, 1, 2]);
+    expect(indentStep(steps, 1, -1)).toBe(true);
+    expect(steps.map((s) => s.level ?? 0)).toEqual([0, 0, 1]);
+  });
+
+  it('creates a story on demand and drops stops of deleted cards', () => {
+    const m = newMap('S', 'm_s');
+    const a = addCard(m, null, { x: 0, y: 0 });
+    const s = activeStory(m);
+    expect(m.stories).toHaveLength(1);
+    s.steps.push({ id: '1', kind: 'card', ref: a.id }, { id: '2', kind: 'card', ref: 'gone' }, { id: '3', kind: 'view', cam: { x: 0, y: 0, z: 1 } });
+    expect(liveSteps(m, s).map((x) => x.id)).toEqual(['1', '3']);
   });
 });
 

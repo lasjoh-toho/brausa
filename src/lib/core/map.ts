@@ -81,6 +81,63 @@ export interface ProjectMap {
   /** Last camera, restored when the map is opened again. */
   view?: Camera;
   updated?: string;
+  /** Presentation paths, as in TiddlyVisuals' Pinboard (exported to the wiki as stories). */
+  stories?: Story[];
+  /** The story shown and played. */
+  story?: string;
+}
+
+/** A stop of a story: a card, or a view of the map. `level` makes it a sub-point (outline). */
+export interface Step {
+  id: string;
+  kind: 'card' | 'view';
+  /** Card id (kind card). */
+  ref?: string;
+  /** Camera (kind view). */
+  cam?: Camera;
+  level?: number;
+}
+
+export interface Story {
+  id: string;
+  title: string;
+  color?: string;
+  steps: Step[];
+}
+
+export const MAX_LEVEL = 5;
+export const STORY_COLORS = ['#e0503f', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#1f2937'];
+
+/** The story shown (created when the map has none). */
+export function activeStory(m: ProjectMap): Story {
+  m.stories ??= [];
+  let s = m.stories.find((x) => x.id === m.story);
+  if (!s) {
+    s = m.stories[0] ?? { id: uid('s'), title: 'Story 1', color: STORY_COLORS[0], steps: [] };
+    if (!m.stories.length) m.stories.push(s);
+    m.story = s.id;
+  }
+  return s;
+}
+
+/** Indent (+1) or outdent (-1): at most one level below the step before, as in an outline. */
+export function indentStep(steps: Step[], i: number, by: number): boolean {
+  const s = steps[i];
+  if (!s) return false;
+  const before = i > 0 ? (steps[i - 1].level ?? 0) : -1;
+  const level = Math.max(0, Math.min((s.level ?? 0) + by, before + 1, MAX_LEVEL));
+  if (level === (s.level ?? 0)) return false;
+  s.level = level;
+  // Sub-points that now hang too deep move up with it.
+  for (let j = i + 1; j < steps.length && (steps[j].level ?? 0) > level; j++) {
+    steps[j].level = Math.min(steps[j].level ?? 0, (steps[j - 1].level ?? 0) + 1);
+  }
+  return true;
+}
+
+/** Stops whose card no longer exists drop out. */
+export function liveSteps(m: ProjectMap, s: Story): Step[] {
+  return s.steps.filter((x) => x.kind === 'view' || (x.ref && m.cards[x.ref]));
 }
 
 /** screen = (world - (x, y)) * z */

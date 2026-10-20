@@ -101,6 +101,15 @@ class AppState {
   desc = $state(this.recursive ? store.get('descFlat', false) : store.get('desc', false));
   /** Show system files (only offered inside a chosen folder or with a search of at least five characters). */
   showSystem = $state(false);
+  /** A story is being presented: no sidebar, no toolbar, the window full screen. */
+  presenting = $state(false);
+  setPresenting(on: boolean) {
+    this.presenting = on;
+    void import('@tauri-apps/api/window')
+      .then((w) => w.getCurrentWindow().setFullscreen(on))
+      .catch(() => {});
+  }
+
   /** The sidebar is shown (the hamburger next to the window buttons hides it). */
   sidebarOpen = $state(store.get('sidebarOpen', true));
   toggleSidebar() {

@@ -235,6 +235,8 @@ pub fn map_tiddlers(map: &Value) -> Vec<Fields> {
             c.get("children").and_then(Value::as_array).into_iter().flatten().filter_map(|k| title_of.get(k.as_str()?).cloned()).collect();
         if !kids.is_empty() {
             f.insert("list".into(), stringify_list(&kids));
+            // TiddlyVisuals' Pinboard dives from this card into its own board.
+            f.insert("pinboard-dive".into(), format!("$:/graph/{map_title}/{}", title_of[*id]));
         }
         if let Some(l) = links.get(*id) {
             f.insert("brausa-links".into(), stringify_list(l));
@@ -262,6 +264,24 @@ pub fn map_tiddlers(map: &Value) -> Vec<Fields> {
             Some(p) => cards.get(p).and_then(|c| c.get("children")).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect(),
         }
     };
+    // Stories (presentation paths) in the Pinboard's format: card stops refer to tiddler titles.
+    let story_title = |s: &Value| format!("{map_title} · {}", s.get("title").and_then(Value::as_str).unwrap_or("Story"));
+    let stories: Vec<&Value> = map.get("stories").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default();
+    let card_steps = |s: &Value, on: Option<&[&str]>| -> Vec<(String, u64)> {
+        s.get("steps")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|st| st.get("kind").and_then(Value::as_str) == Some("card"))
+            .filter_map(|st| {
+                let r = st.get("ref").and_then(Value::as_str)?;
+                if on.is_some_and(|ids| !ids.contains(&r)) {
+                    return None;
+                }
+                Some((title_of.get(r)?.clone(), st.get("level").and_then(Value::as_u64).unwrap_or(0)))
+            })
+            .collect()
+    };
     let board = |title: String, filter: String, ids: &[&str]| -> Fields {
         let mut pos = serde_json::Map::new();
         let mut sizes = serde_json::Map::new();
@@ -279,7 +299,29 @@ pub fn map_tiddlers(map: &Value) -> Vec<Fields> {
         g.insert("template".into(), "$:/plugins/lasjoh-toho/pinboard/templates/pinboard".into());
         g.insert("filter".into(), filter);
         g.insert("brausa-map-id".into(), map_id.into());
-        g.insert("pinboard".into(), serde_json::json!({"version": 1, "cards": sizes}).to_string());
+        let mut pin = serde_json::json!({"version": 1, "cards": sizes});
+        if !stories.is_empty() {
+            let list: Vec<Value> = stories
+                .iter()
+                .map(|s| {
+                    let steps: Vec<Value> = card_steps(s, Some(ids))
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, (t, level))| serde_json::json!({"id": format!("s{i}"), "kind": "card", "ref": t, "level": level}))
+                        .collect();
+                    serde_json::json!({
+                        "id": s.get("id").cloned().unwrap_or(Value::Null),
+                        "title": s.get("title").cloned().unwrap_or(Value::Null),
+                        "color": s.get("color").cloned().unwrap_or(Value::Null),
+                        "tiddler": story_title(s),
+                        "steps": steps
+                    })
+                })
+                .collect();
+            pin["stories"] = Value::Array(list);
+            pin["story"] = map.get("story").cloned().unwrap_or(Value::Null);
+        }
+        g.insert("pinboard".into(), pin.to_string());
         g.insert("text".into(), serde_json::to_string_pretty(&pos).unwrap_or_default());
         g
     };
@@ -290,6 +332,21 @@ pub fn map_tiddlers(map: &Value) -> Vec<Fields> {
             let t = &title_of[*id];
             out.push(board(format!("$:/graph/{map_title}/{t}"), format!("[field:brausa-map[{map_id}]field:brausa-parent[{t}]]"), &kids));
         }
+    }
+    // A story tiddler per story: its cards in order, with their outline levels.
+    for s in &stories {
+        let steps = card_steps(s, None);
+        let mut st = Fields::new();
+        st.insert("title".into(), story_title(s));
+        st.insert("tags".into(), "brausa-story".into());
+        st.insert("pinboard-board".into(), format!("$:/graph/{map_title}"));
+        st.insert("story".into(), stringify_list(&steps.iter().map(|(t, _)| t.clone()).collect::<Vec<_>>()));
+        if steps.iter().any(|(_, l)| *l > 0) {
+            st.insert("pinboard-levels".into(), steps.iter().map(|(_, l)| l.to_string()).collect::<Vec<_>>().join(" "));
+        }
+        st.insert("brausa-story-map".into(), map_id.into());
+        st.insert("text".into(), String::new());
+        out.push(st);
     }
     let statuses: Vec<String> = map
         .get("statuses")
@@ -1425,6 +1482,34 @@ mod tests {
         let kanban = ts.iter().find(|t| t["title"] == "$:/graph/Roadmap · Kanban").unwrap();
         assert!(kanban["graph.graph"].contains("[[In Arbeit]]"));
         assert!(ts.iter().any(|t| t["title"] == "$:/config/flibbles/graph/edges/fields/brausa-links"));
+    }
+
+    #[test]
+    fn stories_become_pinboard_stories_and_story_tiddlers() {
+        let m = json!({"id": "m_1", "title": "Plan", "roots": ["c_a", "c_b"],
+            "cards": {
+                "c_a": {"id": "c_a", "title": "Start", "text": "", "x": 0, "y": 0, "w": 100, "h": 50, "parent": null, "children": ["c_c"]},
+                "c_b": {"id": "c_b", "title": "Ende", "text": "", "x": 0, "y": 0, "w": 100, "h": 50, "parent": null, "children": []},
+                "c_c": {"id": "c_c", "title": "Detail", "text": "", "x": 0, "y": 0, "w": 100, "h": 50, "parent": "c_a", "children": []}
+            },
+            "links": [],
+            "stories": [{"id": "s1", "title": "Vortrag", "color": "#e0503f", "steps": [
+                {"id": "t1", "kind": "card", "ref": "c_a"}, {"id": "t2", "kind": "card", "ref": "c_c", "level": 1},
+                {"id": "t3", "kind": "view", "cam": {"x": 0, "y": 0, "z": 1}}, {"id": "t4", "kind": "card", "ref": "c_b"}]}],
+            "story": "s1"});
+        let ts = map_tiddlers(&m);
+        let story = ts.iter().find(|t| t["title"] == "Plan · Vortrag").unwrap();
+        assert_eq!(story["story"], "Start Detail Ende");
+        assert_eq!(story["pinboard-levels"], "0 1 0");
+        assert_eq!(story["pinboard-board"], "$:/graph/Plan");
+        assert!(!story.contains_key("brausa-map"), "the story tiddler is no card of the board");
+        let board = ts.iter().find(|t| t["title"] == "$:/graph/Plan").unwrap();
+        let pin: Value = serde_json::from_str(&board["pinboard"]).unwrap();
+        let refs: Vec<&str> = pin["stories"][0]["steps"].as_array().unwrap().iter().map(|s| s["ref"].as_str().unwrap()).collect();
+        assert_eq!(refs, ["Start", "Ende"], "the root board only stops at its own cards");
+        assert_eq!(pin["stories"][0]["tiddler"], "Plan · Vortrag");
+        let start = ts.iter().find(|t| t["title"] == "Start").unwrap();
+        assert_eq!(start["pinboard-dive"], "$:/graph/Plan/Start", "a card with cards inside dives into its board");
     }
 
     fn setup() -> (tempfile::TempDir, Store, PathBuf) {

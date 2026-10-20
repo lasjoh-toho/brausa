@@ -6,6 +6,11 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { app } from './app.svelte';
 import type { MapInfo } from '../backend/types';
 import {
+  activeStory,
+  indentStep,
+  liveSteps,
+  STORY_COLORS,
+  type Story,
   addCard,
   contextCard,
   deleteCards,
@@ -51,6 +56,11 @@ class BoardState {
   loading = $state(false);
   mode = $state<'map' | 'kanban'>(store.get('boardMode', 'map'));
   panelOpen = $state(store.get('boardPanel', false));
+  /** The story panel (presentation paths) at the right of the map. */
+  storiesOpen = $state(false);
+  /** Playing a story: index of the stop shown. */
+  presenting = $state<{ i: number } | null>(null);
+
   /** The project's notes & snippets thread (cards not on a map), shown at the right. */
   notes = $state<NoteCard[]>([]);
   notesOpen = $state(store.get('boardNotes', false));
@@ -111,11 +121,120 @@ class BoardState {
     store.set('boardPanel', this.panelOpen);
   }
 
+  // ---------------------------------------------------------------- stories (presentation paths)
+
+  get story(): Story | null {
+    return this.map ? (this.map.stories?.find((s) => s.id === this.map!.story) ?? this.map.stories?.[0] ?? null) : null;
+  }
+
+  toggleStories(open = !this.storiesOpen) {
+    this.storiesOpen = open;
+    if (open) this.toggleNotes(false);
+  }
+
+  /** Selected cards (or, with none, the current view) become stops of the shown story. */
+  addStops() {
+    if (!this.map) return;
+    const ids = [...this.selection];
+    this.mutate((m) => {
+      const s = activeStory(m);
+      if (ids.length) for (const ref of ids) s.steps.push({ id: uid('t'), kind: 'card', ref });
+      else s.steps.push({ id: uid('t'), kind: 'view', cam: { ...this.cam } });
+    });
+  }
+
+  removeStep(id: string) {
+    this.mutate((m) => {
+      const s = activeStory(m);
+      s.steps = s.steps.filter((x) => x.id !== id);
+    });
+  }
+
+  moveStep(from: number, to: number) {
+    this.mutate((m) => {
+      const s = activeStory(m);
+      const [x] = s.steps.splice(from, 1);
+      s.steps.splice(Math.max(0, Math.min(to, s.steps.length)), 0, x);
+    });
+  }
+
+  indent(i: number, by: number) {
+    if (!this.map) return;
+    const s = activeStory(this.map);
+    const probe = s.steps.map((x) => ({ ...x }));
+    if (indentStep(probe, i, by)) this.mutate((m) => indentStep(activeStory(m).steps, i, by));
+  }
+
+  newStory() {
+    this.mutate((m) => {
+      m.stories ??= [];
+      const n = m.stories.length;
+      const s = { id: uid('s'), title: `Story ${n + 1}`, color: STORY_COLORS[n % STORY_COLORS.length], steps: [] };
+      m.stories.push(s);
+      m.story = s.id;
+    });
+  }
+
+  setStory(id: string) {
+    this.mutate((m) => (m.story = id));
+  }
+
+  renameStory(title: string) {
+    if (!title.trim()) return;
+    this.mutate((m) => (activeStory(m).title = title.trim()));
+  }
+
+  deleteStory() {
+    this.mutate((m) => {
+      if (!m.stories || m.stories.length < 2) return;
+      const s = activeStory(m);
+      m.stories = m.stories.filter((x) => x.id !== s.id);
+      m.story = m.stories[0].id;
+    });
+  }
+
+  /** Play the shown story full screen, from stop `from`. */
+  async present(from = 0) {
+    const s = this.story;
+    if (!this.map || !s || !liveSteps(this.map, s).length) return app.toast(t('board.story.empty'), true);
+    this.presenting = { i: from };
+    app.setPresenting(true);
+    // The canvas grows to the whole screen: wait for its new size before flying.
+    setTimeout(() => this.show(from), 250);
+  }
+
+  private show(i: number) {
+    const m = this.map;
+    const s = this.story;
+    if (!m || !s || !this.presenting) return;
+    const steps = liveSteps(m, s);
+    const k = Math.max(0, Math.min(i, steps.length - 1));
+    this.presenting = { i: k };
+    const st = steps[k];
+    this.selection.clear();
+    if (st.kind === 'view' && st.cam) this.flyTo(st.cam, 700);
+    else if (st.ref) this.flyTo(fitRect(worldRect(m, st.ref), this.vw, this.vh, 0.08), 700);
+  }
+
+  stepBy(by: number) {
+    if (this.presenting) this.show(this.presenting.i + by);
+  }
+
+  goStep(i: number) {
+    if (this.presenting) this.show(i);
+  }
+
+  endPresentation() {
+    this.presenting = null;
+    app.setPresenting(false);
+  }
+
   // ---------------------------------------------------------------- notes & snippets thread
 
   toggleNotes(open = !this.notesOpen) {
     this.notesOpen = open;
     store.set('boardNotes', open);
+    if (open) this.storiesOpen = false;
   }
 
   async loadNotes() {
