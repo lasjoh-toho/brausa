@@ -207,6 +207,28 @@ export class DemoBackend implements Backend {
     return { entries: out, more: out.length >= limit };
   }
 
+  async findContent(roots: string[], words: string[]) {
+    const out: Entry[] = [];
+    const ws = words.map((w) => w.toLowerCase());
+    for (const root of roots) {
+      const rec = async (n: Node) => {
+        for (const c of n.children?.values() ?? []) {
+          if (c.children) await rec(c);
+          else if (['md', 'txt', 'html', 'pdf'].includes(extOf(c.entry.path))) {
+            const text = extOf(c.entry.path) === 'pdf' ? `${c.entry.name} Vertrag Stadt Termin` : await this.readText(c.entry.path);
+            const flat = text.replace(/\s+/g, ' ');
+            const at = flat.toLowerCase().indexOf(ws[0] ?? '');
+            if (ws.length && ws.every((w) => flat.toLowerCase().includes(w)))
+              out.push({ ...this.decorate(c.entry), relDir: relativeTo(dirname(c.entry.path), root), hit: { snippet: flat.slice(Math.max(0, at - 60), at + 100), page: null } });
+          }
+        }
+      };
+      const n = this.find(root);
+      if (n) await rec(n);
+    }
+    return { entries: out, more: false };
+  }
+
   async listDir(path: string): Promise<Entry[]> {
     const n = this.find(path);
     if (!n?.children) throw new Error(t('demo.notAFolder', { path }));

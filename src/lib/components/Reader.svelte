@@ -88,6 +88,12 @@
     } finally {
       loading = false;
     }
+    // Found by a search in documents: open the search with its first word.
+    const words = app.contentWords;
+    if (!error && words && path === loadedPath && app.found.some((e) => e.path === path && e.hit)) {
+      preset = words[0];
+      finding = true;
+    }
   }
 
   const scale = $derived(sizes.length ? (width - 32) / Math.max(...sizes.map((s) => s.w)) : 1);
@@ -190,6 +196,8 @@
 
   let finding = $state(false);
   let query = $state('');
+  /** The term the search opens with. */
+  let preset = $state('');
   /** Index of the current hit in the whole document. */
   let cur = $state(0);
   /** PDF: hits per page (from the pages' text, also those not drawn yet). */
@@ -282,6 +290,7 @@
 
   function closeFind() {
     finding = false;
+    preset = '';
     query = '';
     hitRects = [];
     pageCounts = [];
@@ -363,7 +372,7 @@
       <button class="btn icon" title={t('reader.close')} onclick={() => board.closeReader()}><Icon name="x" size={14} /></button>
     </header>
     {#if finding}
-      <FindBar count={total} current={cur} onsearch={search} onstep={(by) => goTo(cur + by)} onclose={closeFind} />
+      <FindBar initial={preset} count={total} current={cur} onsearch={search} onstep={(by) => goTo(cur + by)} onclose={closeFind} />
     {/if}
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->

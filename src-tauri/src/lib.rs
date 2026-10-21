@@ -1,4 +1,5 @@
 mod archive;
+mod content;
 mod dupes;
 mod i18n;
 mod smart;
@@ -116,6 +117,42 @@ async fn find(state: State<'_, Index>, roots: Vec<String>, text: String, include
     let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).filter(|p| archive::split(&p.to_string_lossy()).is_none()).collect();
     let (entries, more) = fsops::find(&roots, &text, include_hidden, limit, std::time::Duration::from_secs(4));
     Ok(Found { entries: decorated(&state, entries)?, more })
+}
+
+#[derive(Serialize)]
+struct ContentHit {
+    snippet: String,
+    page: Option<u32>,
+}
+
+#[derive(Serialize)]
+struct ContentFound {
+    entries: Vec<Entry>,
+    /// By path: where the words are.
+    hits: std::collections::HashMap<String, ContentHit>,
+    more: bool,
+}
+
+/// Documents below `roots` whose text holds all `words` (PDFs, Office files, text).
+#[tauri::command]
+async fn find_content(state: State<'_, Index>, roots: Vec<String>, words: Vec<String>, include_hidden: bool, limit: usize) -> CmdResult<ContentFound> {
+    let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).filter(|p| archive::split(&p.to_string_lossy()).is_none()).collect();
+    let bases = roots.clone();
+    let (found, more) =
+        tauri::async_runtime::spawn_blocking(move || content::search(&roots, &words, include_hidden, limit, std::time::Duration::from_secs(20))).await.map_err(err)?;
+    let mut entries = vec![];
+    let mut hits = std::collections::HashMap::new();
+    for h in found {
+        if let Ok(mut e) = fsops::make_entry(&h.path) {
+            let parent = h.path.parent().unwrap_or(Path::new(""));
+            if let Some(base) = bases.iter().find(|b| parent.starts_with(b)) {
+                e.rel_dir = Some(parent.strip_prefix(base).unwrap_or(Path::new("")).to_string_lossy().replace('\\', "/"));
+            }
+            hits.insert(e.path.clone(), ContentHit { snippet: h.snippet, page: h.page });
+            entries.push(e);
+        }
+    }
+    Ok(ContentFound { entries: decorated(&state, entries)?, hits, more })
 }
 
 // File-system commands run on the async pool so large folders don't block the UI thread.
@@ -898,6 +935,7 @@ pub fn run() {
             places,
             volumes,
             find,
+            find_content,
             list_dir,
             walk,
             transfer,

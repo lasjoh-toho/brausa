@@ -41,7 +41,7 @@
 
   // A search also looks below the folder (or everywhere) for matching names.
   $effect(() => {
-    void [app.findText, app.cwd, app.everywhere, app.home];
+    void [app.findText, app.contentSearch, app.cwd, app.everywhere, app.home];
     app.scheduleFind();
   });
 

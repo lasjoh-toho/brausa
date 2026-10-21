@@ -1,6 +1,7 @@
 export const de = {
   title: 'Nichts gefunden',
   hidden: 'Die Filter blenden hier {files} aus.',
+  noDoc: 'Kein Dokument hier enthält „{q}“ (PDFs, Office-Dateien, Text).',
   search: 'Suche: {q}',
   type: 'Art: {type}',
   date: 'Zeitraum: {range}',
@@ -17,6 +18,7 @@ export const de = {
 export const en: typeof de = {
   title: 'Nothing found',
   hidden: 'The filters hide {files} here.',
+  noDoc: 'No document here contains “{q}” (PDFs, Office files, text).',
   search: 'Search: {q}',
   type: 'Kind: {type}',
   date: 'Time range: {range}',

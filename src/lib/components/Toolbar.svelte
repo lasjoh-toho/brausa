@@ -148,7 +148,7 @@
       bind:this={searchEl}
       bind:value={app.search}
       onkeydown={onSearchKey}
-      placeholder={app.searchMode === 'filter' ? t('toolbar.searchPlaceholder') : t('toolbar.selectPlaceholder')}
+      placeholder={app.searchMode === 'select' ? t('toolbar.selectPlaceholder') : app.contentSearch ? t('toolbar.docsPlaceholder') : t('toolbar.searchPlaceholder')}
       spellcheck="false"
     />
     <kbd>{modLabel}F</kbd>
@@ -178,9 +178,13 @@
         <Icon name="stream" size={14} /><span class="lbl">{t('toolbar.modeFlat')}</span>
       </button>
     </div>
-    <label class="btn types" class:on={!!app.typeFilter || (app.showSystem && app.systemAllowed)} title={t('toolbar.typeHint')}>
-      <span class="icon-only"><Icon name="filter" size={13} /></span>
-      <span class="lbl">{typeLabel}{app.showSystem && app.systemAllowed ? ' + ' + t('toolbar.system') : ''}</span>
+    <label class="btn types" class:on={!!app.typeFilter || (app.showSystem && app.systemAllowed) || app.contentSearch} title={t('toolbar.typeHint')}>
+      <span class="icon-only"><Icon name={app.contentSearch ? 'search' : 'filter'} size={13} /></span>
+      {#if app.contentSearch}
+        <span class="lbl two">{t('toolbar.searchIn')}<br />{t('toolbar.inDocuments')}{app.typeFilter ? ` · ${typeLabel}` : ''}</span>
+      {:else}
+        <span class="lbl">{typeLabel}{app.showSystem && app.systemAllowed ? ' + ' + t('toolbar.system') : ''}</span>
+      {/if}
       <select
         value={app.typeFilter ?? ''}
         onchange={(ev) => {
@@ -188,14 +192,18 @@
           if (v === '__system') {
             ev.currentTarget.value = app.typeFilter ?? '';
             app.setShowSystem(!app.showSystem);
+          } else if (v === '__content') {
+            ev.currentTarget.value = app.typeFilter ?? '';
+            app.setContentSearch(!app.contentSearch);
           } else app.setTypeFilter(v || null);
         }}
       >
         <option value="">{t('toolbar.allTypes')}</option>
         <option value="medien">{t('toolbar.media')}</option>
         {#each CATEGORIES as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+        <option disabled>──────</option>
+        <option value="__content">{app.contentSearch ? '✓ ' : ''}{t('toolbar.searchDocs')}</option>
         {#if app.systemAllowed}
-          <option disabled>──────</option>
           <option value="__system">{app.showSystem ? '✓ ' : ''}{t('toolbar.showSystem')}</option>
         {/if}
       </select>
@@ -289,6 +297,11 @@
   }
   .toolbar .icon-only {
     display: none;
+  }
+  .lbl.two {
+    font-size: 11px;
+    line-height: 1.1;
+    text-align: left;
   }
   .toolbar.compact .lbl {
     display: none;

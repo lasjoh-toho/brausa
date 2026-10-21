@@ -110,6 +110,9 @@
     {#if entry.relDir}
       <span class="path" title={entry.relDir}>{entry.relDir}</span>
     {/if}
+    {#if entry.hit}
+      <span class="snip" title={entry.hit.snippet}>{#if entry.hit.page}<b>{t('files.page', { n: entry.hit.page })}</b> {/if}{entry.hit.snippet}</span>
+    {/if}
     {#if staged}<span class="staged" title={t('files.inTray')}><Icon name="tray" size={11} /></span>{/if}
     {#if isHit && !packable}
       <div class="zones" aria-hidden="true">
@@ -208,6 +211,24 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+  }
+  .snip {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    line-height: 1.3;
+    color: var(--fg);
+    background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+    box-shadow: 0 0 0 1px var(--line);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
   .path {
     position: absolute;
