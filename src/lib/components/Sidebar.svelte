@@ -9,6 +9,7 @@
   import TreeNode from './TreeNode.svelte';
   import SmartRow from './SmartRow.svelte';
   import Icon from './Icon.svelte';
+  import { basename } from '../core/paths';
   import Settings from './Settings.svelte';
   import { updates } from '../state/updates.svelte';
   import { t, tn, loc } from '../i18n/index.svelte';
@@ -80,6 +81,26 @@
     app.searchMode = 'filter';
     app.search = app.search.trim() === term ? '' : term;
   }
+
+  /** Sorting the places: drag a row by its grip. */
+  let placeDrag = $state<{ from: number; to: number } | null>(null);
+  function sortPlace(e: PointerEvent, from: number) {
+    e.stopPropagation();
+    e.preventDefault();
+    placeDrag = { from, to: from };
+    const move = (ev: PointerEvent) => {
+      const row = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>('[data-place]');
+      if (row && placeDrag) placeDrag = { from, to: Number(row.dataset.place) };
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (placeDrag) app.movePlace(placeDrag.from, placeDrag.to);
+      placeDrag = null;
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
 </script>
 
 <aside class="sidebar">
@@ -94,17 +115,31 @@
   </div>
   {#if settingsOpen}<Settings onclose={() => (settingsOpen = false)} />{/if}
 
-  <div class="section">{t('sidebar.places')}</div>
-  {#each app.places as p (p.path)}
+  <div class="section with-action">
+    {t('sidebar.places')}
+    <span class="grow"></span>
+    {#if app.placesEdited}
+      <button class="add" title={t('sidebar.resetPlaces')} onclick={() => app.resetPlaces()}><Icon name="undo" size={12} /></button>
+    {/if}
+    <button class="add" title={t('sidebar.addPlace', { name: basename(app.cwd) || app.cwd })} onclick={() => app.addPlace()}>
+      <Icon name="plus" size={13} />
+    </button>
+  </div>
+  {#each app.places as p, i (p.path)}
     {@const hit = drag.active && drag.hit?.kind === 'folder' && drag.hit.path === p.path}
     <div
       class="place"
       class:current={!app.project && app.cwd === p.path}
       class:hit
+      class:moving={placeDrag?.from === i}
+      class:before={placeDrag && placeDrag.to === i && placeDrag.from > i}
+      class:after={placeDrag && placeDrag.to === i && placeDrag.from < i}
       data-drop="folder"
       data-path={p.path}
+      data-place={i}
       role="button"
       tabindex="0"
+      title={p.path}
       onpointerdown={(e) =>
         drag.begin(
           e,
@@ -114,8 +149,10 @@
         )}
       onkeydown={(e) => e.key === 'Enter' && app.navigate(p.path)}
     >
+      <span class="pgrip" role="button" tabindex="-1" title={t('sidebar.sortPlaces')} onpointerdown={(e) => sortPlace(e, i)}>⋮⋮</span>
       <Icon name={p.path === app.home ? 'home' : 'folder'} size={15} />
-      {p.name}
+      <span class="pname">{p.name}</span>
+      <button class="rm" title={t('sidebar.removePlace')} onpointerdown={(e) => e.stopPropagation()} onclick={(e) => (e.stopPropagation(), app.removePlace(p.path))}><Icon name="x" size={11} /></button>
     </div>
   {/each}
 
@@ -464,6 +501,37 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .place .pgrip {
+    display: none;
+    width: 10px;
+    margin-left: -6px;
+    cursor: grab;
+    color: var(--fg-faint);
+    font-size: 10px;
+    letter-spacing: -2px;
+  }
+  .place:hover .pgrip {
+    display: inline;
+  }
+  .place[data-place] .rm {
+    width: 20px;
+    height: 20px;
+    place-items: center;
+    display: none;
+    color: var(--fg-faint);
+  }
+  .place[data-place]:hover .rm {
+    display: grid;
+  }
+  .place.moving {
+    opacity: 0.5;
+  }
+  .place.before {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+  .place.after {
+    box-shadow: inset 0 -2px 0 var(--accent);
   }
   .project .rm {
     display: none;

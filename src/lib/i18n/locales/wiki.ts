@@ -1,5 +1,8 @@
 // Wiki editor (recipes from bags) and the overlay tool.
 export const de = {
+  toWeb: 'Ins Web',
+  toWebOn: 'Geht beim Hochladen ins Web-Wiki – klicken, um diesen Bag nur hier zu behalten',
+  toWebOff: 'Bleibt auf diesem Rechner (wird nicht hochgeladen) – klicken, um ihn ins Web-Wiki zu übernehmen',
   web: 'Im Web',
   webUrl: 'Webadresse des Wikis (Einzeldatei), z. B. https://…/wiki.html',
   webUser: 'Benutzer',
@@ -116,6 +119,9 @@ export const de = {
 };
 
 export const en: typeof de = {
+  toWeb: 'To the web',
+  toWebOn: 'Goes to the web wiki on upload – click to keep this bag here only',
+  toWebOff: 'Stays on this computer (not uploaded) – click to take it to the web wiki',
   web: 'On the web',
   webUrl: 'Web address of the wiki (single file), e.g. https://…/wiki.html',
   webUser: 'User',

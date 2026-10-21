@@ -9,7 +9,9 @@ export const de = {
   clearOne: 'Filter entfernen',
   clearAll: 'Alle Filter entfernen',
   everywhere: 'An allen Orten suchen',
-  everywhereHint: 'Ordnerauswahl aufheben und im ganzen Home-Ordner und auf allen Laufwerken suchen'
+  everywhereHint: 'Ordnerauswahl aufheben und im ganzen Home-Ordner und in allen Orten suchen',
+  media: 'Auf allen Medien suchen',
+  mediaHint: 'Auf allen externen Laufwerken suchen (USB-Sticks, Speicherkarten, Netzlaufwerke)'
 };
 
 export const en: typeof de = {
@@ -23,5 +25,7 @@ export const en: typeof de = {
   clearOne: 'Remove filter',
   clearAll: 'Remove all filters',
   everywhere: 'Search in all places',
-  everywhereHint: 'Leave the folder and search the whole home folder and all drives'
+  everywhereHint: 'Leave the folder and search the whole home folder and all places',
+  media: 'Search all media',
+  mediaHint: 'Search all external drives (USB sticks, memory cards, network drives)'
 };

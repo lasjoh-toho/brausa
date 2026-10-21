@@ -29,11 +29,21 @@
       </button>
     {/each}
   </div>
-  {#if app.findText && !app.everywhere}
-    <button class="btn" onclick={() => app.searchEverywhere()} title={t('noresults.everywhereHint')}>
-      <Icon name="search" size={13} />
-      {t('noresults.everywhere')}
-    </button>
+  {#if app.findText}
+    <div class="scopes">
+      {#if app.everywhere !== 'places'}
+        <button class="btn" onclick={() => app.searchEverywhere('places')} title={t('noresults.everywhereHint')}>
+          <Icon name="search" size={13} />
+          {t('noresults.everywhere')}
+        </button>
+      {/if}
+      {#if app.everywhere !== 'media' && app.volumes.length}
+        <button class="btn" onclick={() => app.searchEverywhere('media')} title={t('noresults.mediaHint')}>
+          <Icon name="drive" size={13} />
+          {t('noresults.media')}
+        </button>
+      {/if}
+    </div>
   {/if}
   <button class="btn primary" onclick={() => app.clearFilters()}>
     <Icon name="x" size={13} />
@@ -60,6 +70,12 @@
   b {
     color: var(--fg);
     font-size: 14px;
+  }
+  .scopes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
   }
   .chips {
     display: flex;

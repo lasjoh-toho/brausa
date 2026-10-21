@@ -1,6 +1,7 @@
 export const de = {
   searchBelow: 'Suche in {folder} und Unterordnern',
   searchEverywhere: 'Suche an allen Orten',
+  searchMedia: 'Suche auf allen Medien',
   searching: 'sucht …',
   searchMore: 'weitere Treffer – genauer suchen',
   searchHere: 'Nur in {folder}',
@@ -81,6 +82,7 @@ export const de = {
 export const en: typeof de = {
   searchBelow: 'Searching {folder} and its subfolders',
   searchEverywhere: 'Searching in all places',
+  searchMedia: 'Searching all media',
   searching: 'searching …',
   searchMore: 'more hits – narrow the search',
   searchHere: 'Only in {folder}',

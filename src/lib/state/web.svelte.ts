@@ -116,9 +116,22 @@ class WebState {
     await this.go(url);
   }
 
+  /** Two areas at most: the panel takes the place of the second file pane. */
   toggle(open = !this.open) {
     this.open = open;
     store.set('webOpen', open);
+    if (open) {
+      if (app.pane) app.setPane(null);
+      if (board.panelOpen) board.panelOpen = false;
+    }
+  }
+
+  /** The globe: the browser, in place of a document shown in the panel. */
+  openBrowser() {
+    if (this.open && this.mode === 'web') return this.toggle(false);
+    board.closeReader();
+    this.mode = 'web';
+    this.toggle(true);
   }
 
   setWidth(w: number) {

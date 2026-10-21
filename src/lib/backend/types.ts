@@ -102,6 +102,8 @@ export interface WikiRecipe {
   kept?: string[];
   /** The same wiki as a single file on the web. */
   web?: { url: string; user: string } | null;
+  /** The bags uploaded to the web; unset: all but the maps (cards, snippets) and „lokal“. */
+  webBags?: string[] | null;
 }
 
 /** A tiddler that is new or different in the web version. */

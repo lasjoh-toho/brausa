@@ -105,7 +105,12 @@
   }
 
   const hitHere = $derived(drag.active && drag.hit?.kind === 'folder' && drag.hit.path === path);
-  const places = $derived([...app.places, ...app.projects.flatMap((p) => p.folders.map((f) => ({ name: `${p.name}: ${basename(f)}`, path: f })))]);
+  // Places and project folders, each folder once (a project folder can also be a place).
+  const places = $derived(
+    [...app.places, ...app.projects.flatMap((p) => p.folders.map((f) => ({ name: `${p.name}: ${basename(f)}`, path: f })))].filter(
+      (p, i, all) => all.findIndex((q) => q.path === p.path) === i
+    )
+  );
 </script>
 
 <aside class="pane" style:width="{width}px">
@@ -121,6 +126,11 @@
       }} aria-label={t('panel.pickPlace')}>
       <option value="">{t('panel.places')}</option>
       {#each places as p (p.path)}<option value={p.path}>{p.name}</option>{/each}
+      {#if app.volumes.length}
+        <optgroup label={t('sidebar.media')}>
+          {#each app.volumes as v (v.path)}<option value={v.path}>{v.name}</option>{/each}
+        </optgroup>
+      {/if}
       {#if app.cwd !== path}<option value={app.cwd}>{t('panel.sameAsLeft', { name: basename(app.cwd) })}</option>{/if}
     </select>
     <button class="btn icon" onclick={swap} title={t('panel.swapTitle')} aria-label={t('panel.swap')}><Icon name="sync" size={14} /></button>

@@ -19,7 +19,6 @@
   import Icon from './Icon.svelte';
   import FindBar from './FindBar.svelte';
   import { findAll, matchRanges } from '../core/textsearch';
-  import { isToggleKey } from '../platform';
   import { t } from '../i18n/index.svelte';
 
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -289,12 +288,24 @@
     textCount = 0;
   }
 
-  function findKey(e: KeyboardEvent) {
-    if (isToggleKey(e) && e.key.toLowerCase() === 'f' && doc) {
-      finding = true;
-      e.preventDefault();
+  // ⌘/Ctrl+F while the document is in front (see App.svelte).
+  let seenFind = board.findSeq;
+  $effect(() => {
+    if (board.findSeq !== seenFind) {
+      seenFind = board.findSeq;
+      if (finding) {
+        // Already open: focus the field again.
+        finding = false;
+        requestAnimationFrame(() => (finding = true));
+      } else finding = true;
     }
-  }
+  });
+
+  // Another document: its own search.
+  $effect(() => {
+    void ref?.path;
+    closeFind();
+  });
 
   // ---------------------------------------------------------------- snippets
 
@@ -340,8 +351,6 @@
     window.addEventListener('pointerup', up);
   }
 </script>
-
-<svelte:window onkeydown={findKey} />
 
 {#if doc && ref}
   <aside class="reader" class:docked style:width={docked ? undefined : `${board.readerWidth}px`}>
