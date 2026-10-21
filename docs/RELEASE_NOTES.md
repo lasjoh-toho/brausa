@@ -14,6 +14,17 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.14
+
+- **Which bag, in the wiki itself:** in a wiki's edit mode a line shows the tiddler's bag, the other bags holding the same title, and **"Save to"** – the next sync puts the tiddler into the chosen bag.
+- **What goes to the web:** per wiki and bag (globe in the wiki settings). Maps (cards, snippets) and "lokal" stay on this computer unless switched on.
+- **Places:** + adds the current folder, drag the grip to sort, × removes, ↺ restores the standard places.
+- **Two areas:** web panel, document and second file pane take turns; the globe shows the browser instead of a document.
+- Nothing found: **"Search in all places"** and **"Search all media"**; external drives in the second pane's place list.
+- The toolbar shows only icons when it runs out of room.
+- **⌘/Ctrl+F** searches the open document (after opening it or clicking into it), otherwise the files – the search term no longer lands in the file filter.
+- Fixed: the second file pane did not open when a project folder is also a place.
+
 ### New in 0.13
 
 - **Find in text** with highlighting in the web panel and in the PDF and document viewer: the search button (or ⌘/Ctrl+F in the viewer) opens a search bar; every hit is highlighted, the current one stronger, Enter / ⇧Enter step through them. In PDFs all pages count, also those not shown yet.
@@ -94,6 +105,16 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.14: Bag im Wiki wählen, Orte, zwei Bereiche, Suche auf allen Medien**
+- **Welcher Bag – im Wiki selbst:** Im Bearbeiten-Modus zeigt eine Zeile den Bag des Tiddlers, weitere Bags mit demselben Titel und **„Speichern in“** – der nächste Abgleich legt den Tiddler in den gewählten Bag.
+- **Was ins Web geht:** pro Wiki und Bag (Weltkugel in den Wiki-Einstellungen). Maps (Karten, Snippets) und „lokal“ bleiben auf diesem Rechner, solange man sie nicht einschaltet.
+- **Orte:** + fügt den aktuellen Ordner hinzu, am Griff ziehen sortiert, × entfernt, ↺ stellt die Standard-Orte wieder her.
+- **Zwei Bereiche:** Web-Fenster, Dokument und zweites Dateifenster wechseln sich ab; die Weltkugel zeigt den Browser statt eines Dokuments.
+- Nichts gefunden: **„An allen Orten suchen“** und **„Auf allen Medien suchen“**; externe Laufwerke auch in der Ortsliste des zweiten Fensters.
+- Bei wenig Platz zeigt die Toolbar nur Symbole.
+- **⌘/Strg+F** sucht im offenen Dokument (nach dem Öffnen oder einem Klick hinein), sonst in den Dateien – der Suchbegriff landet nicht mehr im Dateifilter.
+- Behoben: Das zweite Dateifenster ging nicht auf, wenn ein Projektordner zugleich ein Ort ist.
 
 **Neu in 0.13: Suche im Text, TiddlyVisuals 1.19**
 - **Im Text suchen** mit Hervorhebung im Web-Fenster und im PDF- und Dokumentbetrachter: Der Lupen-Knopf (oder ⌘/Strg+F im Betrachter) öffnet eine Suchleiste; alle Treffer werden markiert, der aktuelle stärker, ↵ / ⇧↵ springen weiter. In PDFs zählen alle Seiten, auch noch nicht angezeigte.

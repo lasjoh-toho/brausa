@@ -96,7 +96,10 @@ class AppState {
   /** The user's own list of places (added, sorted); null: the standard places. */
   private myPlaces = $state<{ name: string; path: string }[] | null>(store.get('myPlaces', null));
   places = $derived(
-    (this.myPlaces ?? this.placesRaw).map((p) => ({ ...p, name: t(`places.${p.name}`) === `places.${p.name}` ? p.name : t(`places.${p.name}`) }))
+    (this.myPlaces ?? this.placesRaw)
+      // Each folder once (the desktop can be the home folder itself).
+      .filter((p, i, all) => all.findIndex((q) => q.path === p.path) === i)
+      .map((p) => ({ ...p, name: t(`places.${p.name}`) === `places.${p.name}` ? p.name : t(`places.${p.name}`) }))
   );
   /** Places are the user's own (added or sorted). */
   placesEdited = $derived(this.myPlaces !== null);
