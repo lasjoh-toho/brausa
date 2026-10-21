@@ -1,6 +1,10 @@
 export const de = {
   demoHint: 'Läuft im Browser mit Beispieldaten',
   places: 'Orte',
+  addPlace: '„{name}“ zu den Orten hinzufügen',
+  removePlace: 'Aus den Orten entfernen (der Ordner bleibt)',
+  sortPlaces: 'Ziehen zum Sortieren',
+  resetPlaces: 'Standard-Orte wiederherstellen',
   media: 'Medien',
   mediaHint: 'Externe Laufwerke: USB-Sticks, Speicherkarten, Netzlaufwerke',
   noMedia: 'Kein externes Laufwerk angeschlossen',
@@ -52,6 +56,10 @@ export const de = {
 export const en: typeof de = {
   demoHint: 'Running in the browser with sample data',
   places: 'Places',
+  addPlace: 'Add “{name}” to the places',
+  removePlace: 'Remove from the places (the folder stays)',
+  sortPlaces: 'Drag to sort',
+  resetPlaces: 'Restore the standard places',
   media: 'Media',
   mediaHint: 'External drives: USB sticks, memory cards, network drives',
   noMedia: 'No external drive connected',

@@ -58,6 +58,21 @@
       searchEl.blur();
     }
   }
+
+  // Little room: the toolbar's buttons show only their icons (the labels stay as tooltips).
+  let compact = $state(false);
+  function fit(node: HTMLElement) {
+    let need = 0;
+    const check = () => {
+      if (!compact && node.scrollWidth > node.clientWidth + 1) {
+        need = node.scrollWidth;
+        compact = true;
+      } else if (compact && node.clientWidth >= need) compact = false;
+    };
+    const ro = new ResizeObserver(check);
+    ro.observe(node);
+    return { destroy: () => ro.disconnect() };
+  }
 </script>
 
 <svelte:window onpointerdown={outside} onkeydown={(ev) => sortMenu && ev.key === 'Escape' && (sortMenu = null)} />
@@ -74,7 +89,7 @@
   </div>
 {/if}
 
-<header data-tauri-drag-region class="toolbar" class:bare={!app.sidebarOpen} class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
+<header data-tauri-drag-region class="toolbar" class:compact use:fit class:bare={!app.sidebarOpen} class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
   {#if !app.sidebarOpen}
     <button class="btn icon menu-btn" onclick={() => app.toggleSidebar()} title={t('toolbar.showSidebar')} aria-label={t('toolbar.showSidebar')}><Icon name="menu" size={15} /></button>
   {/if}
@@ -157,14 +172,15 @@
   {#if app.view !== 'board' && app.view !== 'start'}
     <div class="seg mode" role="radiogroup" aria-label={t('toolbar.mode')}>
       <button class="btn" class:on={!app.recursive} role="radio" aria-checked={!app.recursive} onclick={() => app.recursive && app.setRecursive(false)} title={t('toolbar.modeFolderHint')}>
-        <Icon name="folder" size={14} />{t('toolbar.modeFolder')}
+        <Icon name="folder" size={14} /><span class="lbl">{t('toolbar.modeFolder')}</span>
       </button>
       <button class="btn" class:on={app.recursive} role="radio" aria-checked={app.recursive} onclick={() => !app.recursive && app.setRecursive(true)} title={t('toolbar.streamHint')}>
-        <Icon name="stream" size={14} />{t('toolbar.modeFlat')}
+        <Icon name="stream" size={14} /><span class="lbl">{t('toolbar.modeFlat')}</span>
       </button>
     </div>
     <label class="btn types" class:on={!!app.typeFilter || (app.showSystem && app.systemAllowed)} title={t('toolbar.typeHint')}>
-      <span>{typeLabel}{app.showSystem && app.systemAllowed ? ' + ' + t('toolbar.system') : ''}</span>
+      <span class="icon-only"><Icon name="filter" size={13} /></span>
+      <span class="lbl">{typeLabel}{app.showSystem && app.systemAllowed ? ' + ' + t('toolbar.system') : ''}</span>
       <select
         value={app.typeFilter ?? ''}
         onchange={(ev) => {
@@ -188,7 +204,7 @@
 
     <div class="sortbox">
       <button class="btn types sort-btn" class:on={!!sortMenu} title={t('toolbar.sortBy')} onclick={openSort}>
-        <span>{SORT_KEYS.find((k) => k.key === app.sort)?.label ?? 'Name'}</span>
+        <span class="lbl">{SORT_KEYS.find((k) => k.key === app.sort)?.label ?? 'Name'}</span>
         <Icon name="chevronDown" size={12} />
       </button>
       <button
@@ -218,13 +234,13 @@
     {/if}
   {/if}
 
-  <button class="btn icon" class:on={web.open} onclick={() => web.toggle()} title={t('toolbar.webHint')} aria-label={t('toolbar.web')}>
+  <button class="btn icon" class:on={web.open} onclick={() => web.openBrowser()} title={t('toolbar.webHint')} aria-label={t('toolbar.web')}>
     <Icon name="globe" size={15} />
   </button>
   <button
     class="btn icon"
     class:on={app.view === 'board' ? board.panelOpen : !!app.pane}
-    onclick={() => (app.view === 'board' ? board.togglePanel() : app.setPane(app.pane ? null : app.cwd))}
+    onclick={() => (app.view === 'board' ? board.togglePanel() : app.setPane(app.pane ? null : app.cwd), (app.view === 'board' ? board.panelOpen : app.pane) && web.toggle(false))}
     title={app.view === 'board' ? t('toolbar.projectFiles') : t('toolbar.paneHint')}
     aria-label={t('toolbar.pane')}
   >
@@ -270,6 +286,15 @@
   }
   .types select option {
     color: initial;
+  }
+  .toolbar .icon-only {
+    display: none;
+  }
+  .toolbar.compact .lbl {
+    display: none;
+  }
+  .toolbar.compact .icon-only {
+    display: inline-flex;
   }
   .toolbar {
     position: relative;

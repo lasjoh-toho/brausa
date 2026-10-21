@@ -82,6 +82,13 @@
     await wikis.remove(original.name);
     onclose();
   }
+
+  /** Does this bag go to the web wiki on upload? Maps (cards, snippets) and „lokal“ stay here unless chosen. */
+  const toWeb = (b: string) => (r.webBags ? r.webBags.includes(b) : b !== 'lokal' && !b.startsWith('@map:'));
+  function setWeb(b: string, on: boolean) {
+    const now = r.webBags ?? r.bags.filter(toWeb);
+    r.webBags = on ? [...now.filter((x) => x !== b), b] : now.filter((x) => x !== b);
+  }
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
@@ -154,6 +161,11 @@
               <Icon name={b.startsWith('@map:') ? 'nodes' : 'tray'} size={13} />
               <span class="name">{wikis.label(b)}</span>
               {#if wikis.bags.find((x) => x.name === b)?.readonly}<span class="badge">{t('wiki.readonly')}</span>{/if}
+              {#if webUrl.trim()}
+                <button class="btn icon webtoggle" class:on={toWeb(b)} onclick={() => setWeb(b, !toWeb(b))} title={toWeb(b) ? t('wiki.toWebOn') : t('wiki.toWebOff')} aria-label={t('wiki.toWeb')}>
+                  <Icon name="globe" size={12} />
+                </button>
+              {/if}
               <button class="btn icon" disabled={i === 0} onclick={() => move(i, -1)} aria-label={t('wiki.moveUp')}><Icon name="up" size={12} /></button>
               <button class="btn icon" onclick={() => (r.bags = r.bags.filter((x) => x !== b))} aria-label={t('common.remove')}><Icon name="x" size={12} /></button>
             </li>
@@ -299,6 +311,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .webtoggle {
+    color: var(--fg-faint);
+  }
+  .webtoggle.on {
+    color: var(--accent);
   }
   .badge {
     font-size: 10px;

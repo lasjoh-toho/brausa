@@ -32,6 +32,7 @@
   import CollectDialog from './lib/components/CollectDialog.svelte';
   import SizeSelect from './lib/components/SizeSelect.svelte';
   import { wikis } from './lib/state/wikis.svelte';
+  import { board } from './lib/state/board.svelte';
   import { t } from './lib/i18n/index.svelte';
 
   let toolbar = $state<Toolbar>();
@@ -56,8 +57,23 @@
     return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
   }
 
+  /** Where ⌘/Ctrl+F searches: in the open document (after a click there or opening it) or in the files. */
+  let findInDoc = false;
+  $effect(() => {
+    if (board.reader) findInDoc = true;
+  });
+  function pointer(e: PointerEvent) {
+    findInDoc = !!board.reader && !!(e.target as HTMLElement).closest?.('.reader, aside.web');
+  }
+
   function key(e: KeyboardEvent) {
     const mod = isToggleKey(e);
+    if (mod && e.key.toLowerCase() === 'f' && findInDoc && board.reader) {
+      // The open document's search, not the file search.
+      board.findSeq++;
+      e.preventDefault();
+      return;
+    }
     if (mod && e.key.toLowerCase() === 'f') {
       toolbar?.focusSearch();
       e.preventDefault();
@@ -110,7 +126,7 @@
   }
 </script>
 
-<svelte:window onkeydown={key} />
+<svelte:window onkeydown={key} onpointerdowncapture={pointer} />
 
 <div class="app">
   {#if app.sidebarOpen && !app.presenting}<Sidebar />{/if}

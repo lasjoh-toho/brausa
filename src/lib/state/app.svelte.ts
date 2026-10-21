@@ -93,7 +93,42 @@ class AppState {
 
   /** Standard places as the core names them (German); `places` shows them in the UI language. */
   private placesRaw = $state<{ name: string; path: string }[]>([]);
-  places = $derived(this.placesRaw.map((p) => ({ ...p, name: t(`places.${p.name}`) === `places.${p.name}` ? p.name : t(`places.${p.name}`) })));
+  /** The user's own list of places (added, sorted); null: the standard places. */
+  private myPlaces = $state<{ name: string; path: string }[] | null>(store.get('myPlaces', null));
+  places = $derived(
+    (this.myPlaces ?? this.placesRaw).map((p) => ({ ...p, name: t(`places.${p.name}`) === `places.${p.name}` ? p.name : t(`places.${p.name}`) }))
+  );
+  /** Places are the user's own (added or sorted). */
+  placesEdited = $derived(this.myPlaces !== null);
+
+  private savePlaces(list: { name: string; path: string }[] | null) {
+    this.myPlaces = list;
+    store.set('myPlaces', list);
+  }
+
+  /** Adds a folder (the current one by default) to the places. */
+  addPlace(path = this.cwd) {
+    const list = [...(this.myPlaces ?? this.placesRaw)];
+    if (!path || list.some((p) => p.path === path)) return;
+    this.savePlaces([...list, { name: basename(path) || path, path }]);
+  }
+
+  removePlace(path: string) {
+    this.savePlaces((this.myPlaces ?? this.placesRaw).filter((p) => p.path !== path));
+  }
+
+  movePlace(from: number, to: number) {
+    const list = [...(this.myPlaces ?? this.placesRaw)];
+    if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return;
+    const [x] = list.splice(from, 1);
+    list.splice(to, 0, x);
+    this.savePlaces(list);
+  }
+
+  /** Back to the standard places. */
+  resetPlaces() {
+    this.savePlaces(null);
+  }
   cwd = $state('');
   history = $state<string[]>([]);
   future = $state<string[]>([]);
@@ -140,7 +175,8 @@ class AppState {
   foundMore = $state(false);
   finding = $state(false);
   /** Search in all places (home and drives) instead of the current folder. */
-  everywhere = $state(false);
+  /** Search beyond the folder: in all places (home and own places) or on all drives. */
+  everywhere = $state<'places' | 'media' | null>(null);
   private findTimer: ReturnType<typeof setTimeout> | undefined;
   private findSeq = 0;
 
@@ -148,14 +184,20 @@ class AppState {
   scheduleFind() {
     clearTimeout(this.findTimer);
     const text = this.findText;
-    const roots = this.everywhere ? [this.home, ...this.volumes.map((v) => v.path)] : [this.cwd];
+    const outside = (p: string) => !isWithin(p, this.home);
+    const roots =
+      this.everywhere === 'media'
+        ? this.volumes.map((v) => v.path)
+        : this.everywhere === 'places'
+          ? [this.home, ...this.places.map((p) => p.path).filter(outside)]
+          : [this.cwd];
     const includeHidden = this.showSystem && this.systemAllowed;
     const seq = ++this.findSeq;
     if (!text) {
       this.found = [];
       this.foundMore = false;
       this.finding = false;
-      this.everywhere = false;
+      this.everywhere = null;
       return;
     }
     this.findTimer = setTimeout(async () => {
@@ -174,9 +216,9 @@ class AppState {
   }
 
   /** "Search everywhere": drop the folder, keep the search. */
-  searchEverywhere() {
+  searchEverywhere(scope: 'places' | 'media' = 'places') {
     this.funnel = null;
-    this.everywhere = true;
+    this.everywhere = scope;
   }
 
   funnel = $state<string | null>(null);
@@ -453,7 +495,7 @@ class AppState {
       this.future = [];
     }
     this.setProject(id);
-    this.everywhere = false;
+    this.everywhere = null;
     this.dupes = null;
     this.funnel = null;
     this.dateFilter = null;
@@ -710,7 +752,7 @@ class AppState {
       this.future = [];
     }
     this.cwd = path;
-    this.everywhere = false;
+    this.everywhere = null;
     this.setProject(null);
     // Start page and map belong to projects; folders show their files.
     if (this.view === 'start' || this.view === 'board') {

@@ -29,6 +29,11 @@ pub const PLUGINS: &str = "@plugins";
 pub const LOCAL: &str = "lokal";
 /// Tags that send a tiddler edited in a wiki to the bag `lokal`.
 const LOCAL_TAGS: [&str; 2] = ["lokal", "privat"];
+/// brausa's own layer in every wiki: which bag each tiddler comes from (also when it is
+/// in several), the bags a tiddler can be saved to, and the edit-mode line showing both.
+const INFO: &str = "@brausa";
+/// Field set in the wiki's edit mode: the bag a changed tiddler goes to on the next sync.
+const SAVE_TO: &str = "brausa-bag";
 /// Marks tiddlers brausa generates in `lokal` for linked files.
 const GENERATED: &str = "brausa-generated";
 
@@ -426,6 +431,22 @@ pub struct Recipe {
     /// The same wiki as a single file on the web (compared and uploaded on request).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web: Option<WebLink>,
+    /// The bags uploaded to the web; `None`: all but the maps (cards, snippets) and `lokal`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_bags: Option<Vec<String>>,
+}
+
+impl Recipe {
+    /// Does this layer go to the web wiki on upload?
+    pub fn to_web(&self, bag: &str) -> bool {
+        if bag == INFO {
+            return false;
+        }
+        match &self.web_bags {
+            Some(list) => bag == PLUGINS || list.iter().any(|b| b == bag),
+            None => bag != LOCAL && !bag.starts_with(MAP_BAG),
+        }
+    }
 }
 
 /// Address of a wiki on the web; the password is kept apart (`web-secrets.json`).
@@ -748,15 +769,37 @@ impl Store {
         out
     }
 
-    /// The recipe's view: title → (fields, bag); later bags win.
+    /// The recipe's view: title → (fields, bag); later bags win. brausa's info layer
+    /// (bag of each tiddler, bags to save to, edit-mode line) comes last.
     fn merged(&self, r: &Recipe) -> io::Result<BTreeMap<String, (Fields, String)>> {
         let mut out = BTreeMap::new();
+        let mut bags_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for b in Self::layer_names(r) {
+            let label = self.bag_label(&b);
             for (t, f) in self.layer(&b)? {
+                if b != PLUGINS {
+                    bags_of.entry(t.clone()).or_default().push(label.clone());
+                }
                 out.insert(t, (f, b.clone()));
             }
         }
+        let writable: Vec<String> = r.bags.iter().filter(|b| !self.bag_readonly(b)).cloned().chain(r.local.then(|| LOCAL.to_string())).collect();
+        for f in info_tiddlers(&bags_of, &writable, r.bags.last().map(String::as_str).unwrap_or("")) {
+            out.insert(f["title"].clone(), (f, INFO.to_string()));
+        }
         Ok(out)
+    }
+
+    /// A bag's name as the wiki shows it (a map bag by its map's title).
+    fn bag_label(&self, bag: &str) -> String {
+        if let Some(spec) = bag.strip_prefix(MAP_BAG) {
+            if let Some((root, id)) = spec.split_once('|') {
+                if let Ok(m) = maps::load(Path::new(root), id) {
+                    return format!("Map {}", m.get("title").and_then(Value::as_str).unwrap_or(id));
+                }
+            }
+        }
+        bag.to_string()
     }
 
     /// Each layer of a wiki with its tiddler titles, bottom first (for the layer view).
@@ -948,7 +991,7 @@ impl Store {
         };
         let mut all = crate::webwiki::tiddlers(&html);
         for (title, (f, bag)) in self.merged(&r)? {
-            let private = bag == LOCAL || parse_list(f.get("tags").map(String::as_str).unwrap_or("")).iter().any(|t| LOCAL_TAGS.contains(&t.to_lowercase().as_str()));
+            let private = !r.to_web(&bag) || parse_list(f.get("tags").map(String::as_str).unwrap_or("")).iter().any(|t| LOCAL_TAGS.contains(&t.to_lowercase().as_str()));
             if !private {
                 all.insert(title, f);
             }
@@ -1167,7 +1210,12 @@ impl Store {
                 let private = r.local
                     && (parse_list(f.get("tags").map(String::as_str).unwrap_or("")).iter().any(|t| LOCAL_TAGS.contains(&t.to_lowercase().as_str()))
                         || before.get(title).map(|(_, b)| b == LOCAL).unwrap_or(false));
-                let bag = if private { LOCAL.to_string() } else { top.clone() };
+                // Chosen in the wiki's edit mode ("save to"): that bag, if it may be written.
+                let chosen = f.get(SAVE_TO).filter(|b| (r.bags.contains(b) && !self.bag_readonly(b)) || (r.local && *b == LOCAL)).cloned();
+                let bag = chosen.unwrap_or_else(|| if private { LOCAL.to_string() } else { top.clone() });
+                let mut f = f.clone();
+                f.remove(SAVE_TO);
+                let f = &f;
                 // Changed in the own bag as well since the last sync? The bag wins, the wiki's version is kept aside.
                 let bag_now = before.get(title).filter(|(_, b)| *b == bag).map(|(f, _)| hash(f));
                 let bag_then = state.pushed.get(title).filter(|(b, _)| *b == bag).map(|(_, h)| h.clone());
@@ -1184,7 +1232,7 @@ impl Store {
             }
             // Deleted in the wiki: delete in the own bag if unchanged; shared tiddlers come back.
             for (title, (bag, h)) in &state.pushed {
-                if wiki.contains_key(title) || bag == PLUGINS || bag.starts_with(MAP_BAG) {
+                if wiki.contains_key(title) || bag == PLUGINS || bag == INFO || bag.starts_with(MAP_BAG) {
                     continue;
                 }
                 let generated = before.get(title).map(|(f, _)| f.contains_key(GENERATED)).unwrap_or(false);
@@ -1641,6 +1689,7 @@ mod tests {
                 local: false,
                 kept: vec![],
                 web: None,
+                web_bags: None,
             })
             .unwrap()
     }
@@ -1788,6 +1837,37 @@ mod tests {
     }
 
     #[test]
+    fn edit_mode_shows_bags_and_saves_into_the_chosen_one() {
+        let (t, store, proj) = setup();
+        let wa = t.path().join("wiki-a");
+        let r = recipe(&store, "a", &proj, Target { kind: "folder".into(), path: wa.display().to_string() });
+        store.sync("a").unwrap();
+        // The info layer: where each tiddler comes from, where it can be saved to, the edit-mode line.
+        let wiki = read_tiddler_dir(&wa.join("tiddlers"));
+        let bags: Value = serde_json::from_str(&wiki["$:/brausa/bags"].0["text"]).unwrap();
+        assert_eq!(bags["ZUI"], "glossar");
+        assert_eq!(bags["Idee"], "[[Map Plan]]");
+        assert_eq!(parse_list(&wiki["$:/brausa/writable"].0["list"]), ["glossar", "wiki-a"]);
+        assert!(wiki["$:/brausa/ui/EditTemplate/bag"].0["tags"].contains("$:/tags/EditTemplate"));
+        // A new tiddler saved to the shared bag instead of the wiki's own one; the choice is not stored.
+        fs::write(wa.join("tiddlers/Begriff.tid"), "brausa-bag: glossar\ntitle: Begriff\n\nfür alle").unwrap();
+        store.sync("a").unwrap();
+        let g = store.bag_tiddlers("glossar").unwrap();
+        assert_eq!(g["Begriff"].0["text"], "für alle");
+        assert!(!g["Begriff"].0.contains_key(SAVE_TO));
+        assert!(!store.bag_tiddlers("wiki-a").unwrap().contains_key("Begriff"));
+        // The edit-mode line now names the shared bag.
+        let wiki = read_tiddler_dir(&wa.join("tiddlers"));
+        let bags: Value = serde_json::from_str(&wiki["$:/brausa/bags"].0["text"]).unwrap();
+        assert_eq!(bags["Begriff"], "glossar");
+        // Maps (cards, snippets), lokal and the info layer stay off the web unless chosen.
+        assert!(r.to_web("glossar") && r.to_web("wiki-a") && r.to_web(PLUGINS));
+        assert!(!r.to_web(LOCAL) && !r.to_web(&r.bags[1]) && !r.to_web(INFO));
+        let chosen = Recipe { web_bags: Some(vec![r.bags[1].clone()]), ..r.clone() };
+        assert!(chosen.to_web(&r.bags[1]) && !chosen.to_web("glossar"));
+    }
+
+    #[test]
     fn read_only_bags_can_not_take_promotions() {
         let (t, store, proj) = setup();
         store.put_bag(&BagInfo { name: "glossar".into(), readonly: true, ..Default::default() }).unwrap();
@@ -1830,4 +1910,36 @@ mod tests {
         assert_eq!(store.bag_tiddlers("wiki-einzel").unwrap()["ZUI"].0["text"], "Zoomen!");
         assert!(!store.bag_tiddlers("wiki-einzel").unwrap().contains_key("$:/core"));
     }
+}
+
+/// brausa's info layer: `$:/brausa/bags` (title → the bags holding it, lowest first),
+/// `$:/brausa/writable` (bags a tiddler can be saved to) and the edit-mode line.
+fn info_tiddlers(bags_of: &BTreeMap<String, Vec<String>>, writable: &[String], default: &str) -> Vec<Fields> {
+    let index: serde_json::Map<String, Value> =
+        bags_of.iter().filter(|(t, _)| !t.starts_with("$:/brausa/")).map(|(t, b)| (t.clone(), Value::String(stringify_list(b)))).collect();
+    let f = |pairs: &[(&str, &str)]| -> Fields { pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect() };
+    let (bag, also, save, new, std) = (
+        crate::tr!("Bag", "Bag"),
+        crate::tr!("auch in", "also in"),
+        crate::tr!("Speichern in", "Save to"),
+        crate::tr!("Neuer Tiddler", "New tiddler"),
+        crate::tr!("Standard", "Default"),
+    );
+    let template = format!(
+        r#"\whitespace trim
+<$let brausaTitle={{{{{{ [{{!!draft.of}}] ~[{{!!title}}] }}}}}} brausaBags={{{{{{ [{{$:/brausa/bags}}jsonget<brausaTitle>] }}}}}}>
+<div class="brausa-bag" style="font-size:.85em;opacity:.8;margin:.3em 0;">
+<%if [<brausaBags>!is[blank]] %>
+{bag}: <$list filter="[enlist<brausaBags>last[]]" variable="b"><code><$text text=<<b>>/></code></$list>
+<%if [enlist<brausaBags>count[]compare:number:gt[1]] %> · {also}: <$list filter="[enlist<brausaBags>butlast[]]" variable="b" join=", "><code><$text text=<<b>>/></code></$list><%endif%>
+<%else%>{new}<%endif%>
+ · {save}: <$select field="brausa-bag" default=""><option value="">{std} ({default})</option><$list filter="[enlist{{$:/brausa/writable!!list}}]" variable="b"><option value=<<b>>><$text text=<<b>>/></option></$list></$select>
+</div>
+</$let>"#
+    );
+    vec![
+        f(&[("title", "$:/brausa/bags"), ("type", "application/json"), ("text", &serde_json::to_string(&index).unwrap_or_default())]),
+        f(&[("title", "$:/brausa/writable"), ("list", &stringify_list(writable)), ("text", "")]),
+        f(&[("title", "$:/brausa/ui/EditTemplate/bag"), ("tags", "$:/tags/EditTemplate"), ("list-after", "$:/core/ui/EditTemplate/title"), ("text", &template)]),
+    ]
 }

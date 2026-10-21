@@ -121,6 +121,11 @@
       }} aria-label={t('panel.pickPlace')}>
       <option value="">{t('panel.places')}</option>
       {#each places as p (p.path)}<option value={p.path}>{p.name}</option>{/each}
+      {#if app.volumes.length}
+        <optgroup label={t('sidebar.media')}>
+          {#each app.volumes as v (v.path)}<option value={v.path}>{v.name}</option>{/each}
+        </optgroup>
+      {/if}
       {#if app.cwd !== path}<option value={app.cwd}>{t('panel.sameAsLeft', { name: basename(app.cwd) })}</option>{/if}
     </select>
     <button class="btn icon" onclick={swap} title={t('panel.swapTitle')} aria-label={t('panel.swap')}><Icon name="sync" size={14} /></button>

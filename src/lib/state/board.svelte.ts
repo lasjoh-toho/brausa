@@ -135,6 +135,9 @@ class BoardState {
 
   /** Selected cards (or, with none, the current view) become stops of the shown story. */
   /** Picking: the next clicked cards join the story (Esc or the button ends it). */
+  /** Asks the reader to open its search (⌘/Ctrl+F while a document is in front). */
+  findSeq = $state(0);
+
   picking = $state(false);
 
   addStop(id: string) {
