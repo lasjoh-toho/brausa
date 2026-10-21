@@ -42,9 +42,6 @@
     app.setView('board');
   }
 
-  function openWiki(path: string) {
-    void app.backend.openDefault(path).catch((e) => app.toast(String(e).replace(/^Error: /, ''), true));
-  }
 </script>
 
 <div class="start">
@@ -103,7 +100,7 @@
       <ul class="list">
         {#each projectWikis as w (w.name)}
           <li>
-            <button onclick={() => openWiki(w.target.path)} title={w.target.path}><Icon name="book" size={12} />{w.name}</button>
+            <button onclick={() => wikis.openStory(w.name)} title={w.target.path}><Icon name="book" size={12} />{w.name}</button>
             <button class="sync" class:spin={wikis.syncing === w.name} title={t('sidebar.syncWiki')} onclick={() => wikis.sync(w.name)}><Icon name="sync" size={12} /></button>
           </li>
         {:else}

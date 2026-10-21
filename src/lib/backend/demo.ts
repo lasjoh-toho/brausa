@@ -664,7 +664,17 @@ export class DemoBackend implements Backend {
   async webSelection(): Promise<{ text: string; url: string; title: string }> {
     this.noWeb();
   }
-  async webSavePage(): Promise<string> {
+  async webSavePage(): Promise<{ path: string; wiki: boolean }> {
+    this.noWeb();
+  }
+  async pickFolder() {
+    // No system dialog in the browser: a folder of the demo stands in.
+    return '/Users/demo/Dokumente';
+  }
+  async isTiddlyWiki() {
+    return false;
+  }
+  async wikiView(): Promise<string> {
     this.noWeb();
   }
   async webTarget() {}

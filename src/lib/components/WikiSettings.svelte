@@ -41,7 +41,7 @@
   function openWikiOf(bag: string) {
     const r = wikis.recipes.find((x) => x.bags.includes(bag));
     if (!r) return app.toast(t('wikisettings.notInWiki', { bag }));
-    void app.backend.openDefault(r.target.path).catch((e) => app.toast(String(e).replace(/^Error: /, ''), true));
+    void wikis.openStory(r.name);
   }
 
   const close = () => (wikis.settingsOpen = false);

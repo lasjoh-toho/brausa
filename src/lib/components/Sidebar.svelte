@@ -71,16 +71,14 @@
     void wikis.load();
   });
 
-  function openTarget(path: string, kind: string) {
-    if (kind === 'folder') app.navigate(path);
-    else void app.backend.openDefault(path).catch((e) => app.toast(String(e).replace(/^Error: /, ''), true));
-  }
-
   function filterTag(t: string) {
     const term = '#' + t;
     app.searchMode = 'filter';
     app.search = app.search.trim() === term ? '' : term;
   }
+
+  /** The "+" at the places: current folder, or one chosen in the system's dialog. */
+  let placeMenu = $state(false);
 
   /** Sorting the places: drag a row by its grip. */
   let placeDrag = $state<{ from: number; to: number } | null>(null);
@@ -115,15 +113,25 @@
   </div>
   {#if settingsOpen}<Settings onclose={() => (settingsOpen = false)} />{/if}
 
-  <div class="section with-action">
+  <div class="section with-action places-head" class:hit={drag.active && drag.hit?.kind === 'places'} data-drop="places">
     {t('sidebar.places')}
     <span class="grow"></span>
     {#if app.placesEdited}
       <button class="add" title={t('sidebar.resetPlaces')} onclick={() => app.resetPlaces()}><Icon name="undo" size={12} /></button>
     {/if}
-    <button class="add" title={t('sidebar.addPlace', { name: basename(app.cwd) || app.cwd })} onclick={() => app.addPlace()}>
+    <button class="add" class:on={placeMenu} title={t('sidebar.addPlaceMenu')} onclick={() => (placeMenu = !placeMenu)}>
       <Icon name="plus" size={13} />
     </button>
+    {#if placeMenu}
+      <div class="place-menu" role="menu">
+        {#if !app.project && app.cwd}
+          <button disabled={app.places.some((p) => p.path === app.cwd)} onclick={() => ((placeMenu = false), app.addPlace())}>
+            <Icon name="folder" size={12} />{t('sidebar.addCurrent', { name: basename(app.cwd) || app.cwd })}
+          </button>
+        {/if}
+        <button onclick={() => ((placeMenu = false), app.pickPlace())}><Icon name="search" size={12} />{t('sidebar.pickFolder')}</button>
+      </div>
+    {/if}
   </div>
   {#each app.places as p, i (p.path)}
     {@const hit = drag.active && drag.hit?.kind === 'folder' && drag.hit.path === p.path}
@@ -325,7 +333,7 @@
     >
       <Icon name="book" size={15} />
       <span class="pname">{w.name}</span>
-      <button class="rm" title={t('sidebar.openWiki')} onclick={(e) => (e.stopPropagation(), openTarget(w.target.path, w.target.kind))}>
+      <button class="rm" title={t('sidebar.openWiki')} onclick={(e) => (e.stopPropagation(), wikis.openStory(w.name))}>
         <Icon name="open" size={11} />
       </button>
       {#if w.web?.url}
@@ -422,6 +430,48 @@
     color: var(--fg-faint);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+  }
+  .places-head {
+    position: relative;
+    border-radius: 6px;
+  }
+  .places-head.hit {
+    color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .place-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    padding: 4px;
+    border-radius: 10px;
+    background: var(--bg-elev);
+    box-shadow:
+      var(--shadow),
+      0 0 0 1px var(--line);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+  }
+  .place-menu button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    color: var(--fg);
+    text-align: left;
+  }
+  .place-menu button:hover:not(:disabled) {
+    background: var(--hover, rgb(0 0 0 / 0.05));
+  }
+  .place-menu button:disabled {
+    color: var(--fg-faint);
   }
   .none-media {
     padding: 2px 8px 4px;

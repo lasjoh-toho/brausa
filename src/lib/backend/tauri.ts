@@ -288,7 +288,19 @@ export class TauriBackend implements Backend {
   }
 
   webSavePage(dir: string) {
-    return invoke<string>('web_save_page', { dir });
+    return invoke<{ path: string; wiki: boolean }>('web_save_page', { dir });
+  }
+
+  pickFolder(start?: string) {
+    return invoke<string | null>('pick_folder', { start: start ?? null });
+  }
+
+  isTiddlyWiki(path: string) {
+    return invoke<boolean>('is_tiddlywiki', { path });
+  }
+
+  wikiView(name: string) {
+    return invoke<string>('tw_view', { name });
   }
 
   webTarget(dir: string | null) {
@@ -303,7 +315,8 @@ export class TauriBackend implements Backend {
     const offs = await Promise.all([
       listen<{ url: string; loading: boolean }>('web-nav', (ev) => cb({ kind: 'nav', ...ev.payload })),
       listen<string>('web-title', (ev) => cb({ kind: 'title', title: ev.payload })),
-      listen<{ url: string; path: string | null; success: boolean }>('web-download', (ev) => cb({ kind: 'download', ...ev.payload }))
+      listen<{ url: string; path: string | null; success: boolean }>('web-download', (ev) => cb({ kind: 'download', ...ev.payload })),
+      listen<{ path: string; wiki: string | null; error: string | null }>('wiki-saved', (ev) => cb({ kind: 'saved', ...ev.payload }))
     ]);
     return () => offs.forEach((off) => off());
   }

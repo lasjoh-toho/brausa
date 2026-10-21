@@ -66,6 +66,10 @@ class WebState {
       this.edit(this.visitScope, (l) => ({ history: setTitle(l.history, this.url, e.title), bookmarks: setTitle(l.bookmarks, this.url, e.title) }));
     }
     else if (e.kind === 'download') void this.downloaded(e.path, e.success);
+    else if (e.kind === 'saved') {
+      if (e.error) app.toast(t('web.wikiSaveFailed', { error: e.error }), true);
+      else app.toast(e.wiki ? t('web.wikiSavedFolder', { name: e.wiki }) : t('web.wikiSaved', { name: basename(e.path) }));
+    }
   }
 
   // ---------------------------------------------------------------- bookmarks and history
@@ -315,11 +319,13 @@ class WebState {
     }
   }
 
-  /** A local HTML file as a website: its folder is served, its scripts run only if allowed. */
+  /** A local HTML file as a website: its folder is served, its scripts run only if allowed.
+   *  A TiddlyWiki runs (it is nothing without its scripts) and saves itself back into the file. */
   async openLocal(path: string) {
     const root = dirname(path);
     const d = store.get<ScriptDecisions>('htmlScripts', { files: {}, dirs: {} });
-    const scripts = decisionFor(d, path) ?? false;
+    const wiki = await app.backend.isTiddlyWiki(path).catch(() => false);
+    const scripts = decisionFor(d, path) ?? wiki;
     await this.serveLocal(root, path, scripts);
   }
 
@@ -362,9 +368,13 @@ class WebState {
     const dir = this.target();
     if (!dir) return app.toast(t('web.noFolder'), true);
     try {
-      const path = await app.backend.webSavePage(dir);
+      const { path, wiki } = await app.backend.webSavePage(dir);
       await this.joinProject(path);
-      app.toast(t('web.pageSaved', { name: basename(path) }));
+      if (wiki) {
+        // The wiki from now on is the copy here: it opens and saves into its file.
+        app.toast(t('web.wikiDownloaded', { name: basename(path), folder: basename(dir) }));
+        await this.openLocal(path);
+      } else app.toast(t('web.pageSaved', { name: basename(path) }));
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
     }
@@ -373,6 +383,11 @@ class WebState {
   private async downloaded(path: string | null, ok: boolean) {
     if (!ok || !path) return app.toast(t('web.downloadFailed'), true);
     await this.joinProject(path);
+    // A downloaded TiddlyWiki opens right away, as the copy in the project.
+    if (/\.html?$/i.test(path) && (await app.backend.isTiddlyWiki(path).catch(() => false))) {
+      app.toast(t('web.wikiDownloaded', { name: basename(path), folder: basename(dirname(path)) }));
+      return this.openLocal(path);
+    }
     app.toast(t('web.downloaded', { name: basename(path), folder: basename(dirname(path)) }));
   }
 
