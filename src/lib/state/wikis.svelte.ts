@@ -5,6 +5,7 @@
 import { app } from './app.svelte';
 import { store } from '../platform';
 import { board } from './board.svelte';
+import { web } from './web.svelte';
 import { t, tn } from '../i18n/index.svelte';
 import type { OverlayResolution, WebPreview, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
 
@@ -75,10 +76,14 @@ class WikiState {
   }
 
   /** Sync a wiki, then open it (TiddlyDesktop or the browser shows the story there). */
+  /** Brings the wiki up to date and shows it in the web panel (it saves back from there). */
   async openStory(name: string) {
     await this.sync(name);
-    const r = this.recipes.find((x) => x.name === name);
-    if (r) await app.backend.openDefault(r.target.path).catch((e) => app.toast(String(e).replace(/^Error: /, ''), true));
+    try {
+      await web.openLocal(await app.backend.wikiView(name));
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    }
   }
 
   /** Open the editor with fresh lists (maps may have been created since). */

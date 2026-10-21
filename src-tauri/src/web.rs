@@ -125,6 +125,12 @@ pub struct Web {
 const ADBLOCK: &str = include_str!("adblock.js");
 /// Lets marked text, pictures and links be dragged out of the panel (see webdrag.js).
 const DRAG: &str = include_str!("webdrag.js");
+/// The page as shown, or a TiddlyWiki as the complete wiki file it would save.
+const SAVE_PAGE: &str = r#"(() => {
+  const w = window.$tw && $tw.wiki && $tw.wiki.renderTiddler ? $tw.wiki : null;
+  if (w) return JSON.stringify({ title: w.renderText('text/plain', 'text/vnd.tiddlywiki', w.getTiddlerText('$:/SiteTitle') || 'Wiki'), url: location.href, wiki: true, html: w.renderTiddler('text/plain', '$:/core/save/all') });
+  return JSON.stringify({ title: document.title, url: location.href, html: '<!doctype html>\n' + document.documentElement.outerHTML });
+})()"#;
 
 /// Pictures of the page at least MIN pixels wide and high, as a JSON list of addresses.
 const IMAGES: &str = "JSON.stringify([...new Set([...document.images].filter(i => i.naturalWidth >= MIN && i.naturalHeight >= MIN).map(i => i.currentSrc || i.src).filter(u => /^https?:/.test(u)))])";
@@ -344,21 +350,23 @@ impl Web {
         serde_json::from_str::<String>(&raw).map_err(|e| e.to_string())
     }
 
-    /// Saves the page as it is shown now (HTML after scripts ran) into `dir`.
-    pub fn save_page(&self, app: &AppHandle, dir: &Path) -> Result<PathBuf, String> {
-        let raw = self.eval(app, "JSON.stringify({title: document.title, url: location.href, html: '<!doctype html>\\n' + document.documentElement.outerHTML})")?;
+    /// Saves the page as it is shown now (HTML after scripts ran) into `dir`. A TiddlyWiki
+    /// is saved the way it saves itself, as a complete wiki file (the flag says so).
+    pub fn save_page(&self, app: &AppHandle, dir: &Path) -> Result<(PathBuf, bool), String> {
+        let raw = self.eval(app, SAVE_PAGE)?;
         // The callback result is the JSON encoding of our JSON string.
         let inner: String = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
         let page: serde_json::Value = serde_json::from_str(&inner).map_err(|e| e.to_string())?;
         let title = page["title"].as_str().filter(|t| !t.trim().is_empty()).unwrap_or("Webseite");
         let url = page["url"].as_str().unwrap_or("");
         let html = page["html"].as_str().unwrap_or("");
+        let wiki = page["wiki"].as_bool().unwrap_or(false);
         // Relative links keep working when opened again: point them at the original address.
-        let html = html.replacen("<head>", &format!("<head><base href=\"{}\">", url.replace('"', "&quot;")), 1);
+        let html = if wiki { html.to_string() } else { html.replacen("<head>", &format!("<head><base href=\"{}\">", url.replace('"', "&quot;")), 1) };
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let p = free_path(dir, &format!("{}.html", safe_name(title)));
         fs::write(&p, html).map_err(|e| e.to_string())?;
-        Ok(p)
+        Ok((p, wiki))
     }
 
     /// Serves `root` on 127.0.0.1 under a secret prefix; returns the base URL.
@@ -385,8 +393,19 @@ impl Web {
         let p = server.server_addr().to_ip().map(|a| a.port()).ok_or_else(|| crate::tr!("Kein Port", "No port"))?;
         let sites = self.sites.clone();
         std::thread::spawn(move || {
-            for req in server.incoming_requests() {
-                let res = respond(&sites, req.url());
+            for mut req in server.incoming_requests() {
+                let res = match req.method() {
+                    tiny_http::Method::Options => options(&sites, req.url()),
+                    tiny_http::Method::Put => {
+                        let url = req.url().to_string();
+                        let mut body = vec![];
+                        match req.as_reader().take(MAX_PUT).read_to_end(&mut body) {
+                            Ok(_) => put(&sites, &url, &body),
+                            Err(_) => status(400, "Fehler beim Lesen"),
+                        }
+                    }
+                    _ => respond(&sites, req.url()),
+                };
                 let _ = req.respond(res);
             }
         });
@@ -396,6 +415,49 @@ impl Web {
 }
 
 type Response = tiny_http::Response<std::io::Cursor<Vec<u8>>>;
+
+/// Largest wiki a page may save back.
+const MAX_PUT: u64 = 512 * 1024 * 1024;
+
+/// Called after a page saved itself (a TiddlyWiki): brausa takes the file from there.
+pub static ON_SAVE: std::sync::OnceLock<Box<dyn Fn(&Path) + Send + Sync>> = std::sync::OnceLock::new();
+
+fn status(code: u16, text: &str) -> Response {
+    tiny_http::Response::from_data(text.as_bytes().to_vec()).with_status_code(code)
+}
+
+/// The HTML file a page with scripts may save itself into (TiddlyWiki's PUT saver).
+fn saveable(sites: &Mutex<HashMap<String, Site>>, url: &str) -> Option<PathBuf> {
+    let path = url.trim_start_matches('/');
+    let (key, rest) = path.split_once('/').unwrap_or((path, ""));
+    let sites = sites.lock().ok()?;
+    let site = sites.get(key).filter(|s| s.scripts)?;
+    let file = resolve(&site.root, rest)?;
+    let ext = file.extension().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
+    (file.is_file() && (ext == "html" || ext == "htm")).then_some(file)
+}
+
+/// "May I save here?" – TiddlyWiki saves by PUT when the answer carries a `dav` header.
+fn options(sites: &Mutex<HashMap<String, Site>>, url: &str) -> Response {
+    match saveable(sites, url) {
+        Some(_) => status(200, "").with_header(header("dav", "1")).with_header(header("Allow", "GET, HEAD, OPTIONS, PUT")),
+        None => status(200, "").with_header(header("Allow", "GET, HEAD, OPTIONS")),
+    }
+}
+
+/// The page saves itself: the file is replaced (through a temporary file, so it is never half written).
+fn put(sites: &Mutex<HashMap<String, Site>>, url: &str, body: &[u8]) -> Response {
+    let Some(file) = saveable(sites, url) else { return status(403, "Diese Seite darf sich nicht speichern") };
+    let tmp = file.with_extension("brausa-tmp");
+    if let Err(e) = fs::write(&tmp, body).and_then(|_| fs::rename(&tmp, &file)) {
+        let _ = fs::remove_file(&tmp);
+        return status(500, &e.to_string());
+    }
+    if let Some(f) = ON_SAVE.get() {
+        f(&file);
+    }
+    status(204, "")
+}
 
 fn header(k: &str, v: &str) -> tiny_http::Header {
     tiny_http::Header::from_bytes(k.as_bytes(), v.as_bytes()).unwrap()
@@ -482,6 +544,26 @@ mod tests {
         assert_eq!(r.status_code().0, 200);
         assert!(r.headers().iter().any(|h| h.field.equiv("Content-Security-Policy")));
         assert_eq!(respond(&web.sites, "/wrong/index.html").status_code().0, 404);
+        let _ = fs::remove_dir_all(tmp);
+    }
+
+    #[test]
+    fn only_pages_with_scripts_save_themselves_and_only_html() {
+        let tmp = std::env::temp_dir().join(format!("brausa-put-{}", token()));
+        fs::create_dir_all(&tmp).unwrap();
+        fs::write(tmp.join("wiki.html"), "alt").unwrap();
+        fs::write(tmp.join("a.css"), "h1{}").unwrap();
+        let web = Web::default();
+        let key = |b: String| b.trim_end_matches('/').rsplit('/').next().unwrap().to_string();
+        let (with, without) = (key(web.serve(&tmp, true).unwrap()), key(web.serve(&tmp, false).unwrap()));
+        let dav = |r: &Response| r.headers().iter().any(|h| h.field.equiv("dav"));
+        assert!(dav(&options(&web.sites, &format!("/{with}/wiki.html"))));
+        assert!(!dav(&options(&web.sites, &format!("/{without}/wiki.html"))));
+        assert_eq!(put(&web.sites, &format!("/{without}/wiki.html"), b"neu").status_code().0, 403);
+        assert_eq!(put(&web.sites, &format!("/{with}/a.css"), b"neu").status_code().0, 403);
+        assert_eq!(put(&web.sites, &format!("/{with}/../x.html"), b"neu").status_code().0, 403);
+        assert_eq!(put(&web.sites, &format!("/{with}/wiki.html"), b"neu").status_code().0, 204);
+        assert_eq!(fs::read_to_string(tmp.join("wiki.html")).unwrap(), "neu");
         let _ = fs::remove_dir_all(tmp);
     }
 

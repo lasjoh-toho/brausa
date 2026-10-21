@@ -11,7 +11,7 @@
  * Scroll containers marked with data-autoscroll scroll when dragging near their edges.
  */
 import type { Entry } from '../core/types';
-import { isWithin, basename } from '../core/paths';
+import { isWithin, basename, dirname } from '../core/paths';
 import { UNTAGGED } from '../core/views';
 import { isCopyKey } from '../platform';
 import { archiveRoot, inArchive } from '../core/archive';
@@ -19,7 +19,7 @@ import { app } from './app.svelte';
 import type { NoteCard } from '../core/map';
 import { t } from '../i18n/index.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project' | 'notes' | 'kanban' | 'wiki';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project' | 'notes' | 'kanban' | 'wiki' | 'places';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
 export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
@@ -98,6 +98,8 @@ class DragController {
         return app.kanbanBy === 'tag' ? (h.key === UNTAGGED ? t('drag.removeTag') : t('drag.setTag', { tag: h.key ?? '' })) : t('drag.moveTo', { name: h.key ?? '' });
       case 'notes':
         return t('drag.toThread');
+      case 'places':
+        return t('drag.toPlaces');
       case 'wiki':
         return t('drag.toWiki', { name: h.key ?? '' });
       case 'kanban':
@@ -509,6 +511,11 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         const d = data as { note?: NoteCard; fresh?: boolean } | undefined;
         if (d?.note) board.noteToColumn(d.note, h.key!, !d.fresh);
         else for (const r of await board.refsFor(items)) board.addToColumn({ title: r.name ?? '', refs: [r], h: board.isImage(r) ? 190 : 120 }, h.key!);
+        break;
+      }
+      case 'places': {
+        // Folders become places (files: the folder they are in).
+        for (const e of items) app.addPlace(e.kind === 'dir' ? e.path : dirname(e.path));
         break;
       }
       case 'wiki': {

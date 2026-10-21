@@ -504,8 +504,36 @@ async fn web_selection(app: AppHandle, web: State<'_, web::Web>) -> CmdResult<se
 }
 
 #[tauri::command]
-async fn web_save_page(app: AppHandle, web: State<'_, web::Web>, dir: String) -> CmdResult<String> {
-    web.save_page(&app, Path::new(&dir)).map(|p| p.to_string_lossy().to_string())
+async fn web_save_page(app: AppHandle, web: State<'_, web::Web>, dir: String) -> CmdResult<SavedPage> {
+    web.save_page(&app, Path::new(&dir)).map(|(p, wiki)| SavedPage { path: p.to_string_lossy().to_string(), wiki })
+}
+
+#[derive(Serialize)]
+struct SavedPage {
+    path: String,
+    /// A TiddlyWiki, saved as a complete wiki file.
+    wiki: bool,
+}
+
+/// The system's dialog for choosing a folder (None: cancelled).
+#[tauri::command]
+async fn pick_folder(app: AppHandle, start: Option<String>) -> CmdResult<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut d = app.dialog().file();
+    if let Some(s) = start.filter(|s| Path::new(s).is_dir()) {
+        d = d.set_directory(s);
+    }
+    let picked = tauri::async_runtime::spawn_blocking(move || d.blocking_pick_folder()).await.map_err(err)?;
+    Ok(picked.and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().to_string()))
+}
+
+/// Is the file a single-file TiddlyWiki (it then needs its scripts and may save itself)?
+#[tauri::command]
+async fn is_tiddlywiki(path: String) -> bool {
+    let mut head = vec![0u8; 64 * 1024];
+    let n = std::fs::File::open(&path).and_then(|mut f| std::io::Read::read(&mut f, &mut head)).unwrap_or(0);
+    let s = String::from_utf8_lossy(&head[..n]);
+    s.contains("content=\"TiddlyWiki\"") || s.contains("tiddlywiki-tiddler-store")
 }
 
 /// Where downloads from the web panel go (null: the system's Downloads folder).
@@ -519,6 +547,20 @@ async fn web_target(web: State<'_, web::Web>, dir: Option<String>) -> CmdResult<
 #[tauri::command]
 async fn web_serve(web: State<'_, web::Web>, root: String, scripts: bool) -> CmdResult<String> {
     web.serve(Path::new(&root), scripts)
+}
+
+#[derive(Clone, Serialize)]
+struct WikiSaved {
+    path: String,
+    /// The folder wiki the page belonged to.
+    wiki: Option<String>,
+    error: Option<String>,
+}
+
+/// The wiki as one HTML file to show in the web panel (see tw::Store::view).
+#[tauri::command]
+async fn tw_view(w: State<'_, Wikis>, name: String) -> CmdResult<String> {
+    Ok(w.0.lock().map_err(err)?.view(&name).map_err(err)?.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -892,6 +934,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_drag::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Watcher::default())
         .manage(web::Web::default())
         .setup(|app| {
@@ -919,6 +962,12 @@ pub fn run() {
             app.manage(Projs(Mutex::new(projects::Projects::open(&dir, legacy)?)));
             app.manage(Index(Mutex::new(reg)));
             app.manage(Wikis(Mutex::new(tw::Store::open(&dir)?)));
+            // A wiki saved itself in the web panel: a folder wiki's view goes back into its folder.
+            let (saved, wdir) = (app.handle().clone(), dir.clone());
+            let _ = web::ON_SAVE.set(Box::new(move |file| {
+                let name = tw::Store::open(&wdir).and_then(|s| s.saved_view(file));
+                let _ = saved.emit("wiki-saved", WikiSaved { path: file.to_string_lossy().to_string(), wiki: name.as_ref().ok().cloned().flatten(), error: name.err().map(|e| e.to_string()) });
+            }));
             app.manage(Smart(smart::SmartFolders::open(&dir)?));
             app.manage(watchdog::Watchdog::new(&dir));
             watchdog::Watchdog::start(app.handle().clone());
@@ -936,6 +985,9 @@ pub fn run() {
             volumes,
             find,
             find_content,
+            tw_view,
+            is_tiddlywiki,
+            pick_folder,
             list_dir,
             walk,
             transfer,

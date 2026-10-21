@@ -21,6 +21,10 @@ use crate::maps;
 pub type Fields = BTreeMap<String, String>;
 
 const MAP_BAG: &str = "@map:";
+/// The empty TiddlyWiki folder wikis are shown in (scripts/build-tw-empty.sh).
+const EMPTY_WIKI: &str = include_str!("../resources/tw-empty.html");
+/// Where those views are kept, one folder per wiki.
+const VIEWS: &str = "views";
 /// Built-in, read-only bag with the plugins every brausa wiki needs.
 pub const PLUGINS: &str = "@plugins";
 /// Shared bag for what stays on this computer: links to local files (generated from
@@ -167,6 +171,7 @@ fn ignored(f: &Fields) -> bool {
         || t == "$:/StoryList"
         || t == "$:/HistoryList"
         || t == "$:/Import"
+        || t == "$:/isEncrypted"
         || t == "$:/core"
         || ["$:/state/", "$:/temp/", "$:/status/", "$:/themes/", "$:/languages/", "$:/plugins/", "$:/boot/", "$:/library/"]
             .iter()
@@ -828,6 +833,67 @@ impl Store {
 
     // ------------------------------------------------------------ wikis on the web
 
+    // ------------------------------------------------------------ the wiki in brausa's web panel
+
+    /// The wiki as one HTML file for the web panel: a single-file wiki is that file; a folder
+    /// wiki is put into the bundled empty TiddlyWiki (saving it goes back into the folder).
+    pub fn view(&self, name: &str) -> io::Result<PathBuf> {
+        let r = self.recipe(name)?;
+        if r.target.kind == "file" {
+            return Ok(PathBuf::from(&r.target.path));
+        }
+        let mut tiddlers: Vec<Fields> = read_wiki(&r.target)?.into_values().map(|(f, _)| f).collect();
+        if !tiddlers.iter().any(|f| f["title"] == "$:/language") && !crate::i18n::en() {
+            tiddlers.push([("title", "$:/language"), ("text", "$:/languages/de-DE")].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect());
+        }
+        let dir = self.dir.join(VIEWS).join(filename(name));
+        fs::create_dir_all(&dir)?;
+        let p = dir.join("index.html");
+        fs::write(&p, with_store(EMPTY_WIKI, &tiddlers)?)?;
+        // What the view shows, to tell the user's changes from changes made in the folder meanwhile.
+        let shown: BTreeMap<&String, String> = tiddlers.iter().map(|f| (&f["title"], hash(f))).collect();
+        fs::write(dir.join("shown.json"), serde_json::to_vec(&shown)?)?;
+        Ok(p)
+    }
+
+    /// A wiki saved itself in the web panel. A folder wiki's view goes back into its folder:
+    /// changed tiddlers are written, deleted ones removed. Returns the wiki's name.
+    pub fn saved_view(&self, file: &Path) -> io::Result<Option<String>> {
+        let views = self.dir.join(VIEWS);
+        let (Ok(file), Ok(views)) = (file.canonicalize(), views.canonicalize()) else { return Ok(None) };
+        let Some(folder) = file.parent().filter(|d| d.parent() == Some(views.as_path())).and_then(|d| d.file_name()).map(|n| n.to_string_lossy().to_string()) else {
+            return Ok(None);
+        };
+        let Some(r) = self.recipes().into_iter().find(|r| filename(&r.name) == folder && r.target.kind == "folder") else { return Ok(None) };
+        let html = fs::read_to_string(&file)?;
+        let saved = tiddlers_in(&html)?;
+        let shown_file = file.with_file_name("shown.json");
+        let shown: BTreeMap<String, String> = fs::read(&shown_file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let dir = Path::new(&r.target.path).join("tiddlers");
+        fs::create_dir_all(&dir)?;
+        let keep = |f: &Fields| !ignored(f) && !f.contains_key("draft.of");
+        let before = read_tiddler_dir(&dir);
+        // Written: what was changed or added in the view (untouched tiddlers keep the folder's version).
+        for f in saved.values().filter(|f| keep(f)) {
+            if shown.get(&f["title"]) == Some(&hash(f)) {
+                continue;
+            }
+            let old = before.get(&f["title"]);
+            if old.map(|(o, _)| o != f).unwrap_or(true) {
+                write_tiddler(&dir, old.map(|(_, p)| p.clone()), f)?;
+            }
+        }
+        // Deleted: what the view showed and no longer has, unless it changed in the folder since.
+        for (title, (f, path)) in &before {
+            if !saved.contains_key(title) && shown.get(title) == Some(&hash(f)) && keep(f) && !path.as_os_str().is_empty() {
+                fs::remove_file(path)?;
+            }
+        }
+        let now: BTreeMap<&String, String> = saved.iter().map(|(t, f)| (t, hash(f))).collect();
+        fs::write(&shown_file, serde_json::to_vec(&now)?)?;
+        Ok(Some(r.name))
+    }
+
     fn recipe(&self, name: &str) -> io::Result<Recipe> {
         self.recipes().into_iter().find(|x| x.name == name).ok_or_else(|| err(crate::tr!(format!("Wiki „{name}“ gibt es nicht"), format!("There is no wiki “{name}”"))))
     }
@@ -1414,6 +1480,27 @@ fn read_wiki(t: &Target) -> io::Result<WikiTiddlers> {
     }
 }
 
+/// The tiddlers of a single-file wiki's HTML (later stores win, as in TiddlyWiki).
+fn tiddlers_in(html: &str) -> io::Result<BTreeMap<String, Fields>> {
+    let mut out = BTreeMap::new();
+    for (start, end) in store_blocks(html) {
+        let v: Value = serde_json::from_str(&html[start..end]).map_err(|e| err(format!("Tiddler-Speicher unlesbar: {e}")))?;
+        for f in v.as_array().into_iter().flatten().filter_map(fields_from_json) {
+            out.insert(f["title"].clone(), f);
+        }
+    }
+    Ok(out)
+}
+
+/// `html` (a TiddlyWiki) with one more tiddler store after its last one.
+fn with_store(html: &str, tiddlers: &[Fields]) -> io::Result<String> {
+    let end = store_blocks(html).last().map(|(_, e)| *e).ok_or_else(|| err("Kein Tiddler-Speicher in der Vorlage"))?;
+    let close = end + "</script>".len();
+    // As TiddlyWiki writes it: "<" escaped, so the JSON can not end the script element.
+    let json = serde_json::to_string(tiddlers)?.replace('<', "\\u003C");
+    Ok(format!("{}\n<script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">{json}</script>{}", &html[..close], &html[close..]))
+}
+
 /// Byte ranges of the JSON inside `<script class="tiddlywiki-tiddler-store" …>` blocks.
 fn store_blocks(html: &str) -> Vec<(usize, usize)> {
     let mut out = vec![];
@@ -1911,6 +1998,39 @@ mod tests {
         assert!(maps::load(&proj, "m_1").unwrap()["cards"][&id]["bag"].is_null());
         assert!(!store.bag_tiddlers("glossar").unwrap().contains_key("Idee"));
         assert!(store.merged(&r).unwrap()["Idee"].1.starts_with(MAP_BAG));
+    }
+
+    #[test]
+    fn folder_wiki_opens_in_the_bundled_tiddlywiki_and_saves_back() {
+        let (t, store, proj) = setup();
+        let wa = t.path().join("wiki-a");
+        recipe(&store, "a", &proj, Target { kind: "folder".into(), path: wa.display().to_string() });
+        store.sync("a").unwrap();
+        let view = store.view("a").unwrap();
+        let html = fs::read_to_string(&view).unwrap();
+        let shown = tiddlers_in(&html).unwrap();
+        assert!(shown.contains_key("$:/core") && shown.contains_key("ZUI") && shown.contains_key("Idee"));
+        // Meanwhile a new tiddler arrives in the folder (a sync): saving the view must not delete it.
+        fs::write(wa.join("tiddlers/Neu.tid"), "title: Neu\n\nvom Abgleich").unwrap();
+        // In the view: one tiddler edited, one added, one deleted; a draft and state stay out.
+        let mut list: Vec<Fields> = shown.values().filter(|f| f["title"] != "Idee").cloned().collect();
+        list.iter_mut().find(|f| f["title"] == "ZUI").unwrap().insert("text".into(), "geändert".into());
+        for (title, extra) in [("Eigen", None), ("Draft of 'Eigen'", Some("Eigen")), ("$:/state/x", None), ("$:/isEncrypted", None)] {
+            let mut f: Fields = [("title".to_string(), title.to_string()), ("text".to_string(), "x".to_string())].into();
+            if let Some(d) = extra {
+                f.insert("draft.of".into(), d.into());
+            }
+            list.push(f);
+        }
+        let html = format!("<html><script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">{}</script></html>", serde_json::to_string(&list).unwrap().replace('<', "\\u003C"));
+        fs::write(&view, html).unwrap();
+        assert_eq!(store.saved_view(&view).unwrap().as_deref(), Some("a"));
+        let folder = read_tiddler_dir(&wa.join("tiddlers"));
+        assert_eq!(folder["ZUI"].0["text"], "geändert");
+        assert!(folder.contains_key("Eigen") && folder.contains_key("Neu"));
+        assert!(!folder.contains_key("Idee") && !folder.contains_key("Draft of 'Eigen'") && !folder.contains_key("$:/state/x") && !folder.contains_key("$:/isEncrypted"));
+        // Any other page saving itself is not a wiki view.
+        assert_eq!(store.saved_view(&proj).unwrap(), None);
     }
 
     #[test]

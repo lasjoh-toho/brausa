@@ -48,7 +48,9 @@ export interface WebBounds {
 export type WebEvent =
   | { kind: 'nav'; url: string; loading: boolean }
   | { kind: 'title'; title: string }
-  | { kind: 'download'; url: string; path: string | null; success: boolean };
+  | { kind: 'download'; url: string; path: string | null; success: boolean }
+  /** A page saved itself (a TiddlyWiki); `wiki`: the folder wiki it showed. */
+  | { kind: 'saved'; path: string; wiki: string | null; error: string | null };
 
 /** A project: a named collection of files and folders from anywhere (not a folder). */
 export interface ProjectInfo {
@@ -289,7 +291,14 @@ export interface Backend {
   /** Marked text of the page, with its address and title. */
   webSelection(): Promise<{ text: string; url: string; title: string }>;
   /** Saves the page as shown into `dir`; returns the file. */
-  webSavePage(dir: string): Promise<string>;
+  /** Saves the shown page; a TiddlyWiki as a complete wiki file (`wiki`). */
+  webSavePage(dir: string): Promise<{ path: string; wiki: boolean }>;
+  /** The system's folder dialog; null when cancelled. */
+  pickFolder(start?: string): Promise<string | null>;
+  /** Is the file a single-file TiddlyWiki? */
+  isTiddlyWiki(path: string): Promise<boolean>;
+  /** The wiki as one HTML file for the web panel (a folder wiki inside the bundled TiddlyWiki). */
+  wikiView(name: string): Promise<string>;
   /** Folder for downloads (null: the system's Downloads folder). */
   webTarget(dir: string | null): Promise<void>;
   /** Serves a local folder as a website on this computer only; returns its address. */

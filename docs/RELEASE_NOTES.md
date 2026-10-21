@@ -14,6 +14,12 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.16
+
+- **Wikis open in brausa:** "Open wiki" (sidebar, project start page, map, wiki settings) brings the wiki up to date and shows it in the web panel, no longer the folder. A folder wiki is shown in a TiddlyWiki that comes with brausa (5.3.8, German or English); what you change there is saved back into the wiki's folder (only what changed; tiddlers added meanwhile by a sync stay).
+- **Downloading wikis into projects:** "Save" in the web panel saves a TiddlyWiki as a complete wiki file (not the page as shown) into the project and opens it; a downloaded wiki file opens as well. Local wiki files run their scripts and save into their own file.
+- **Places:** + offers the current folder or **"Choose folder …"** (the system's dialog), and folders can be dragged onto "Places". A message says when a folder is a place already.
+
 ### New in 0.15
 
 - **Search in documents:** in the kinds menu (next to Folders/Flat), **"Search in documents"** looks for the words inside PDFs, Word/Excel/PowerPoint and OpenDocument files, notes, Markdown, HTML and other text below the folder – or in all places / on all media. Each hit shows the text around the word (and its page); opening a document opens its search bar with the word highlighted. Combines with the kind filter (e.g. only PDFs).
@@ -110,6 +116,11 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.16: Wikis in brausa öffnen und herunterladen, Orte wählen**
+- **Wikis öffnen in brausa:** „Wiki öffnen“ (Seitenleiste, Projekt-Startseite, Map, Wiki-Einstellungen) gleicht das Wiki ab und zeigt es im Web-Fenster – nicht mehr den Ordner. Ein Ordner-Wiki erscheint in einem mitgelieferten TiddlyWiki (5.3.8, Deutsch oder Englisch); Änderungen dort werden in den Ordner des Wikis zurückgespeichert (nur Geändertes; zwischendurch durch einen Abgleich hinzugekommene Tiddler bleiben).
+- **Wikis in Projekte herunterladen:** „Speichern“ im Web-Fenster speichert ein TiddlyWiki als vollständige Wiki-Datei (nicht die angezeigte Seite) ins Projekt und öffnet sie; ein heruntergeladenes Wiki öffnet sich ebenso. Lokale Wiki-Dateien führen ihre Skripte aus und speichern in ihre eigene Datei.
+- **Orte:** + bietet den aktuellen Ordner oder **„Ordner wählen …“** (Systemdialog); Ordner lassen sich auch auf „Orte“ ziehen. Ist ein Ordner schon ein Ort, gibt es einen Hinweis.
 
 **Neu in 0.15: Suchen in Dokumenten, Kanban-Bahnen nach Bag**
 - **Suchen in Dokumenten:** Im Arten-Menü (neben Ordner/Flach) sucht **„Suchen in Dokumenten“** die Wörter im Text von PDFs, Word-/Excel-/PowerPoint- und OpenDocument-Dateien, Notizen, Markdown, HTML und anderen Textdateien unterhalb des Ordners – oder an allen Orten / auf allen Medien. Jeder Treffer zeigt den Text um das Wort (und die Seite); ein geöffnetes Dokument öffnet seine Suchleiste mit dem Wort markiert. Lässt sich mit dem Arten-Filter kombinieren (z. B. nur PDFs).

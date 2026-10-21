@@ -109,11 +109,20 @@ class AppState {
     store.set('myPlaces', list);
   }
 
-  /** Adds a folder (the current one by default) to the places. */
+  /** Adds a folder (the current one by default) to the places; says so either way. */
   addPlace(path = this.cwd) {
     const list = [...(this.myPlaces ?? this.placesRaw)];
-    if (!path || list.some((p) => p.path === path)) return;
-    this.savePlaces([...list, { name: basename(path) || path, path }]);
+    if (!path) return;
+    const name = basename(path) || path;
+    if (list.some((p) => p.path === path)) return void this.toast(t('sidebar.placeExists', { name }));
+    this.savePlaces([...list, { name, path }]);
+    this.toast(t('sidebar.placeAdded', { name }));
+  }
+
+  /** The system's folder dialog; the chosen folder becomes a place. */
+  async pickPlace() {
+    const path = await this.backend.pickFolder(this.cwd || this.home).catch((e) => void this.toast(String(e).replace(/^Error: /, ''), true));
+    if (path) this.addPlace(path);
   }
 
   removePlace(path: string) {
