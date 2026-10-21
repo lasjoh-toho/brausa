@@ -32,12 +32,13 @@
     return kind === 'plugins' ? 'gear' : kind === 'local' ? 'home' : kind === 'map' ? 'nodes' : kind === 'own' ? 'book' : 'tray';
   }
 
-  /** Load order of a recipe, bottom first: plugins, shared/map bags, lokal, own bag. */
+  /** Load order of a recipe, bottom first: plugins, shared/map bags, lokal, what came from the web, own bag. */
   function stack(r: Draft & { name: string }): string[] {
     // Same order as Store::layer_names in the core.
     const own = ownOf(r);
-    const lower = r.bags.slice(0, -1).filter((b) => b !== '@plugins');
-    return [...(r.plugins ? ['@plugins'] : []), ...lower, ...(r.local && !r.bags.includes('lokal') ? ['lokal'] : []), own];
+    const web = `web-${r.name}`;
+    const lower = r.bags.slice(0, -1).filter((b) => b !== '@plugins' && b !== web);
+    return [...(r.plugins ? ['@plugins'] : []), ...lower, ...(r.local && !r.bags.includes('lokal') ? ['lokal'] : []), ...(r.bags.includes(web) ? [web] : []), own];
   }
 
   // ---------- matrix ----------

@@ -780,6 +780,9 @@ export class DemoBackend implements Backend {
     return 0;
   }
   async wikiWebDiscard() {}
+  async wikiWebTexts() {
+    return { webText: '', localText: '' };
+  }
   async wikiWebUpload() {
     throw new Error(t('demo.webAppOnly'));
   }
@@ -806,7 +809,8 @@ export class DemoBackend implements Backend {
     const r = this.recipes.find((x) => x.name === recipe);
     if (!r) throw new Error(recipe);
     const own = `wiki-${r.name}`;
-    const stack = [...(r.plugins ? ['@plugins'] : []), ...r.bags.filter((b) => b !== own), ...(r.local ? ['lokal'] : []), own];
+    const web = `web-${r.name}`;
+    const stack = [...(r.plugins ? ['@plugins'] : []), ...r.bags.filter((b) => b !== own && b !== web), ...(r.local ? ['lokal'] : []), ...(r.bags.includes(web) ? [web] : []), own];
     const glossary = ['Zoomable User Interface', 'Snippet', 'Bag', 'Recipe', 'Tiddler', 'Karte', 'Projekt', 'Pinboard', 'Kanban', 'Markdown', 'Overlay', 'Wiki'];
     const titles = async (bag: string): Promise<string[]> => {
       if (bag === '@plugins') return (await this.wikiPlugins()).map(([n]) => `$:/plugins/brausa/${n.toLowerCase()}`);

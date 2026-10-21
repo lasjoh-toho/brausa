@@ -1,6 +1,10 @@
 export const de = {
   title: '„{name}“ mit dem Web abgleichen',
-  intro: 'Die Web-Version liegt in einem vorübergehenden Bag. Angehakte Tiddler kommen in den eigenen Bag des Wikis; danach wird der Bag gelöscht.',
+  intro: 'Angehakt sind Tiddler, die es hier noch nicht gibt oder die im Web neuer sind. Sie kommen in den Bag „web-{name}“ über „lokal“; eine ältere Fassung im eigenen Bag des Wikis wird ersetzt. Beim Öffnen des Wikis geschieht das automatisch.',
+  all: 'alle',
+  none: 'keine',
+  hereNewer: 'hier neuer',
+  showAll: '{n} weitere zeigen',
   new: 'Neu im Web',
   changed: 'Im Web überarbeitet',
   web: 'Web',
@@ -17,7 +21,11 @@ export const de = {
 
 export const en: typeof de = {
   title: 'Compare “{name}” with the web',
-  intro: 'The web version is in a temporary bag. Checked tiddlers go into the wiki’s own bag; then the bag is deleted.',
+  intro: 'Ticked are tiddlers that do not exist here yet or are newer on the web. They go into the bag “web-{name}” above “lokal”; an older copy in the wiki’s own bag is replaced. Opening the wiki does this automatically.',
+  all: 'all',
+  none: 'none',
+  hereNewer: 'newer here',
+  showAll: 'Show {n} more',
   new: 'New on the web',
   changed: 'Revised on the web',
   web: 'Web',

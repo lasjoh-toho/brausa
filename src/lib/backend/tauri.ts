@@ -393,6 +393,10 @@ export class TauriBackend implements Backend {
     return invoke<number>('tw_web_apply', { name, titles, plugins });
   }
 
+  wikiWebTexts(name: string, title: string) {
+    return invoke<{ webText: string; localText: string }>('tw_web_texts', { name, title });
+  }
+
   wikiWebDiscard(name: string) {
     return invoke<void>('tw_web_discard', { name });
   }

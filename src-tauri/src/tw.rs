@@ -474,7 +474,14 @@ pub struct WebChange {
     pub title: String,
     pub web_modified: Option<String>,
     pub local_modified: Option<String>,
-    /// Start of the text on the web and here (here: empty for new tiddlers).
+    /// The web version is the newer one (or new): taken over unless unticked.
+    pub newer: bool,
+}
+
+/// Start of a tiddler's text on the web and here (fetched only when shown).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebTexts {
     pub web_text: String,
     pub local_text: String,
 }
@@ -770,9 +777,14 @@ impl Store {
             Some((t, l)) => (Some(t), l),
             None => (None, &r.bags[..]),
         };
-        out.extend(lower.iter().cloned());
+        // What came from the web version lies above `lokal`, below the wiki's own bag.
+        let web = Self::web_bag(&r.name);
+        out.extend(lower.iter().filter(|b| **b != web).cloned());
         if r.local && !r.bags.iter().any(|b| b == LOCAL) {
             out.push(LOCAL.to_string());
+        }
+        if lower.contains(&web) {
+            out.push(web);
         }
         out.extend(top.cloned());
         out
@@ -945,7 +957,13 @@ impl Store {
         Ok(s)
     }
 
-    /// Load the web version into a temporary bag and list what is new or different there.
+    /// The bag tiddlers taken over from the web version go into; it lies above `lokal`.
+    pub fn web_bag(name: &str) -> String {
+        format!("web-{name}")
+    }
+
+    /// Load the web version (kept as a file until the next comparison) and list what is new or
+    /// different there. Nothing is written into bags yet.
     pub fn web_fetch(&self, name: &str) -> io::Result<WebPreview> {
         let r = self.recipe(name)?;
         let link = r.web.clone().ok_or_else(|| err(crate::tr!("Für dieses Wiki ist keine Webadresse eingetragen", "No web address is set for this wiki")))?;
@@ -957,14 +975,10 @@ impl Store {
         let cache = self.web_cache(name);
         fs::create_dir_all(cache.parent().unwrap())?;
         fs::write(&cache, &html)?;
-        // The temporary bag holds the web tiddlers until the user decided.
-        let tmp = Self::tmp_bag(name);
-        let _ = fs::remove_dir_all(self.bag_dir(&tmp)?);
-        self.put_bag(&BagInfo { name: tmp.clone(), description: crate::tr!("Web-Version (vorübergehend)", "Web version (temporary)").into(), hidden: true, ..Default::default() })?;
+        self.web_discard(name)?;
         let here = self.merged(&r)?;
         let bundled = self.layer(PLUGINS)?;
         let own_plugins = self.bag_tiddlers(OWN_PLUGINS).unwrap_or_default();
-        let short = |s: &str| s.chars().take(400).collect::<String>();
         let mut preview = WebPreview { new: vec![], changed: vec![], plugins: vec![], has_password: self.has_web_password(name) };
         for (title, f) in &web {
             if crate::webwiki::ephemeral(title) {
@@ -976,25 +990,19 @@ impl Store {
                 }
                 let version = f.get("version").cloned().unwrap_or_default();
                 let have = own_plugins.get(title).is_some_and(|(o, _)| o.get("version") == f.get("version"));
-                self.put_tiddler(&tmp, f)?;
                 preview.plugins.push(WebPlugin { title: title.clone(), version, have });
                 continue;
             }
-            let change = |local: Option<&Fields>| WebChange {
-                title: title.clone(),
-                web_modified: f.get("modified").cloned(),
-                local_modified: local.and_then(|l| l.get("modified").cloned()),
-                web_text: short(f.get("text").map(String::as_str).unwrap_or("")),
-                local_text: local.map(|l| short(l.get("text").map(String::as_str).unwrap_or(""))).unwrap_or_default(),
+            let change = |local: Option<&Fields>| {
+                let (web_m, local_m) = (f.get("modified").cloned(), local.and_then(|l| l.get("modified").cloned()));
+                // TiddlyWiki dates (YYYYMMDDhhmmssmmm) compare as text.
+                let newer = local.is_none() || matches!((&web_m, &local_m), (Some(w), Some(l)) if w > l) || (web_m.is_some() && local_m.is_none());
+                WebChange { title: title.clone(), web_modified: web_m, local_modified: local_m, newer }
             };
             match here.get(title) {
-                None => {
-                    self.put_tiddler(&tmp, f)?;
-                    preview.new.push(change(None));
-                }
+                None => preview.new.push(change(None)),
                 Some((l, _)) if ["text", "tags", "type", "caption"].iter().any(|k| l.get(*k).map(String::as_str).unwrap_or("") != f.get(*k).map(String::as_str).unwrap_or("")) => {
-                    self.put_tiddler(&tmp, f)?;
-                    preview.changed.push(change(Some(l)));
+                    preview.changed.push(change(Some(l)))
                 }
                 _ => {}
             }
@@ -1002,16 +1010,44 @@ impl Store {
         Ok(preview)
     }
 
-    /// Take the chosen tiddlers into the wiki's own bag and the chosen plugins into `plugins`;
-    /// the temporary bag goes away. Returns how many tiddlers came over.
+    /// The start of a tiddler's text on the web and here, for the comparison dialog.
+    pub fn web_texts(&self, name: &str, title: &str) -> io::Result<WebTexts> {
+        let short = |f: Option<&Fields>| f.and_then(|f| f.get("text")).map(|s| s.chars().take(2000).collect::<String>()).unwrap_or_default();
+        let web = crate::webwiki::tiddlers(&fs::read_to_string(self.web_cache(name))?);
+        let here = self.merged(&self.recipe(name)?)?;
+        Ok(WebTexts { web_text: short(web.get(title)), local_text: short(here.get(title).map(|(f, _)| f)) })
+    }
+
+    /// Take the chosen tiddlers into the wiki's web bag (above `lokal`; an older copy in the
+    /// wiki's own bag goes, so the web version shows) and the chosen plugins into `plugins`.
+    /// Returns how many tiddlers came over.
     pub fn web_apply(&self, name: &str, titles: &[String], plugins: &[String]) -> io::Result<usize> {
         let mut r = self.recipe(name)?;
-        let tmp = self.bag_tiddlers(&Self::tmp_bag(name))?;
+        let web = crate::webwiki::tiddlers(&fs::read_to_string(self.web_cache(name)).map_err(|_| err(crate::tr!("Erst mit dem Web vergleichen", "Compare with the web first")))?);
         let own = r.bags.last().cloned().ok_or_else(|| err("Wiki ohne Bag"))?;
+        let bag = Self::web_bag(name);
         let mut n = 0;
-        for t in titles {
-            if let Some((f, _)) = tmp.get(t) {
-                self.put_tiddler(&own, f)?;
+        let chosen: Vec<&Fields> = titles.iter().filter_map(|t| web.get(t)).filter(|f| !f.contains_key("plugin-type")).collect();
+        if !chosen.is_empty() {
+            if !self.bag_dir(&bag)?.exists() {
+                self.put_bag(&BagInfo { name: bag.clone(), description: crate::tr!(format!("Aus dem Web-Wiki „{name}“ übernommen"), format!("Taken over from the web wiki “{name}”")).into(), ..Default::default() })?;
+            }
+            if !r.bags.contains(&bag) {
+                let at = r.bags.len().saturating_sub(1);
+                r.bags.insert(at, bag.clone());
+                r = self.put_recipe(r)?;
+            }
+            // Each bag read once: thousands of tiddlers must not mean thousands of folder scans.
+            let have = self.bag_tiddlers(&bag)?;
+            let older = self.bag_tiddlers(&own)?;
+            let dir = self.bag_dir(&bag)?.join("tiddlers");
+            fs::create_dir_all(&dir)?;
+            for f in chosen {
+                let title = &f["title"];
+                write_tiddler(&dir, have.get(title).map(|(_, p)| p.clone()), f)?;
+                if let Some((_, p)) = older.get(title).filter(|(_, p)| !p.as_os_str().is_empty()) {
+                    fs::remove_file(p)?;
+                }
                 n += 1;
             }
         }
@@ -1020,7 +1056,7 @@ impl Store {
                 self.put_bag(&BagInfo { name: OWN_PLUGINS.into(), description: crate::tr!("Eigene Plugins (aus Web-Wikis), über den mitgelieferten", "Own plugins (from web wikis), above the bundled ones").into(), ..Default::default() })?;
             }
             for t in plugins {
-                if let Some((f, _)) = tmp.get(t) {
+                if let Some(f) = web.get(t) {
                     self.put_tiddler(OWN_PLUGINS, f)?;
                 }
             }
@@ -1029,7 +1065,6 @@ impl Store {
                 self.put_recipe(r)?;
             }
         }
-        self.web_discard(name)?;
         Ok(n)
     }
 
@@ -1053,7 +1088,7 @@ impl Store {
         Ok(title)
     }
 
-    /// Throw the temporary bag of a web comparison away.
+    /// Throw the temporary bag of a web comparison away (brausa ≤ 0.16 kept the web version in one).
     pub fn web_discard(&self, name: &str) -> io::Result<()> {
         let d = self.bag_dir(&Self::tmp_bag(name))?;
         if d.exists() {
@@ -1734,14 +1769,29 @@ mod tests {
         assert_eq!(p.changed.iter().map(|c| c.title.as_str()).collect::<Vec<_>>(), ["ZUI"]);
         assert_eq!(p.plugins.len(), 1);
         assert!(!p.has_password);
-        assert!(store.bag_dir("web-tmp-W").unwrap().exists());
+        assert!(p.new[0].newer, "new tiddlers are taken");
+        assert!(!store.bag_dir("web-tmp-W").unwrap().exists(), "no temporary bag");
+        assert!(store.web_texts("W", "ZUI").unwrap().web_text.contains("im Web ergänzt"));
 
         assert_eq!(store.web_apply("W", &["Neu".into()], &["$:/plugins/x/y".into()]).unwrap(), 1);
-        assert!(!store.bag_dir("web-tmp-W").unwrap().exists(), "temporary bag is gone");
         let own = store.recipe("W").unwrap();
         assert_eq!(own.bags[0], OWN_PLUGINS, "plugins bag sits right above @plugins");
-        assert!(store.bag_tiddlers(own.bags.last().unwrap()).unwrap().contains_key("Neu"));
+        assert!(store.bag_tiddlers("web-W").unwrap().contains_key("Neu"));
+        assert!(!store.bag_tiddlers(own.bags.last().unwrap()).unwrap().contains_key("Neu"));
         assert!(store.bag_tiddlers(OWN_PLUGINS).unwrap().contains_key("$:/plugins/x/y"));
+        // The web bag lies above lokal, below the wiki's own bag.
+        let mut r = store.recipe("W").unwrap();
+        r.local = true;
+        let r = store.put_recipe(r).unwrap();
+        let names = Store::layer_names(&r);
+        assert_eq!(&names[names.len() - 3..], [LOCAL.to_string(), "web-W".to_string(), r.bags.last().unwrap().clone()]);
+        // A newer web version replaces the older copy in the own bag.
+        let top = r.bags.last().unwrap().clone();
+        store.put_tiddler(&top, &f(&[("title", "Alt"), ("text", "alt"), ("modified", "20200101000000000")])).unwrap();
+        fs::write(store.web_cache("W"), format!("<html>{store_tag}[{{\"title\":\"Alt\",\"text\":\"neu\",\"modified\":\"20260101000000000\"}}]</script></html>")).unwrap();
+        store.web_apply("W", &["Alt".into()], &[]).unwrap();
+        assert!(!store.bag_tiddlers(&top).unwrap().contains_key("Alt"));
+        assert_eq!(store.merged(&r).unwrap()["Alt"].0["text"], "neu");
 
         assert!(store.web_upload("W").is_err(), "no password, no upload");
         store.set_web_password("W", Some("geheim")).unwrap();
@@ -1753,6 +1803,25 @@ mod tests {
         assert!(t.contains_key("Neu"));
         assert_eq!(t["ZUI"]["text"], "Zoomable UI", "the wiki's version goes up");
         assert!(!t.contains_key("Privat"), "lokal stays on this computer");
+    }
+
+    #[test]
+    fn thousands_of_web_tiddlers_come_over_quickly() {
+        let (_t, store, proj) = setup();
+        let mut r = recipe(&store, "W", &proj, Target { kind: "folder".into(), path: proj.join("wiki").display().to_string() });
+        r.web = Some(WebLink { url: "http://127.0.0.1:9/none".into(), user: String::new() });
+        store.put_recipe(r).unwrap();
+        let list: Vec<Value> = (0..2500).map(|i| json!({"title": format!("T {i}"), "text": "x".repeat(300), "modified": "20260101000000000"})).collect();
+        let store_tag = "<script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">";
+        fs::create_dir_all(store.web_cache("W").parent().unwrap()).unwrap();
+        fs::write(store.web_cache("W"), format!("<html>{store_tag}{}</script></html>", serde_json::to_string(&list).unwrap())).unwrap();
+        let titles: Vec<String> = (0..2500).map(|i| format!("T {i}")).collect();
+        let start = std::time::Instant::now();
+        assert_eq!(store.web_apply("W", &titles, &[]).unwrap(), 2500);
+        let took = start.elapsed();
+        assert_eq!(store.bag_tiddlers("web-W").unwrap().len(), 2500);
+        assert!(took < std::time::Duration::from_secs(10), "took {took:?}");
+        eprintln!("2500 tiddlers applied in {took:?}");
     }
 
     #[test]
