@@ -113,8 +113,8 @@ export interface WebChange {
   title: string;
   webModified: string | null;
   localModified: string | null;
-  webText: string;
-  localText: string;
+  /** The web version is new or newer: taken over unless unticked. */
+  newer: boolean;
 }
 
 /** What the web version of a wiki brings. */
@@ -318,6 +318,8 @@ export interface Backend {
   /** Take chosen tiddlers (into the wiki's own bag) and plugins (into bag „plugins“); the temporary bag goes. */
   wikiWebApply(name: string, titles: string[], plugins: string[]): Promise<number>;
   wikiWebDiscard(name: string): Promise<void>;
+  /** The start of a tiddler's text on the web and here (for the comparison). */
+  wikiWebTexts(name: string, title: string): Promise<{ webText: string; localText: string }>;
   /** Upload the wiki as a new version of its web file. */
   wikiWebUpload(name: string): Promise<void>;
   /** Store (or with null forget) the upload password. */

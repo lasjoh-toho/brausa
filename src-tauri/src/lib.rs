@@ -607,8 +607,15 @@ async fn tw_web_fetch(app: AppHandle, name: String) -> CmdResult<tw::WebPreview>
 
 /// Take chosen tiddlers and plugins from the web version; the temporary bag goes.
 #[tauri::command]
-async fn tw_web_apply(w: State<'_, Wikis>, name: String, titles: Vec<String>, plugins: Vec<String>) -> CmdResult<usize> {
-    w.0.lock().map_err(err)?.web_apply(&name, &titles, &plugins).map_err(err)
+async fn tw_web_apply(app: AppHandle, name: String, titles: Vec<String>, plugins: Vec<String>) -> CmdResult<usize> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || a.state::<Wikis>().0.lock().map_err(err)?.web_apply(&name, &titles, &plugins).map_err(err)).await.map_err(err)?
+}
+
+/// The start of a tiddler's text on the web and here (shown on demand in the comparison).
+#[tauri::command]
+async fn tw_web_texts(w: State<'_, Wikis>, name: String, title: String) -> CmdResult<tw::WebTexts> {
+    w.0.lock().map_err(err)?.web_texts(&name, &title).map_err(err)
 }
 
 #[tauri::command]
@@ -1058,6 +1065,7 @@ pub fn run() {
             tw_web_fetch,
             tw_web_apply,
             tw_web_discard,
+            tw_web_texts,
             tw_web_upload,
             tw_web_password,
             tw_web_has_password,

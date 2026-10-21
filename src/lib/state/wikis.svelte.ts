@@ -76,8 +76,9 @@ class WikiState {
   }
 
   /** Sync a wiki, then open it (TiddlyDesktop or the browser shows the story there). */
-  /** Brings the wiki up to date and shows it in the web panel (it saves back from there). */
+  /** Brings the wiki up to date (with its web version, if it has one) and shows it in the web panel (it saves back from there). */
   async openStory(name: string) {
+    if (this.recipes.find((x) => x.name === name)?.web) await this.webTakeNewer(name);
     await this.sync(name);
     try {
       await web.openLocal(await app.backend.wikiView(name));
@@ -172,6 +173,27 @@ class WikiState {
       } else this.webSync = { name, preview };
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
+    } finally {
+      this.webBusy = null;
+    }
+  }
+
+  /** Without asking: what is new on the web or newer there comes over (into the web bag). */
+  async webTakeNewer(name: string) {
+    if (this.webBusy) return;
+    this.webBusy = name;
+    try {
+      const p = await app.backend.wikiWebFetch(name);
+      const titles = [...p.new, ...p.changed].filter((c) => c.newer).map((c) => c.title);
+      const n = titles.length ? await app.backend.wikiWebApply(name, titles, []) : 0;
+      const older = p.changed.length - p.changed.filter((c) => c.newer).length;
+      if (n) {
+        await this.load();
+        app.toast(t('wikis.webAuto', { n, name }) + (older ? ' ' + t('wikis.webOlderKept', { n: older }) : ''));
+      }
+    } catch (e) {
+      // Offline or unreachable: the wiki opens as it is here.
+      app.toast(t('wikis.webUnreachable', { name, error: String(e).replace(/^Error: /, '') }), true);
     } finally {
       this.webBusy = null;
     }

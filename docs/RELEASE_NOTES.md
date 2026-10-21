@@ -14,6 +14,13 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.17
+
+- **Comparing with the web wiki is fast:** the comparison no longer copies the web version tiddler by tiddler into a temporary bag (with thousands of tiddlers that took minutes); texts are loaded only when a row is opened, long lists show 150 rows at first ("show more", "all/none"), the buttons stay in view.
+- **Only what is new or newer is ticked:** tiddlers that do not exist here, or are newer on the web; where the version here is newer it stays ("newer here").
+- **Bag "web-<wiki>" above "lokal":** what comes from the web lands there; an older copy in the wiki's own bag is replaced, so the web version shows.
+- **Automatically when opening:** "Open wiki" on a wiki with a web address first takes over what is new or newer on the web (offline: it opens as it is).
+
 ### New in 0.16
 
 - **Wikis open in brausa:** "Open wiki" (sidebar, project start page, map, wiki settings) brings the wiki up to date and shows it in the web panel, no longer the folder. A folder wiki is shown in a TiddlyWiki that comes with brausa (5.3.8, German or English); what you change there is saved back into the wiki's folder (only what changed; tiddlers added meanwhile by a sync stay).
@@ -116,6 +123,12 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.17: Schneller Abgleich mit dem Web-Wiki, automatisch beim Öffnen**
+- **Der Vergleich mit dem Web-Wiki ist schnell:** Die Web-Version wird nicht mehr Tiddler für Tiddler in einen vorübergehenden Bag kopiert (bei Tausenden Tiddlern dauerte das Minuten); Texte werden erst beim Aufklappen einer Zeile geladen, lange Listen zeigen zunächst 150 Zeilen („weitere zeigen“, „alle/keine“), die Knöpfe bleiben sichtbar.
+- **Nur Neues und Neueres ist angehakt:** Tiddler, die es hier nicht gibt oder die im Web neuer sind; ist die Fassung hier neuer, bleibt sie („hier neuer“).
+- **Bag „web-<Wiki>“ über „lokal“:** Was aus dem Web kommt, landet dort; eine ältere Fassung im eigenen Bag des Wikis wird ersetzt, damit die Web-Fassung gilt.
+- **Automatisch beim Öffnen:** „Wiki öffnen“ übernimmt bei einem Wiki mit Webadresse zuerst, was im Web neu oder neuer ist (ohne Netz öffnet es wie es ist).
 
 **Neu in 0.16: Wikis in brausa öffnen und herunterladen, Orte wählen**
 - **Wikis öffnen in brausa:** „Wiki öffnen“ (Seitenleiste, Projekt-Startseite, Map, Wiki-Einstellungen) gleicht das Wiki ab und zeigt es im Web-Fenster – nicht mehr den Ordner. Ein Ordner-Wiki erscheint in einem mitgelieferten TiddlyWiki (5.3.8, Deutsch oder Englisch); Änderungen dort werden in den Ordner des Wikis zurückgespeichert (nur Geändertes; zwischendurch durch einen Abgleich hinzugekommene Tiddler bleiben).
