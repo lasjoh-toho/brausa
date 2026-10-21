@@ -14,6 +14,11 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.15
+
+- **Search in documents:** in the kinds menu (next to Folders/Flat), **"Search in documents"** looks for the words inside PDFs, Word/Excel/PowerPoint and OpenDocument files, notes, Markdown, HTML and other text below the folder – or in all places / on all media. Each hit shows the text around the word (and its page); opening a document opens its search bar with the word highlighted. Combines with the kind filter (e.g. only PDFs).
+- **Kanban lanes by bag:** Lanes → "by bag" shows one lane per bag of the wikis holding the map (plus the map's own bag), each marked "goes to the web" or "stays local". Dragging a card into another lane keeps it in that bag in the wiki; "Save to" in the wiki's edit mode moves it back.
+
 ### New in 0.14
 
 - **Which bag, in the wiki itself:** in a wiki's edit mode a line shows the tiddler's bag, the other bags holding the same title, and **"Save to"** – the next sync puts the tiddler into the chosen bag.
@@ -105,6 +110,10 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.15: Suchen in Dokumenten, Kanban-Bahnen nach Bag**
+- **Suchen in Dokumenten:** Im Arten-Menü (neben Ordner/Flach) sucht **„Suchen in Dokumenten“** die Wörter im Text von PDFs, Word-/Excel-/PowerPoint- und OpenDocument-Dateien, Notizen, Markdown, HTML und anderen Textdateien unterhalb des Ordners – oder an allen Orten / auf allen Medien. Jeder Treffer zeigt den Text um das Wort (und die Seite); ein geöffnetes Dokument öffnet seine Suchleiste mit dem Wort markiert. Lässt sich mit dem Arten-Filter kombinieren (z. B. nur PDFs).
+- **Kanban-Bahnen nach Bag:** Bahnen → „nach Bag“ zeigt eine Bahn je Bag der Wikis, die die Map enthalten (dazu den eigenen Bag der Map), jeweils mit „geht ins Web“ oder „bleibt lokal“. Eine Karte in eine andere Bahn ziehen speichert sie im Wiki in diesem Bag; „Speichern in“ im Bearbeiten-Modus des Wikis verschiebt sie zurück.
 
 **Neu in 0.14: Bag im Wiki wählen, Orte, zwei Bereiche, Suche auf allen Medien**
 - **Welcher Bag – im Wiki selbst:** Im Bearbeiten-Modus zeigt eine Zeile den Bag des Tiddlers, weitere Bags mit demselben Titel und **„Speichern in“** – der nächste Abgleich legt den Tiddler in den gewählten Bag.

@@ -244,6 +244,7 @@
                     <span class="label" title={e.relDir ? `${e.relDir}/${e.name}` : e.name}>{e.name}</span>
                     <!-- Folder and tags sit in the name cell unless they have a column of their own. -->
                     {#if e.relDir && !shown.has('folder')}<span class="rel">{e.relDir}</span>{/if}
+                    {#if e.hit}<span class="rel snip" title={e.hit.snippet}>{e.hit.page ? `${t('files.page', { n: e.hit.page })} · ` : ''}{e.hit.snippet}</span>{/if}
                     {#if !shown.has('tags')}
                       {#each e.tags.slice(0, 3) as tag (tag)}<span class="tag" title={tag}><i style:background={tagColor(tag)}></i>{leaf(tag)}</span>{/each}
                     {/if}
@@ -482,6 +483,12 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .rel.snip {
+    flex: 1 1 auto;
+    max-width: 60%;
+    font-style: italic;
+    white-space: nowrap;
   }
   .rel {
     flex: none;

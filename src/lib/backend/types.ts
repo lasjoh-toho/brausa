@@ -183,6 +183,8 @@ export interface Backend {
   volumes(): Promise<{ name: string; path: string }[]>;
   /** Files and folders whose name contains `text`, below each root (`more`: stopped early). */
   findNames(roots: string[], text: string, opts?: { includeHidden?: boolean; limit?: number }): Promise<{ entries: Entry[]; more: boolean }>;
+  /** Documents below `roots` whose text (PDFs, Office files, text) holds all `words`; each entry carries its `hit`. */
+  findContent(roots: string[], words: string[], opts?: { includeHidden?: boolean; limit?: number }): Promise<{ entries: Entry[]; more: boolean }>;
   listDir(path: string, opts?: { includeHidden?: boolean }): Promise<Entry[]>;
   /** Flattened recursive listing of files below root; `relDir` is set on each entry. */
   walk(root: string, opts?: WalkOptions): Promise<Entry[]>;

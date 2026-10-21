@@ -21,7 +21,8 @@
 <div class="none">
   <Icon name="filter" size={28} />
   <b>{t('noresults.title')}</b>
-  {#if hidden}<span>{t('noresults.hidden', { files: tn('common.files', hidden) })}</span>{/if}
+  {#if app.contentWords}<span>{t('noresults.noDoc', { q: app.contentWords.join(' ') })}</span>
+  {:else if hidden}<span>{t('noresults.hidden', { files: tn('common.files', hidden) })}</span>{/if}
   <div class="chips">
     {#each app.activeFilters as f (f.kind)}
       <button class="chip" title={t('noresults.removeOne')} onclick={() => app.clearFilter(f.kind)}>

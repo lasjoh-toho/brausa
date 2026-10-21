@@ -1,6 +1,6 @@
 [package]
 name = "brausa"
-version = "0.14.0"
+version = "0.15.0"
 description = "Plattformunabhängiger visueller Datei-Browser"
 edition = "2021"
 license = "MIT"
@@ -31,6 +31,7 @@ mime_guess = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
+pdf-extract = "0.12.1"
 
 # Image decoding is painfully slow unoptimised; keep dependencies fast in dev builds.
 [profile.dev.package."*"]

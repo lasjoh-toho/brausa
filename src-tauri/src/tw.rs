@@ -251,6 +251,10 @@ pub fn map_tiddlers(map: &Value) -> Vec<Fields> {
                 f.insert(k.into(), s(c, k));
             }
         }
+        // Kept in a wiki bag (Kanban lanes by bag); the edit mode's "save to" shows and changes it.
+        if !s(c, "bag").is_empty() {
+            f.insert(SAVE_TO.into(), s(c, "bag"));
+        }
         if let Some(r) = c.get("refs").and_then(Value::as_array).and_then(|r| r.iter().find(|r| r.get("kind").and_then(Value::as_str) == Some("file"))) {
             if let Some(p) = r.get("path").and_then(Value::as_str) {
                 f.insert("brausa-file".into(), p.into());
@@ -774,9 +778,23 @@ impl Store {
     fn merged(&self, r: &Recipe) -> io::Result<BTreeMap<String, (Fields, String)>> {
         let mut out = BTreeMap::new();
         let mut bags_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for b in Self::layer_names(r) {
+        let names = Self::layer_names(r);
+        let mut layers: Vec<(String, BTreeMap<String, Fields>)> = names.iter().map(|b| Ok((b.clone(), self.layer(b)?))).collect::<io::Result<_>>()?;
+        // Map cards kept in one of the wiki's bags appear in that bag's layer.
+        let mut moved: Vec<(String, Fields)> = vec![];
+        for (b, l) in layers.iter_mut().filter(|(b, _)| b.starts_with(MAP_BAG)) {
+            let away: Vec<String> =
+                l.iter().filter(|(_, f)| f.get(SAVE_TO).map(|x| x != b && !x.starts_with('@') && names.contains(x)).unwrap_or(false)).map(|(t, _)| t.clone()).collect();
+            moved.extend(away.into_iter().filter_map(|t| l.remove(&t)).map(|f| (f[SAVE_TO].clone(), f)));
+        }
+        for (bag, f) in moved {
+            if let Some((_, l)) = layers.iter_mut().find(|(b, _)| *b == bag) {
+                l.entry(f["title"].clone()).or_insert(f);
+            }
+        }
+        for (b, layer) in layers {
             let label = self.bag_label(&b);
-            for (t, f) in self.layer(&b)? {
+            for (t, f) in layer {
                 if b != PLUGINS {
                     bags_of.entry(t.clone()).or_default().push(label.clone());
                 }
@@ -1232,7 +1250,8 @@ impl Store {
             }
             // Deleted in the wiki: delete in the own bag if unchanged; shared tiddlers come back.
             for (title, (bag, h)) in &state.pushed {
-                if wiki.contains_key(title) || bag == PLUGINS || bag == INFO || bag.starts_with(MAP_BAG) {
+                let card = before.get(title).map(|(f, _)| f.contains_key("brausa-map")).unwrap_or(false);
+                if wiki.contains_key(title) || bag == PLUGINS || bag == INFO || bag.starts_with(MAP_BAG) || card {
                     continue;
                 }
                 let generated = before.get(title).map(|(f, _)| f.contains_key(GENERATED)).unwrap_or(false);
@@ -1293,7 +1312,7 @@ fn apply_card_edits(root: &Path, map_id: &str, edits: &[Fields], state: &SyncSta
                 continue;
             }
         }
-        for (k, field) in [("title", "title"), ("text", "text"), ("color", "color"), ("status", "status")] {
+        for (k, field) in [("title", "title"), ("text", "text"), ("color", "color"), ("status", "status"), ("bag", SAVE_TO)] {
             let v = f.get(field).cloned().unwrap_or_default();
             let old = card.get(k).and_then(Value::as_str).unwrap_or("").to_string();
             if v != old && !(k == "title" && v.starts_with("Karte ")) {
@@ -1865,6 +1884,33 @@ mod tests {
         assert!(!r.to_web(LOCAL) && !r.to_web(&r.bags[1]) && !r.to_web(INFO));
         let chosen = Recipe { web_bags: Some(vec![r.bags[1].clone()]), ..r.clone() };
         assert!(chosen.to_web(&r.bags[1]) && !chosen.to_web("glossar"));
+    }
+
+    #[test]
+    fn map_cards_kept_in_a_bag_show_there_and_move_in_edit_mode() {
+        let (t, store, proj) = setup();
+        let wa = t.path().join("wiki-a");
+        let r = recipe(&store, "a", &proj, Target { kind: "folder".into(), path: wa.display().to_string() });
+        let mut m = maps::load(&proj, "m_1").unwrap();
+        let id = m["cards"].as_object().unwrap().iter().find(|(_, c)| c["title"] == "Idee").map(|(k, _)| k.clone()).unwrap();
+        m["cards"][&id]["bag"] = json!("glossar");
+        maps::save(&proj, &m).unwrap();
+        // The card is in the bag glossar now (and goes to the web with it).
+        let merged = store.merged(&r).unwrap();
+        assert_eq!(merged["Idee"].1, "glossar");
+        assert!(r.to_web(&merged["Idee"].1));
+        store.sync("a").unwrap();
+        let wiki = read_tiddler_dir(&wa.join("tiddlers"));
+        let bags: Value = serde_json::from_str(&wiki["$:/brausa/bags"].0["text"]).unwrap();
+        assert_eq!(bags["Idee"], "glossar");
+        // "Save to" the default in the wiki: back in the map's own bag; the card file is not touched.
+        let mut f = wiki["Idee"].0.clone();
+        f.remove(SAVE_TO);
+        write_tiddler(&wa.join("tiddlers"), Some(wiki["Idee"].1.clone()), &f).unwrap();
+        store.sync("a").unwrap();
+        assert!(maps::load(&proj, "m_1").unwrap()["cards"][&id]["bag"].is_null());
+        assert!(!store.bag_tiddlers("glossar").unwrap().contains_key("Idee"));
+        assert!(store.merged(&r).unwrap()["Idee"].1.starts_with(MAP_BAG));
     }
 
     #[test]

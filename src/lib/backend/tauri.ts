@@ -55,6 +55,16 @@ export class TauriBackend implements Backend {
     return { entries: r.entries.map(withThumb), more: r.more };
   }
 
+  async findContent(roots: string[], words: string[], opts: { includeHidden?: boolean; limit?: number } = {}) {
+    const r = await invoke<{ entries: Entry[]; hits: Record<string, { snippet: string; page: number | null }>; more: boolean }>('find_content', {
+      roots,
+      words,
+      includeHidden: opts.includeHidden ?? false,
+      limit: opts.limit ?? 500
+    });
+    return { entries: r.entries.map((e) => ({ ...withThumb(e), hit: r.hits[e.path] })), more: r.more };
+  }
+
   async listDir(path: string, opts: { includeHidden?: boolean } = {}) {
     return (await invoke<Entry[]>('list_dir', { path, includeHidden: opts.includeHidden ?? false })).map(withThumb);
   }

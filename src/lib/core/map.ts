@@ -50,6 +50,8 @@ export interface MapCard {
   h: number;
   color?: string | null;
   status?: string | null;
+  /** The wiki bag the card is kept in (none: the map's own bag). */
+  bag?: string | null;
   fields?: Record<string, string>;
   refs?: CardRef[];
   parent: string | null;
@@ -96,8 +98,8 @@ export interface KanbanSettings {
   order?: string[];
   /** Saved searches. */
   searches?: string[];
-  /** Swimlanes: one per card holding the cards (on the map). */
-  lanes?: boolean;
+  /** Swimlanes: one per card holding the cards on the map (true), or one per wiki bag ('bag'). */
+  lanes?: boolean | 'bag';
   /** Cards on the map show their own colour, or the colour of their Kanban column. */
   cardColors?: 'own' | 'status';
 }

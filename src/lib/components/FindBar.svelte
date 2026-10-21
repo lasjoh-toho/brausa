@@ -1,5 +1,6 @@
 <script lang="ts">
   /** Search in a document or web page: hits counted and highlighted, ↑/↓ (or Enter / ⇧Enter) step through them. */
+  import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import { t } from '../i18n/index.svelte';
 
@@ -8,10 +9,16 @@
     current,
     onsearch,
     onstep,
-    onclose
-  }: { count: number; current: number; onsearch: (q: string) => void; onstep: (by: 1 | -1) => void; onclose: () => void } = $props();
+    onclose,
+    initial = ''
+  }: { count: number; current: number; onsearch: (q: string) => void; onstep: (by: 1 | -1) => void; onclose: () => void; initial?: string } = $props();
 
-  let q = $state('');
+  // svelte-ignore state_referenced_locally
+  let q = $state(initial);
+  // Opened with a term (e.g. from a search in documents): search it right away.
+  $effect(() => {
+    if (initial) untrack(() => onsearch(initial));
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function input() {

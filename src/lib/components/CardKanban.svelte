@@ -9,6 +9,7 @@
   import { app } from '../state/app.svelte';
   import { board } from '../state/board.svelte';
   import { drag } from '../state/drag.svelte';
+  import { wikis } from '../state/wikis.svelte';
   import { DEFAULT_STATUSES, ancestors, addCard, bounds, columnColor, kanbanOrder, type MapCard } from '../core/map';
   import ColorPalette from './ColorPalette.svelte';
   import BoardSwitch from './BoardSwitch.svelte';
@@ -30,13 +31,35 @@
   });
   const cards = $derived(m ? kanbanOrder(m, Object.values(m.cards).filter((c) => c.status && matches(c))) : []);
 
-  /** Swimlanes: the card holding the cards on the map (top level: no lane title). */
-  const lanes = $derived.by(() => {
+  /** The wikis that hold this map, and the bags its cards can be kept in. */
+  const inWikis = $derived(wikis.recipes.filter((r) => r.bags.includes(board.mapBag())));
+  const toWeb = (b: string) => inWikis.some((r) => (r.webBags ? r.webBags.includes(b) : b !== 'lokal' && !b.startsWith('@')));
+  // The wikis once, when lanes by bag are first shown (an empty list stays empty).
+  let wikisLoaded = false;
+  $effect(() => {
+    if (k.lanes === 'bag' && !wikisLoaded) {
+      wikisLoaded = true;
+      if (!wikis.recipes.length) void wikis.load();
+    }
+  });
+
+  /** Swimlanes: the card holding the cards on the map (top level: no lane title), or the bag a card is kept in. */
+  const lanes = $derived.by((): { key: string; label: string; web?: boolean }[] => {
     if (!k.lanes || !m) return [{ key: '', label: '' }];
+    if (k.lanes === 'bag') {
+      const names = new Set<string>();
+      for (const r of inWikis) {
+        for (const b of r.bags) if (!b.startsWith('@') && !wikis.bags.find((x) => x.name === b)?.readonly) names.add(b);
+        if (r.local) names.add('lokal');
+      }
+      for (const c of cards) if (c.bag) names.add(c.bag);
+      return [{ key: '', label: t('map.kanban.mapLane'), web: toWeb(board.mapBag()) }, ...[...names].map((b) => ({ key: b, label: b, web: toWeb(b) }))];
+    }
     const keys = [...new Set(cards.map((c) => c.parent ?? ''))];
     return keys.map((key) => ({ key, label: key ? m.cards[key]?.title || t('map.untitled') : t('map.kanban.topLevel') }));
   });
-  const cell = (status: string, lane: string) => cards.filter((c) => c.status === status && (!k.lanes || (c.parent ?? '') === lane));
+  const laneOf = (c: MapCard) => (k.lanes === 'bag' ? (c.bag ?? '') : (c.parent ?? ''));
+  const cell = (status: string, lane: string) => cards.filter((c) => c.status === status && (!k.lanes || laneOf(c) === lane));
 
   /** Default statuses are stored in German; show them in the UI language. */
   const STATUS_KEYS: Record<string, string> = { Offen: 'map.status.open', 'In Arbeit': 'map.status.doing', Erledigt: 'map.status.done' };
@@ -55,7 +78,7 @@
 
   // ---------------------------------------------------------------- dragging cards
 
-  let dragging = $state<{ id: string; x: number; y: number; status: string | null; before: string | null } | null>(null);
+  let dragging = $state<{ id: string; x: number; y: number; status: string | null; before: string | null; lane: string | null } | null>(null);
   let folded = $state(new Set<string>());
 
   let overThread = false;
@@ -77,7 +100,8 @@
         const r = under.getBoundingClientRect();
         before = ev.clientY < r.top + r.height / 2 ? under.dataset.kcard! : (under.nextElementSibling as HTMLElement | null)?.dataset.kcard ?? '__end';
       }
-      dragging = { id: c.id, x: ev.clientX, y: ev.clientY, status: col?.dataset.status ?? null, before };
+      const lane = el?.closest<HTMLElement>('[data-lane]')?.dataset.lane ?? null;
+      dragging = { id: c.id, x: ev.clientX, y: ev.clientY, status: col?.dataset.status ?? null, before, lane };
       overThread = !!el?.closest('[data-notes-thread]');
       document.querySelector('[data-notes-thread]')?.classList.toggle('hit', overThread);
     };
@@ -97,6 +121,8 @@
       const status = d.status === '__none' ? null : d.status;
       board.mutate((mm) => {
         mm.cards[c.id].status = status;
+        // Into another bag's lane: the card is kept in that bag from now on.
+        if (k.lanes === 'bag' && d.lane !== null) mm.cards[c.id].bag = d.lane || null;
         // New place in the board order.
         const ids = kanbanOrder(mm, Object.values(mm.cards).filter((x) => x.status)).map((x) => x.id).filter((id) => id !== c.id);
         const at = d.before && d.before !== '__end' ? ids.indexOf(d.before) : -1;
@@ -225,8 +251,19 @@
         </div>
       {/if}
     </div>
-    <label class="lanes" title={t('map.kanban.lanesHint')}>
-      <input type="checkbox" checked={!!k.lanes} onchange={(e) => setKanban((kk) => (kk.lanes = e.currentTarget.checked))} />{t('map.kanban.lanes')}
+    <label class="lanes" title={k.lanes === 'bag' ? t('map.kanban.lanesBagHint') : t('map.kanban.lanesHint')}>
+      {t('map.kanban.lanes')}
+      <select
+        value={k.lanes === 'bag' ? 'bag' : k.lanes ? 'parent' : ''}
+        onchange={(e) => {
+          const v = e.currentTarget.value;
+          setKanban((kk) => (kk.lanes = v === 'bag' ? 'bag' : v === 'parent'));
+        }}
+      >
+        <option value="">{t('map.kanban.lanesNone')}</option>
+        <option value="parent">{t('map.kanban.lanesParent')}</option>
+        <option value="bag">{t('map.kanban.lanesBag')}</option>
+      </select>
     </label>
     <div class="right">
       <button class="btn icon" class:on={app.presenting} onclick={() => app.setPresenting(!app.presenting)} title={t('map.kanban.fullscreen')}><Icon name="fit" size={14} /></button>
@@ -275,8 +312,15 @@
     </div>
 
     {#each lanes as lane (lane.key)}
-      {#if k.lanes}<div class="lane">{lane.label}</div>{/if}
-      <div class="row-cells" style:--n={statuses.length}>
+      {#if k.lanes}
+        <div class="lane" class:over={k.lanes === 'bag' && dragging?.lane === lane.key}>
+          {#if k.lanes === 'bag'}<Icon name={lane.web ? 'globe' : 'drive'} size={11} />{/if}
+          {lane.label}
+          {#if k.lanes === 'bag'}<span class="lane-sub">{lane.web ? t('map.kanban.toWeb') : t('map.kanban.notWeb')}</span>{/if}
+          {#if k.lanes === 'bag' && lane.key === '' && !inWikis.length}<span class="lane-sub">· {t('map.kanban.noWiki')}</span>{/if}
+        </div>
+      {/if}
+      <div class="row-cells" style:--n={statuses.length} data-lane={lane.key}>
         {#each statuses as s (s)}
           {@const col = colOf(s)}
           <div
@@ -313,7 +357,7 @@
                 </div>
                 {#if view === 'full' || (view === 'fold' && folded.has(c.id))}
                   {#if c.text}<div class="x">{c.text.slice(0, 220)}</div>{/if}
-                  {#if path(c) && !k.lanes}<div class="p">{path(c)}</div>{/if}
+                  {#if path(c) && k.lanes !== true}<div class="p">{path(c)}</div>{/if}
                   {#if c.refs?.length}
                     <div class="refs">
                       {#each c.refs as ref, i (ref.id ?? i)}
@@ -447,6 +491,14 @@
     font-size: 12px;
     color: var(--fg-muted);
   }
+  .lanes select {
+    height: 26px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+  }
   .right {
     margin-left: auto;
     display: flex;
@@ -548,12 +600,23 @@
     color: var(--danger);
   }
   .lane {
+    display: flex;
+    align-items: center;
+    gap: 5px;
     margin: 10px 0 4px;
     padding-bottom: 2px;
     border-bottom: 1px dashed var(--line);
     font-size: 12px;
     font-weight: 600;
     color: var(--fg-muted);
+  }
+  .lane.over {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .lane-sub {
+    font-weight: 400;
+    color: var(--fg-faint);
   }
   .cell {
     display: flex;

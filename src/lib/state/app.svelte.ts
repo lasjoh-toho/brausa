@@ -17,7 +17,7 @@ export interface Stuck {
   search: string;
   typeFilter: string | null;
 }
-import { parseCategories, searchNeedle } from '../core/pattern';
+import { parseCategories, parsePattern, searchNeedle } from '../core/pattern';
 import { archiveName, archiveRoot, inArchive, isArchive } from '../core/archive';
 import type { ProjectInfo } from '../backend/types';
 import { filterEntries, withFound, groupEntries, tagCounts, type GroupBy, type SortKey, type ViewMode } from '../core/views';
@@ -170,8 +170,22 @@ class AppState {
 
   // ---------------------------------------------------------------- searching below the folder
 
-  /** The name a search looks for in subfolders (null: no such search). */
-  findText = $derived(this.searchMode === 'filter' && !this.project ? searchNeedle(this.search) : null);
+  /** Search in the text of documents (PDFs, Office files, text) instead of in names. */
+  contentSearch = $state(false);
+  setContentSearch(on: boolean) {
+    this.contentSearch = on;
+    this.everywhere = null;
+  }
+  /** The words a document search looks for (all of them, at least 3 letters in all). */
+  contentWords = $derived.by(() => {
+    if (!this.contentSearch || this.searchMode !== 'filter' || this.project) return null;
+    const words = parsePattern(this.search).terms.flatMap((t) => (t.type === 'text' && !t.neg ? [t.text] : []));
+    return words.join('').length >= 3 ? words : null;
+  });
+  /** The name a search looks for in subfolders, or the document search's words (null: no such search). */
+  findText = $derived(
+    this.contentSearch ? (this.contentWords?.join(' ') ?? null) : this.searchMode === 'filter' && !this.project ? searchNeedle(this.search) : null
+  );
   /** Files and folders below the folder (or everywhere) whose name matches the search. */
   found = $state<Entry[]>([]);
   /** The search below stopped early: there may be more. */
@@ -196,6 +210,7 @@ class AppState {
           : [this.cwd];
     const includeHidden = this.showSystem && this.systemAllowed;
     const seq = ++this.findSeq;
+    const words = this.contentWords;
     if (!text) {
       this.found = [];
       this.foundMore = false;
@@ -206,7 +221,7 @@ class AppState {
     this.findTimer = setTimeout(async () => {
       this.finding = true;
       try {
-        const r = await this.backend.findNames(roots, text, { includeHidden, limit: 2000 });
+        const r = words ? await this.backend.findContent(roots, words, { includeHidden, limit: 500 }) : await this.backend.findNames(roots, text, { includeHidden, limit: 2000 });
         if (seq !== this.findSeq) return;
         this.found = r.entries;
         this.foundMore = r.more;
@@ -295,12 +310,13 @@ class AppState {
 
   /** Entries after all filters except the date range (the calendar shows these). */
   undated = $derived(
-    filterEntries(this.everywhere ? this.found : withFound(this.raw, this.found), {
-      search: this.searchMode === 'filter' ? this.search : '',
+    filterEntries(this.everywhere || this.contentWords ? this.found : withFound(this.raw, this.found), {
+      // Documents found by their text keep their names.
+      search: this.searchMode === 'filter' && !this.contentWords ? this.search : '',
       funnel: this.funnel,
       cats: this.typeFilter ? parseCategories(this.typeFilter) : null,
       // A search shows the folders it finds, in Stream too.
-      showDirs: (!this.recursive || !!this.findText) && !this.typeFilter && !this.project,
+      showDirs: (!this.recursive || !!this.findText) && !this.typeFilter && !this.project && !this.contentWords,
       sort: this.sort,
       desc: this.desc
     })

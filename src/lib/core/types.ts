@@ -22,6 +22,8 @@ export interface Entry {
   taken?: number | null;
   /** In recursive stream mode: directory path relative to the stream root ('' = root). */
   relDir?: string;
+  /** Found by a search in documents: text around the words, and their page (PDFs). */
+  hit?: { snippet: string; page?: number | null };
   /** Optional URL usable as <img src>; the backend decides how it is served. */
   thumb?: string | null;
 }

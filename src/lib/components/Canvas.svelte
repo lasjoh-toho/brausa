@@ -107,12 +107,14 @@
       <button class="btn" onclick={() => (app.stuck = null)}>{t('common.close')}</button>
     </div>
   {/if}
-  {#if app.findText && !app.dupes && (app.everywhere || app.finding || app.foundMore)}
+  {#if app.findText && !app.dupes && (app.everywhere || app.finding || app.foundMore || app.contentWords)}
     <p class="truncated">
       <Icon name="search" size={13} />
+      {#if app.contentWords}<b>{t('files.inDocs')}:</b>{/if}
       {app.everywhere === 'media' ? t('files.searchMedia') : app.everywhere ? t('files.searchEverywhere') : t('files.searchBelow', { folder: basename(app.cwd) || app.cwd })}
       {#if app.finding}<span class="muted">{t('files.searching')}</span>{:else if app.foundMore}<span class="muted">{t('files.searchMore')}</span>{/if}
       {#if app.everywhere}<button class="btn" onclick={() => (app.everywhere = null)}>{t('files.searchHere', { folder: basename(app.cwd) || app.cwd })}</button>{/if}
+      {#if app.contentWords}<button class="btn" onclick={() => app.setContentSearch(false)}>{t('files.searchNames')}</button>{/if}
     </p>
   {/if}
   {#if app.truncated && !app.dupes}
