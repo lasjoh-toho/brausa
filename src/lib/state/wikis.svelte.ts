@@ -185,11 +185,13 @@ class WikiState {
     try {
       const p = await app.backend.wikiWebFetch(name);
       const titles = [...p.new, ...p.changed].filter((c) => c.newer).map((c) => c.title);
-      const n = titles.length ? await app.backend.wikiWebApply(name, titles, []) : 0;
+      // The wiki's plugins and themes come along: without them its tiddlers do not show right.
+      const plugins = p.plugins.filter((x) => !x.have).map((x) => x.title);
+      const n = titles.length || plugins.length ? await app.backend.wikiWebApply(name, titles, plugins) : 0;
       const older = p.changed.length - p.changed.filter((c) => c.newer).length;
-      if (n) {
+      if (n || plugins.length) {
         await this.load();
-        app.toast(t('wikis.webAuto', { n, name }) + (older ? ' ' + t('wikis.webOlderKept', { n: older }) : ''));
+        app.toast(t('wikis.webAuto', { n, name }) + (plugins.length ? ' ' + t('wikis.webPlugins', { n: plugins.length }) : '') + (older ? ' ' + t('wikis.webOlderKept', { n: older }) : ''));
       }
     } catch (e) {
       // Offline or unreachable: the wiki opens as it is here.

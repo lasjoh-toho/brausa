@@ -9,7 +9,8 @@
   const s = wikis.webSync!;
   // Ticked: what is new on the web or newer there; local versions that are newer stay.
   let take = $state(new Set([...s.preview.new, ...s.preview.changed].filter((c) => c.newer).map((c) => c.title)));
-  let plugins = $state(new Set<string>());
+  // The wiki's plugins and themes it needs to look right: ticked unless brausa has them already.
+  let plugins = $state(new Set(s.preview.plugins.filter((p) => !p.have).map((p) => p.title)));
   let upload = $state(s.preview.hasPassword);
   let open = $state<string | null>(null);
   let texts = $state<{ webText: string; localText: string } | null>(null);
