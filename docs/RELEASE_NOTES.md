@@ -14,6 +14,10 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.18
+
+- **Web wikis look as on the web:** the wiki's plugins and themes now come along (automatically when opening, ticked in the comparison) – without them its tiddlers did not show right. Its start tiddlers (`$:/DefaultTiddlers`), theme, palette, language strings and changed core tiddlers come along too.
+
 ### New in 0.17
 
 - **Comparing with the web wiki is fast:** the comparison no longer copies the web version tiddler by tiddler into a temporary bag (with thousands of tiddlers that took minutes); texts are loaded only when a row is opened, long lists show 150 rows at first ("show more", "all/none"), the buttons stay in view.
@@ -123,6 +127,9 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.18: Web-Wikis sehen aus wie im Web**
+- Die Plugins und Themes des Wikis kommen jetzt mit (beim Öffnen automatisch, im Abgleich angehakt) – ohne sie wurden seine Tiddler nicht richtig dargestellt. Ebenso seine Start-Tiddler (`$:/DefaultTiddlers`), Theme, Palette, Sprachtexte und geänderte Core-Tiddler.
 
 **Neu in 0.17: Schneller Abgleich mit dem Web-Wiki, automatisch beim Öffnen**
 - **Der Vergleich mit dem Web-Wiki ist schnell:** Die Web-Version wird nicht mehr Tiddler für Tiddler in einen vorübergehenden Bag kopiert (bei Tausenden Tiddlern dauerte das Minuten); Texte werden erst beim Aufklappen einer Zeile geladen, lange Listen zeigen zunächst 150 Zeilen („weitere zeigen“, „alle/keine“), die Knöpfe bleiben sichtbar.

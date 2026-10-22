@@ -139,8 +139,9 @@ pub fn with_tiddlers(html: &str, tiddlers: &BTreeMap<String, Fields>) -> Option<
 
 /// Tiddlers that only describe the state of a browser session: never compared or offered.
 pub fn ephemeral(title: &str) -> bool {
-    ["$:/StoryList", "$:/HistoryList", "$:/Import", "$:/DefaultTiddlers"].contains(&title)
-        || ["$:/state/", "$:/temp/", "$:/status/", "$:/language/", "$:/core", "$:/themes/", "$:/info/"].iter().any(|p| title.starts_with(p))
+    // The wiki's start tiddlers, themes, palettes and changed core tiddlers belong to its look and come along.
+    ["$:/StoryList", "$:/HistoryList", "$:/Import", "$:/core", "$:/isEncrypted"].contains(&title)
+        || ["$:/state/", "$:/temp/", "$:/status/", "$:/info/"].iter().any(|p| title.starts_with(p))
 }
 
 /// `user:password` for HTTP basic authentication.
@@ -160,6 +161,16 @@ pub fn basic_auth(user: &str, password: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_wikis_look_comes_along_session_state_does_not() {
+        for t in ["$:/DefaultTiddlers", "$:/theme", "$:/palette", "$:/core/ui/PageTemplate", "$:/language/Buttons/Save/Caption"] {
+            assert!(!ephemeral(t), "{t}");
+        }
+        for t in ["$:/StoryList", "$:/core", "$:/state/x", "$:/temp/y", "$:/isEncrypted", "$:/info/url/full"] {
+            assert!(ephemeral(t), "{t}");
+        }
+    }
 
     fn f(pairs: &[(&str, &str)]) -> Fields {
         pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
