@@ -36,9 +36,15 @@
   function stack(r: Draft & { name: string }): string[] {
     // Same order as Store::layer_names in the core.
     const own = ownOf(r);
-    const web = `web-${r.name}`;
-    const lower = r.bags.slice(0, -1).filter((b) => b !== '@plugins' && b !== web);
-    return [...(r.plugins ? ['@plugins'] : []), ...lower, ...(r.local && !r.bags.includes('lokal') ? ['lokal'] : []), ...(r.bags.includes(web) ? [web] : []), own];
+    const fromWeb = (b: string) => b === `web-${r.name}` || b.startsWith('mws-');
+    const lower = r.bags.slice(0, -1).filter((b) => b !== '@plugins');
+    return [
+      ...(r.plugins ? ['@plugins'] : []),
+      ...lower.filter((b) => !fromWeb(b)),
+      ...(r.local && !r.bags.includes('lokal') ? ['lokal'] : []),
+      ...lower.filter(fromWeb),
+      own
+    ];
   }
 
   // ---------- matrix ----------

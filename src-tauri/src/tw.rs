@@ -23,6 +23,10 @@ pub type Fields = BTreeMap<String, String>;
 const MAP_BAG: &str = "@map:";
 /// The empty TiddlyWiki folder wikis are shown in (scripts/build-tw-empty.sh).
 const EMPTY_WIKI: &str = include_str!("../resources/tw-empty.html");
+/// Bags mirrored from a MultiWikiServer wiki: `mws-<its bag>`.
+const MWS_BAG: &str = "mws-";
+/// MultiWikiServer tells its client which bag each tiddler of the page comes from.
+const MWS_BAG_INFO: &str = "$:/state/multiwikiclient/tiddlers/bag";
 /// Where those views are kept, one folder per wiki.
 const VIEWS: &str = "views";
 /// Built-in, read-only bag with the plugins every brausa wiki needs.
@@ -779,13 +783,12 @@ impl Store {
         };
         // What came from the web version lies above `lokal`, below the wiki's own bag.
         let web = Self::web_bag(&r.name);
-        out.extend(lower.iter().filter(|b| **b != web).cloned());
+        let from_web = |b: &String| *b == web || b.starts_with(MWS_BAG);
+        out.extend(lower.iter().filter(|b| !from_web(b)).cloned());
         if r.local && !r.bags.iter().any(|b| b == LOCAL) {
             out.push(LOCAL.to_string());
         }
-        if lower.contains(&web) {
-            out.push(web);
-        }
+        out.extend(lower.iter().filter(|b| from_web(b)).cloned());
         out.extend(top.cloned());
         out
     }
@@ -957,6 +960,66 @@ impl Store {
         Ok(s)
     }
 
+    /// A web wiki's page and all its tiddlers. A MultiWikiServer page loads its plugins (and on some
+    /// setups its tiddlers) from scripts before booting: those are fetched too and added to the
+    /// page's store, so the page alone holds the whole wiki.
+    fn download_wiki(url: &str) -> io::Result<(String, BTreeMap<String, Fields>)> {
+        let html = Self::download(url)?;
+        let mut web = crate::webwiki::tiddlers(&html);
+        let mut extra: BTreeMap<String, Fields> = BTreeMap::new();
+        let base = tauri::Url::parse(url).map_err(|e| err(e.to_string()))?;
+        let mut found = crate::webwiki::preloaded(&html, crate::webwiki::PRELOAD);
+        for (src, func) in crate::webwiki::preload_scripts(&html) {
+            let Ok(u) = base.join(&src) else { continue };
+            match Self::download(u.as_str()) {
+                Ok(js) => found.extend(crate::webwiki::preloaded(&js, &func)),
+                Err(e) => return Err(err(crate::tr!(format!("Teil des Web-Wikis nicht ladbar ({u}): {e}"), format!("Part of the web wiki could not be loaded ({u}): {e}")))),
+            }
+        }
+        // The page's own store wins (it boots after the preloaded tiddlers).
+        for f in found {
+            if !web.contains_key(&f["title"]) {
+                extra.insert(f["title"].clone(), f);
+            }
+        }
+        if extra.is_empty() {
+            return Ok((html, web));
+        }
+        let list: Vec<Fields> = extra.values().cloned().collect();
+        let html = match with_store(&html, &list) {
+            Ok(h) => h,
+            // A page without a store of its own (everything preloaded): one at the end.
+            Err(_) => format!("{html}\n<script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">{}</script>", serde_json::to_string(&list)?.replace('<', "\\u003C")),
+        };
+        web.extend(extra);
+        Ok((html, web))
+    }
+
+    /// A MultiWikiServer wiki's bags, bottom first: from the server's recipe status, else in the
+    /// order the page lists its tiddlers (MWS writes the top bag's first). Empty for other wikis.
+    fn mws_bag_order(url: &str, web: &BTreeMap<String, Fields>) -> Vec<String> {
+        let Some(info) = web.get(MWS_BAG_INFO).and_then(|f| serde_json::from_str::<serde_json::Map<String, Value>>(f.get("text")?).ok()) else { return vec![] };
+        // `…/wiki/<slug>` → `…/recipe/<slug>/status` (the default routes).
+        let status = url.trim_end_matches('/').rsplit_once('/').and_then(|(head, slug)| Some(format!("{}/recipe/{slug}/status", head.rsplit_once('/')?.0)));
+        let from_status = status.and_then(|u| {
+            let v: Value = ureq::get(&u).set("Referer", url).set("X-Requested-With", "TiddlyWiki").timeout(std::time::Duration::from_secs(15)).call().ok()?.into_string().ok().and_then(|s| serde_json::from_str(&s).ok())?;
+            let mut bags: Vec<(i64, String)> = v.get("bags")?.as_array()?.iter().filter_map(|b| Some((b.get("priority")?.as_i64()?, b.get("bag_name")?.as_str()?.to_string()))).collect();
+            // Lowest priority number = top of the stack.
+            bags.sort_by(|a, b| b.0.cmp(&a.0));
+            Some(bags.into_iter().map(|(_, n)| n).collect::<Vec<_>>())
+        });
+        from_status.filter(|b| !b.is_empty()).unwrap_or_else(|| {
+            let mut seen: Vec<String> = vec![];
+            for b in info.values().filter_map(Value::as_str) {
+                if !seen.iter().any(|s| s == b) {
+                    seen.push(b.to_string());
+                }
+            }
+            seen.reverse();
+            seen
+        })
+    }
+
     /// The bag tiddlers taken over from the web version go into; it lies above `lokal`.
     pub fn web_bag(name: &str) -> String {
         format!("web-{name}")
@@ -967,14 +1030,14 @@ impl Store {
     pub fn web_fetch(&self, name: &str) -> io::Result<WebPreview> {
         let r = self.recipe(name)?;
         let link = r.web.clone().ok_or_else(|| err(crate::tr!("Für dieses Wiki ist keine Webadresse eingetragen", "No web address is set for this wiki")))?;
-        let html = Self::download(&link.url)?;
-        let web = crate::webwiki::tiddlers(&html);
+        let (html, web) = Self::download_wiki(&link.url)?;
         if web.is_empty() {
             return Err(err(crate::tr!("Unter der Adresse liegt kein TiddlyWiki", "There is no TiddlyWiki at that address")));
         }
         let cache = self.web_cache(name);
         fs::create_dir_all(cache.parent().unwrap())?;
         fs::write(&cache, &html)?;
+        fs::write(cache.with_extension("bags.json"), serde_json::to_vec(&Self::mws_bag_order(&link.url, &web))?)?;
         self.web_discard(name)?;
         let here = self.merged(&r)?;
         let bundled = self.layer(PLUGINS)?;
@@ -1025,24 +1088,47 @@ impl Store {
         let mut r = self.recipe(name)?;
         let web = crate::webwiki::tiddlers(&fs::read_to_string(self.web_cache(name)).map_err(|_| err(crate::tr!("Erst mit dem Web vergleichen", "Compare with the web first")))?);
         let own = r.bags.last().cloned().ok_or_else(|| err("Wiki ohne Bag"))?;
-        let bag = Self::web_bag(name);
         let mut n = 0;
         let chosen: Vec<&Fields> = titles.iter().filter_map(|t| web.get(t)).filter(|f| !f.contains_key("plugin-type")).collect();
-        if !chosen.is_empty() {
-            if !self.bag_dir(&bag)?.exists() {
-                self.put_bag(&BagInfo { name: bag.clone(), description: crate::tr!(format!("Aus dem Web-Wiki „{name}“ übernommen"), format!("Taken over from the web wiki “{name}”")).into(), ..Default::default() })?;
+        // A MultiWikiServer wiki: each tiddler into (a mirror of) its bag there, in the server's order.
+        let bag_of: BTreeMap<String, String> = web
+            .get(MWS_BAG_INFO)
+            .and_then(|f| serde_json::from_str::<serde_json::Map<String, Value>>(f.get("text")?).ok())
+            .map(|m| m.into_iter().filter_map(|(t, b)| Some((t, format!("{MWS_BAG}{}", b.as_str()?)))).collect())
+            .unwrap_or_default();
+        let order: Vec<String> = fs::read(self.web_cache(name).with_extension("bags.json"))
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Vec<String>>(&b).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|b| format!("{MWS_BAG}{b}"))
+            .collect();
+        let mut by_bag: BTreeMap<String, Vec<&Fields>> = BTreeMap::new();
+        for f in chosen {
+            by_bag.entry(bag_of.get(&f["title"]).cloned().unwrap_or_else(|| Self::web_bag(name))).or_default().push(f);
+        }
+        // New bags sit right below the wiki's own bag, bottom first as on the server.
+        let mut bags: Vec<&String> = by_bag.keys().collect();
+        bags.sort_by_key(|b| order.iter().position(|o| o == *b).unwrap_or(usize::MAX));
+        let older = self.bag_tiddlers(&own)?;
+        for bag in bags {
+            if !self.bag_dir(bag)?.exists() {
+                let what = match bag.strip_prefix(MWS_BAG) {
+                    Some(b) => crate::tr!(format!("Bag „{b}“ des MultiWikiServer-Wikis „{name}“"), format!("Bag “{b}” of the MultiWikiServer wiki “{name}”")),
+                    None => crate::tr!(format!("Aus dem Web-Wiki „{name}“ übernommen"), format!("Taken over from the web wiki “{name}”")),
+                };
+                self.put_bag(&BagInfo { name: bag.clone(), description: what.into(), ..Default::default() })?;
             }
-            if !r.bags.contains(&bag) {
+            if !r.bags.contains(bag) {
                 let at = r.bags.len().saturating_sub(1);
                 r.bags.insert(at, bag.clone());
                 r = self.put_recipe(r)?;
             }
             // Each bag read once: thousands of tiddlers must not mean thousands of folder scans.
-            let have = self.bag_tiddlers(&bag)?;
-            let older = self.bag_tiddlers(&own)?;
-            let dir = self.bag_dir(&bag)?.join("tiddlers");
+            let have = self.bag_tiddlers(bag)?;
+            let dir = self.bag_dir(bag)?.join("tiddlers");
             fs::create_dir_all(&dir)?;
-            for f in chosen {
+            for f in &by_bag[bag] {
                 let title = &f["title"];
                 write_tiddler(&dir, have.get(title).map(|(_, p)| p.clone()), f)?;
                 if let Some((_, p)) = older.get(title).filter(|(_, p)| !p.as_os_str().is_empty()) {
@@ -1803,6 +1889,64 @@ mod tests {
         assert!(t.contains_key("Neu"));
         assert_eq!(t["ZUI"]["text"], "Zoomable UI", "the wiki's version goes up");
         assert!(!t.contains_key("Privat"), "lokal stays on this computer");
+    }
+
+    #[test]
+    fn multiwikiserver_pages_bring_their_plugins_but_not_the_sync_client() {
+        let (_t, store, proj) = setup();
+        // Like MultiWikiServer: content in the page's store, plugins loaded as scripts before boot.
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let page = format!(
+            "<html><head><script>window.$tw = window.$tw || Object.create(null); $tw.preloadTiddlers = []; $tw.preloadTiddler = function(fields) {{ $tw.preloadTiddlers.push(fields); }};</script>\n\
+             <script src=\"/$cache/tiddlywiki/5.3.8/plugins/tiddlywiki/menubar/plugin.js?cb=%24tw.preloadTiddler\" integrity=\"sha384-x\" crossorigin=\"anonymous\"></script>\n\
+             <script src=\"/$cache/mws/client/plugin.js?cb=%24tw.preloadTiddler\" crossorigin=\"anonymous\"></script></head><body>\n\
+             <script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">[{}]</script></body></html>",
+            [
+                r#"{"title":"Startseite","text":"Hallo aus MWS"}"#,
+                r#"{"title":"$:/DefaultTiddlers","text":"Startseite"}"#,
+                r#"{"title":"$:/config/multiwikiclient/recipe","text":"meinwiki"}"#,
+                r#"{"title":"$:/state/multiwikiclient/tiddlers/bag","text":"{\"Startseite\":\"inhalt\",\"$:/DefaultTiddlers\":\"basis\"}","type":"application/json"}"#,
+            ]
+            .join(",\n")
+        );
+        let menubar = r#"$tw.preloadTiddler({"title":"$:/plugins/tiddlywiki/menubar","plugin-type":"plugin","version":"5.3.8","text":"{\"tiddlers\":{}}"});"#;
+        let client = r#"$tw.preloadTiddler({"title":"$:/plugins/mws/client","plugin-type":"plugin","version":"0.1","text":"{\"tiddlers\":{}}"});"#;
+        std::thread::spawn(move || {
+            for req in server.incoming_requests() {
+                let status = r#"{"bags":[{"bag_name":"inhalt","priority":1},{"bag_name":"basis","priority":2}]}"#;
+                let body = if req.url().contains("menubar") {
+                    menubar.to_string()
+                } else if req.url().contains("client") {
+                    client.to_string()
+                } else if req.url() == "/recipe/meinwiki/status" {
+                    status.to_string()
+                } else {
+                    page.clone()
+                };
+                let _ = req.respond(tiny_http::Response::from_string(body));
+            }
+        });
+        let mut r = recipe(&store, "M", &proj, Target { kind: "folder".into(), path: proj.join("mwiki").display().to_string() });
+        r.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/wiki/meinwiki"), user: String::new() });
+        store.put_recipe(r).unwrap();
+
+        let p = store.web_fetch("M").unwrap();
+        let new: Vec<&str> = p.new.iter().map(|c| c.title.as_str()).collect();
+        assert!(new.contains(&"Startseite") && new.contains(&"$:/DefaultTiddlers"), "{new:?}");
+        assert!(!new.iter().any(|t| t.contains("multiwikiclient")), "the client's state and config stay out: {new:?}");
+        assert_eq!(p.plugins.iter().map(|x| x.title.as_str()).collect::<Vec<_>>(), ["$:/plugins/tiddlywiki/menubar"], "the sync client stays out");
+        // Taken over: the preloaded plugin comes from the cached page too.
+        store.web_apply("M", &["Startseite".into(), "$:/DefaultTiddlers".into()], &["$:/plugins/tiddlywiki/menubar".into()]).unwrap();
+        assert!(store.bag_tiddlers(OWN_PLUGINS).unwrap().contains_key("$:/plugins/tiddlywiki/menubar"));
+        // Each tiddler into a mirror of its bag on the server, stacked as there, above lokal.
+        assert!(store.bag_tiddlers("mws-inhalt").unwrap().contains_key("Startseite"));
+        assert!(store.bag_tiddlers("mws-basis").unwrap().contains_key("$:/DefaultTiddlers"));
+        let mut r = store.recipe("M").unwrap();
+        r.local = true;
+        let r = store.put_recipe(r).unwrap();
+        let names = Store::layer_names(&r);
+        assert_eq!(&names[names.len() - 4..], [LOCAL.to_string(), "mws-basis".into(), "mws-inhalt".into(), r.bags.last().unwrap().clone()]);
     }
 
     #[test]

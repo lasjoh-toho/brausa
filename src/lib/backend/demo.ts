@@ -809,8 +809,8 @@ export class DemoBackend implements Backend {
     const r = this.recipes.find((x) => x.name === recipe);
     if (!r) throw new Error(recipe);
     const own = `wiki-${r.name}`;
-    const web = `web-${r.name}`;
-    const stack = [...(r.plugins ? ['@plugins'] : []), ...r.bags.filter((b) => b !== own && b !== web), ...(r.local ? ['lokal'] : []), ...(r.bags.includes(web) ? [web] : []), own];
+    const fromWeb = (b: string) => b === `web-${r.name}` || b.startsWith('mws-');
+    const stack = [...(r.plugins ? ['@plugins'] : []), ...r.bags.filter((b) => b !== own && !fromWeb(b)), ...(r.local ? ['lokal'] : []), ...r.bags.filter(fromWeb), own];
     const glossary = ['Zoomable User Interface', 'Snippet', 'Bag', 'Recipe', 'Tiddler', 'Karte', 'Projekt', 'Pinboard', 'Kanban', 'Markdown', 'Overlay', 'Wiki'];
     const titles = async (bag: string): Promise<string[]> => {
       if (bag === '@plugins') return (await this.wikiPlugins()).map(([n]) => `$:/plugins/brausa/${n.toLowerCase()}`);

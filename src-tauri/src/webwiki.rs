@@ -37,6 +37,73 @@ pub fn tiddlers(html: &str) -> BTreeMap<String, Fields> {
     out
 }
 
+/// Scripts a wiki page loads before TiddlyWiki boots, with the function each one calls per
+/// tiddler. MultiWikiServer delivers a wiki's plugins this way (`…/plugin.js?cb=$tw.preloadTiddler`),
+/// and on some setups the tiddlers too (`…/store.js`).
+pub fn preload_scripts(html: &str) -> Vec<(String, String)> {
+    let mut out = vec![];
+    let mut rest = html;
+    while let Some(i) = rest.find("<script") {
+        let tag = &rest[i..];
+        let Some(gt) = tag.find('>') else { break };
+        let attrs = &tag[7..gt];
+        rest = &tag[gt..];
+        let Some(src) = attributes(attrs).into_iter().find(|(k, _)| k == "src").map(|(_, v)| unescape(&v)) else { continue };
+        let path = src.split(['?', '#']).next().unwrap_or("");
+        if !(path.ends_with("/plugin.js") || path.ends_with("/store.js")) {
+            continue;
+        }
+        let func = src
+            .split_once('?')
+            .and_then(|(_, q)| q.split('&').find_map(|kv| kv.strip_prefix("cb=")))
+            .map(percent_decode)
+            .unwrap_or_else(|| PRELOAD.to_string());
+        out.push((src, func));
+    }
+    out
+}
+
+/// TiddlyWiki's hook for tiddlers that arrive before it boots.
+pub const PRELOAD: &str = "$tw.preloadTiddler";
+
+/// The tiddlers a script hands to `func({…})`, call by call.
+pub fn preloaded(js: &str, func: &str) -> Vec<Fields> {
+    let call = format!("{func}(");
+    let mut out = vec![];
+    let mut rest = js;
+    while let Some(i) = rest.find(&call) {
+        rest = &rest[i + call.len()..];
+        let body = rest.trim_start();
+        if !body.starts_with('{') {
+            continue;
+        }
+        if let Some(Ok(v)) = serde_json::Deserializer::from_str(body).into_iter::<Value>().next() {
+            if let Some(f) = fields_of(&v) {
+                out.push(f);
+            }
+        }
+    }
+    out
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(if b[i] == b'+' { b' ' } else { b[i] });
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 fn fields_of(v: &Value) -> Option<Fields> {
     let o = v.as_object()?;
     let f: Fields = o
@@ -140,8 +207,9 @@ pub fn with_tiddlers(html: &str, tiddlers: &BTreeMap<String, Fields>) -> Option<
 /// Tiddlers that only describe the state of a browser session: never compared or offered.
 pub fn ephemeral(title: &str) -> bool {
     // The wiki's start tiddlers, themes, palettes and changed core tiddlers belong to its look and come along.
-    ["$:/StoryList", "$:/HistoryList", "$:/Import", "$:/core", "$:/isEncrypted"].contains(&title)
-        || ["$:/state/", "$:/temp/", "$:/status/", "$:/info/"].iter().any(|p| title.starts_with(p))
+    // A server's sync client (MultiWikiServer, TiddlyWeb) has no server to talk to here.
+    ["$:/StoryList", "$:/HistoryList", "$:/Import", "$:/core", "$:/isEncrypted", "$:/plugins/mws/client", "$:/plugins/tiddlywiki/tiddlyweb", "$:/plugins/tiddlywiki/multiwikiclient"].contains(&title)
+        || ["$:/state/", "$:/temp/", "$:/status/", "$:/info/", "$:/config/multiwikiclient/", "$:/config/tiddlyweb/"].iter().any(|p| title.starts_with(p))
 }
 
 /// `user:password` for HTTP basic authentication.
