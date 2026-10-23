@@ -515,6 +515,60 @@ pub struct WebPreview {
     pub has_password: bool,
 }
 
+/// The link of a wiki to a MultiWikiServer wiki: where its API is, the last change seen there,
+/// and what each synced tiddler looked like then (to tell changes here from changes there).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MwsState {
+    /// `…/recipe/<slug>`.
+    pub api: String,
+    /// `…/wiki/<slug>` (sent as referer, as the wiki page itself does).
+    pub page: String,
+    pub last_seq: String,
+    /// Title → (bag here, hash at the last sync).
+    pub synced: BTreeMap<String, (String, String)>,
+    /// Changed on both sides, waiting for the server copy to be resolved.
+    #[serde(default)]
+    pub conflicts: BTreeSet<String>,
+}
+
+impl MwsState {
+    /// Remember the tiddlers as they are in their bags now.
+    fn record(&mut self, store: &Store, titles: &[(String, String)]) -> io::Result<()> {
+        let mut by_bag: BTreeMap<&String, Vec<&String>> = BTreeMap::new();
+        for (t, b) in titles {
+            by_bag.entry(b).or_default().push(t);
+        }
+        for (bag, ts) in by_bag {
+            let have = store.bag_tiddlers(bag)?;
+            for t in ts {
+                if let Some((f, _)) = have.get(t) {
+                    self.synced.insert(t.clone(), (bag.clone(), hash(f)));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MwsReport {
+    pub pulled: Vec<String>,
+    pub pushed: Vec<String>,
+    pub deleted_here: Vec<String>,
+    pub deleted_there: Vec<String>,
+    pub conflicts: Vec<String>,
+}
+
+/// `…/wiki/<slug>` → `…/recipe/<slug>` (MultiWikiServer's default routes).
+fn mws_api(page: &str) -> Option<String> {
+    let (head, slug) = page.trim_end_matches('/').rsplit_once('/')?;
+    Some(format!("{}/recipe/{slug}", head.rsplit_once('/')?.0))
+}
+
+/// The last change of the MultiWikiServer wiki the page was made at.
+const MWS_LAST_SEQ: &str = "$:/state/multiwikiclient/recipe/last_revision_id";
+
 /// Writable bag for plugins of one's own (from web wikis), right above `@plugins`.
 pub const OWN_PLUGINS: &str = "plugins";
 
@@ -1019,7 +1073,7 @@ impl Store {
     fn mws_bag_order(url: &str, web: &BTreeMap<String, Fields>, cookie: Option<&str>) -> Vec<String> {
         let Some(info) = web.get(MWS_BAG_INFO).and_then(|f| serde_json::from_str::<serde_json::Map<String, Value>>(f.get("text")?).ok()) else { return vec![] };
         // `…/wiki/<slug>` → `…/recipe/<slug>/status` (the default routes).
-        let status = url.trim_end_matches('/').rsplit_once('/').and_then(|(head, slug)| Some(format!("{}/recipe/{slug}/status", head.rsplit_once('/')?.0)));
+        let status = mws_api(url).map(|a| format!("{a}/status"));
         let from_status = status.and_then(|u| {
             let mut req = ureq::get(&u);
             if let Some(c) = cookie {
@@ -1048,18 +1102,14 @@ impl Store {
         format!("web-{name}")
     }
 
-    /// Load the web version (kept as a file until the next comparison) and list what is new or
-    /// different there. Nothing is written into bags yet.
-    pub fn web_fetch(&self, name: &str) -> io::Result<WebPreview> {
-        self.web_fetch_as(name, None)
-    }
-
     /// The address of a wiki's web version.
     pub fn web_url(&self, name: &str) -> Option<String> {
         self.recipe(name).ok()?.web.map(|w| w.url)
     }
 
-    /// As `web_fetch`, with the web panel's cookies for the wiki's address (its login session).
+    /// Load the web version (kept as a file until the next comparison) and list what is new or
+    /// different there; nothing is written into bags yet. `cookie`: the web panel's cookies for the
+    /// wiki's address (its login session).
     pub fn web_fetch_as(&self, name: &str, cookie: Option<&str>) -> io::Result<WebPreview> {
         let r = self.recipe(name)?;
         let link = r.web.clone().ok_or_else(|| err(crate::tr!("Für dieses Wiki ist keine Webadresse eingetragen", "No web address is set for this wiki")))?;
@@ -1103,6 +1153,22 @@ impl Store {
                 _ => {}
             }
         }
+        // A MultiWikiServer wiki is linked from now on: what is here already in the same version
+        // counts as synced (a wiki imported before brausa 0.21 included).
+        if web.contains_key(MWS_BAG_INFO) && self.mws_state(name).is_none() {
+            let mut st = MwsState {
+                api: mws_api(&link.url).unwrap_or_default(),
+                page: link.url.clone(),
+                last_seq: web.get(MWS_LAST_SEQ).and_then(|f| f.get("text")).cloned().unwrap_or_default(),
+                ..Default::default()
+            };
+            for (title, (f, bag)) in &here {
+                if web.get(title).map(|w| strip_wiki_fields(w) == strip_wiki_fields(f)).unwrap_or(false) {
+                    st.synced.insert(title.clone(), (bag.clone(), hash(f)));
+                }
+            }
+            self.put_mws_state(name, &st)?;
+        }
         Ok(preview)
     }
 
@@ -1144,19 +1210,9 @@ impl Store {
         let mut bags: Vec<&String> = by_bag.keys().collect();
         bags.sort_by_key(|b| order.iter().position(|o| o == *b).unwrap_or(usize::MAX));
         let older = self.bag_tiddlers(&own)?;
+        let mut synced: Vec<(String, String)> = vec![];
         for bag in bags {
-            if !self.bag_dir(bag)?.exists() {
-                let what = match bag.strip_prefix(MWS_BAG) {
-                    Some(b) => crate::tr!(format!("Bag „{b}“ des MultiWikiServer-Wikis „{name}“"), format!("Bag “{b}” of the MultiWikiServer wiki “{name}”")),
-                    None => crate::tr!(format!("Aus dem Web-Wiki „{name}“ übernommen"), format!("Taken over from the web wiki “{name}”")),
-                };
-                self.put_bag(&BagInfo { name: bag.clone(), description: what.into(), ..Default::default() })?;
-            }
-            if !r.bags.contains(bag) {
-                let at = r.bags.len().saturating_sub(1);
-                r.bags.insert(at, bag.clone());
-                r = self.put_recipe(r)?;
-            }
+            self.ensure_web_bag(&mut r, bag, name)?;
             // Each bag read once: thousands of tiddlers must not mean thousands of folder scans.
             let have = self.bag_tiddlers(bag)?;
             let dir = self.bag_dir(bag)?.join("tiddlers");
@@ -1168,7 +1224,20 @@ impl Store {
                     fs::remove_file(p)?;
                 }
                 n += 1;
+                synced.push((title.clone(), bag.clone()));
             }
+        }
+        // A MultiWikiServer wiki stays linked: later syncs go through its API (see mws_sync).
+        if !bag_of.is_empty() {
+            let link = r.web.clone().ok_or_else(|| err("Wiki ohne Webadresse"))?;
+            let mut st = self.mws_state(name).unwrap_or_else(|| MwsState {
+                api: mws_api(&link.url).unwrap_or_default(),
+                page: link.url.clone(),
+                last_seq: web.get(MWS_LAST_SEQ).and_then(|f| f.get("text")).cloned().unwrap_or_default(),
+                ..Default::default()
+            });
+            st.record(self, &synced)?;
+            self.put_mws_state(name, &st)?;
         }
         if !plugins.is_empty() {
             if !self.bag_dir(OWN_PLUGINS)?.exists() {
@@ -1185,6 +1254,188 @@ impl Store {
             }
         }
         Ok(n)
+    }
+
+    /// A bag for tiddlers from the web version (a MultiWikiServer bag's mirror, or `web-<wiki>`),
+    /// made if missing and put right below the wiki's own bag.
+    fn ensure_web_bag(&self, r: &mut Recipe, bag: &str, name: &str) -> io::Result<()> {
+        if !self.bag_dir(bag)?.exists() {
+            let what = match bag.strip_prefix(MWS_BAG) {
+                Some(b) => crate::tr!(format!("Bag „{b}“ des MultiWikiServer-Wikis „{name}“"), format!("Bag “{b}” of the MultiWikiServer wiki “{name}”")),
+                None => crate::tr!(format!("Aus dem Web-Wiki „{name}“ übernommen"), format!("Taken over from the web wiki “{name}”")),
+            };
+            self.put_bag(&BagInfo { name: bag.to_string(), description: what.into(), ..Default::default() })?;
+        }
+        if !r.bags.iter().any(|b| b == bag) {
+            let at = r.bags.len().saturating_sub(1);
+            r.bags.insert(at, bag.to_string());
+            *r = self.put_recipe(r.clone())?;
+        }
+        Ok(())
+    }
+
+    // ------------------------------------------------------------ MultiWikiServer: sync both ways
+
+    fn mws_state_file(&self, name: &str) -> PathBuf {
+        self.web_cache(name).with_extension("mws.json")
+    }
+
+    fn mws_state(&self, name: &str) -> Option<MwsState> {
+        fs::read(self.mws_state_file(name)).ok().and_then(|b| serde_json::from_slice(&b).ok())
+    }
+
+    fn put_mws_state(&self, name: &str, st: &MwsState) -> io::Result<()> {
+        fs::create_dir_all(self.dir.join("web"))?;
+        fs::write(self.mws_state_file(name), serde_json::to_vec(st)?)
+    }
+
+    /// Is the wiki linked to a MultiWikiServer wiki (after its first import)?
+    pub fn mws_linked(&self, name: &str) -> bool {
+        self.mws_state(name).is_some()
+    }
+
+    /// Sync with the MultiWikiServer wiki: what changed there since the last time comes into its
+    /// mirror bags (deleted there: deleted here, unless changed here); what changed here in the
+    /// mirror bags or the wiki's own bag goes there (the server picks the bag), and moves into the
+    /// mirror of that bag. Changed on both sides: the local version stays, the server's is kept
+    /// beside it as "<title> (Server …)" and the title waits until that copy is gone.
+    pub fn mws_sync(&self, name: &str, cookie: Option<&str>) -> io::Result<MwsReport> {
+        let mut r = self.recipe(name)?;
+        let mut st = self.mws_state(name).ok_or_else(|| err(crate::tr!("Das Wiki ist mit keinem MultiWikiServer verbunden", "The wiki is not linked to a MultiWikiServer")))?;
+        let own = r.bags.last().cloned().ok_or_else(|| err("Wiki ohne Bag"))?;
+        let mut rep = MwsReport::default();
+        let (api, page) = (st.api.clone(), st.page.clone());
+        let call = |method: &str, path: &str, body: Option<Value>| -> io::Result<Value> {
+            let mut req = ureq::request(method, &format!("{api}{path}")).timeout(std::time::Duration::from_secs(60)).set("Referer", &page).set("X-Requested-With", "fetch");
+            if let Some(c) = cookie {
+                req = req.set("Cookie", c);
+            }
+            let res = match body {
+                Some(b) => req.set("Content-Type", "application/json").send_string(&b.to_string()),
+                None => req.call(),
+            };
+            let res = res.map_err(|e| match e {
+                ureq::Error::Status(401 | 403, _) => err(crate::tr!(
+                    "Der MultiWikiServer verlangt eine Anmeldung: im Web-Fenster von brausa dort anmelden, dann erneut abgleichen",
+                    "The MultiWikiServer needs a login: log in there in brausa's web panel, then sync again"
+                )),
+                e => err(crate::tr!(format!("MultiWikiServer nicht erreichbar: {e}"), format!("MultiWikiServer not reachable: {e}"))),
+            })?;
+            serde_json::from_str(&res.into_string()?).map_err(|e| err(e.to_string()))
+        };
+        let stamp = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
+
+        // 1. From the server.
+        let up = call("GET", &format!("/updates?since={}", st.last_seq), None)?;
+        let list = |k: &str| -> Vec<String> { up.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default() };
+        let (modified, deleted) = (list("modifications"), list("deletions"));
+        let here = self.merged(&r)?;
+        let changed_here = |title: &str, st: &MwsState| match (here.get(title), st.synced.get(title)) {
+            (Some((f, _)), Some((_, h))) => hash(f) != *h,
+            (Some(_), None) => true,
+            _ => false,
+        };
+        let mut pulled: Vec<(String, String)> = vec![];
+        if !modified.is_empty() {
+            let read = call("PUT", "/batch/read", Some(serde_json::json!({ "titles": modified })))?;
+            // One list per bag on the server.
+            let items: Vec<&Value> = read.as_array().into_iter().flatten().flat_map(|v| v.as_array().map(|a| a.iter().collect::<Vec<_>>()).unwrap_or_else(|| vec![v])).collect();
+            for it in items {
+                let Some(mut f) = it.get("fields").and_then(crate::webwiki::fields) else { continue };
+                // Fields the server keeps for itself.
+                f.remove("bag");
+                f.remove("revision");
+                let title = f["title"].clone();
+                let Some(from) = it.pointer("/info/readFrom").and_then(Value::as_str) else { continue };
+                let bag = mws_bag(from);
+                if here.get(&title).map(|(l, _)| strip_wiki_fields(l) == strip_wiki_fields(&f)).unwrap_or(false) {
+                    pulled.push((title, here[&f["title"]].1.clone()));
+                    continue;
+                }
+                if changed_here(&title, &st) && here.contains_key(&title) {
+                    let mut c = f.clone();
+                    c.insert("title".into(), format!("{title} (Server {stamp})"));
+                    self.put_tiddler(&own, &c)?;
+                    st.conflicts.insert(title.clone());
+                    rep.conflicts.push(title);
+                    continue;
+                }
+                self.ensure_web_bag(&mut r, &bag, name)?;
+                self.put_tiddler(&bag, &f)?;
+                // An older copy in another bag of the wiki would cover it.
+                if let Some((_, b)) = here.get(&title).filter(|(_, b)| *b != bag && (*b == own || b.starts_with(MWS_BAG))) {
+                    self.delete_tiddler(b, &title)?;
+                }
+                pulled.push((title.clone(), bag));
+                rep.pulled.push(title);
+            }
+        }
+        for title in &deleted {
+            if let Some((_, b)) = here.get(title) {
+                if !changed_here(title, &st) && (b.starts_with(MWS_BAG) || *b == own) {
+                    self.delete_tiddler(b, title)?;
+                    rep.deleted_here.push(title.clone());
+                }
+            }
+            st.synced.remove(title);
+        }
+        st.record(self, &pulled)?;
+        if let Some(seq) = up.get("lastSeq").and_then(Value::as_str) {
+            st.last_seq = seq.to_string();
+        }
+
+        // 2. To the server.
+        let now = self.merged(&r)?;
+        // A conflict waits until its server copy is gone (resolved by hand).
+        st.conflicts.retain(|t| now.keys().any(|k| k.starts_with(&format!("{t} (Server "))));
+        let goes_up = |title: &str, f: &Fields, bag: &str| {
+            (bag == own || bag.starts_with(MWS_BAG))
+                && !ignored(f)
+                && !crate::webwiki::ephemeral(title)
+                && !title.starts_with("$:/brausa/")
+                && !f.contains_key(GENERATED)
+                && !f.contains_key("draft.of")
+                && !parse_list(f.get("tags").map(String::as_str).unwrap_or("")).iter().any(|t| LOCAL_TAGS.contains(&t.to_lowercase().as_str()))
+                && !title.contains(" (Server ")
+                && !title.contains(" (Konflikt ")
+        };
+        let mut send: Vec<Fields> = vec![];
+        for (title, (f, bag)) in &now {
+            if goes_up(title, f, bag) && !st.conflicts.contains(title) && st.synced.get(title).map(|(_, h)| *h != hash(f)).unwrap_or(true) {
+                let mut f = f.clone();
+                f.remove(SAVE_TO);
+                send.push(f);
+            }
+        }
+        let gone: Vec<String> = st.synced.keys().filter(|t| !now.contains_key(*t) && !st.conflicts.contains(*t)).cloned().collect();
+        let mut moved: Vec<(String, String)> = vec![];
+        for chunk in send.chunks(200) {
+            let saved = call("PUT", "/batch/save", Some(serde_json::json!({ "tiddlers": chunk })))?;
+            for (f, res) in chunk.iter().zip(saved.as_array().into_iter().flatten()) {
+                let title = &f["title"];
+                let Some(to) = res.pointer("/info/writeTo").and_then(Value::as_str) else { continue };
+                let bag = mws_bag(to);
+                // Lands in the mirror of the bag the server chose.
+                let from = &now[title].1;
+                if *from != bag {
+                    self.ensure_web_bag(&mut r, &bag, name)?;
+                    self.put_tiddler(&bag, f)?;
+                    self.delete_tiddler(from, title)?;
+                }
+                moved.push((title.clone(), bag));
+                rep.pushed.push(title.clone());
+            }
+        }
+        if !gone.is_empty() {
+            call("PUT", "/batch/delete", Some(serde_json::json!({ "titles": gone })))?;
+            for t in gone {
+                st.synced.remove(&t);
+                rep.deleted_there.push(t);
+            }
+        }
+        st.record(self, &moved)?;
+        self.put_mws_state(name, &st)?;
+        Ok(rep)
     }
 
     /// A snippet, note or card dropped onto a wiki: a tiddler in the wiki's own bag, under a free title.
@@ -1883,7 +2134,7 @@ mod tests {
         r.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/wiki.html"), user: "ich".into() });
         store.put_recipe(r.clone()).unwrap();
 
-        let p = store.web_fetch("W").unwrap();
+        let p = store.web_fetch_as("W", None).unwrap();
         assert_eq!(p.new.iter().map(|c| c.title.as_str()).collect::<Vec<_>>(), ["Neu"]);
         assert_eq!(p.changed.iter().map(|c| c.title.as_str()).collect::<Vec<_>>(), ["ZUI"]);
         assert_eq!(p.plugins.len(), 1);
@@ -1964,7 +2215,7 @@ mod tests {
         r.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/wiki/meinwiki"), user: String::new() });
         store.put_recipe(r).unwrap();
 
-        let p = store.web_fetch("M").unwrap();
+        let p = store.web_fetch_as("M", None).unwrap();
         let new: Vec<&str> = p.new.iter().map(|c| c.title.as_str()).collect();
         assert!(new.contains(&"Startseite") && new.contains(&"$:/DefaultTiddlers"), "{new:?}");
         assert!(!new.iter().any(|t| t.contains("multiwikiclient")), "the client's state and config stay out: {new:?}");
@@ -1983,6 +2234,164 @@ mod tests {
         let r = store.put_recipe(r).unwrap();
         let names = Store::layer_names(&r);
         assert_eq!(&names[names.len() - 4..], [LOCAL.to_string(), "mws-basis".into(), "mws-inhalt".into(), r.bags.last().unwrap().clone()]);
+    }
+
+    /// A tiny MultiWikiServer: bag "basis" (read only) below "inhalt" (all writes), an event log.
+    #[derive(Default)]
+    struct FakeMws {
+        seq: u64,
+        events: Vec<(u64, String, bool)>,
+        tiddlers: BTreeMap<String, (String, Value)>,
+    }
+
+    impl FakeMws {
+        fn save(&mut self, bag: &str, f: Value) {
+            self.seq += 1;
+            let t = f["title"].as_str().unwrap().to_string();
+            self.events.push((self.seq, t.clone(), true));
+            self.tiddlers.insert(t, (bag.into(), f));
+        }
+        fn delete(&mut self, t: &str) {
+            self.seq += 1;
+            self.events.push((self.seq, t.into(), false));
+            self.tiddlers.remove(t);
+        }
+    }
+
+    fn fake_mws() -> (u16, std::sync::Arc<std::sync::Mutex<FakeMws>>) {
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let state = std::sync::Arc::new(std::sync::Mutex::new(FakeMws::default()));
+        let st = state.clone();
+        std::thread::spawn(move || {
+            for mut req in server.incoming_requests() {
+                let mut body = String::new();
+                let _ = req.as_reader().read_to_string(&mut body);
+                let input: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+                let url = req.url().to_string();
+                let mut s = st.lock().unwrap();
+                let out = if url == "/wiki/w" {
+                    let mut list: Vec<Value> = s.tiddlers.values().map(|(_, f)| f.clone()).collect();
+                    let bags: serde_json::Map<String, Value> = s.tiddlers.iter().map(|(t, (b, _))| (t.clone(), json!(b))).collect();
+                    list.push(json!({"title": MWS_BAG_INFO, "type": "application/json", "text": Value::Object(bags).to_string()}));
+                    list.push(json!({"title": MWS_LAST_SEQ, "text": s.seq.to_string()}));
+                    format!("<html><script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">{}</script></html>", serde_json::to_string(&list).unwrap().replace('<', "\\u003C"))
+                } else if url == "/recipe/w/status" {
+                    json!({"bags": [{"bag_name": "inhalt", "priority": 1}, {"bag_name": "basis", "priority": 2}]}).to_string()
+                } else if let Some(since) = url.strip_prefix("/recipe/w/updates?since=") {
+                    assert!(req.headers().iter().any(|h| h.field.equiv("Referer")), "referer like the wiki page");
+                    let since: u64 = since.parse().unwrap_or(0);
+                    let mut last: BTreeMap<String, bool> = BTreeMap::new();
+                    for (q, t, save) in &s.events {
+                        if *q > since {
+                            last.insert(t.clone(), *save);
+                        }
+                    }
+                    json!({"modifications": last.iter().filter(|(_, v)| **v).map(|(k, _)| k).collect::<Vec<_>>(),
+                           "deletions": last.iter().filter(|(_, v)| !**v).map(|(k, _)| k).collect::<Vec<_>>(),
+                           "lastSeq": s.seq.to_string()}).to_string()
+                } else if url == "/recipe/w/batch/read" {
+                    let items: Vec<Value> = input["titles"].as_array().unwrap().iter().filter_map(|t| s.tiddlers.get(t.as_str()?)).map(|(b, f)| {
+                        let mut f = f.clone();
+                        f["revision"] = json!("7");
+                        json!({"fields": f, "info": {"readFrom": b}})
+                    }).collect();
+                    json!([items]).to_string()
+                } else if url == "/recipe/w/batch/save" {
+                    assert!(req.headers().iter().any(|h| h.field.equiv("X-Requested-With")), "CSRF header");
+                    let mut res = vec![];
+                    for f in input["tiddlers"].as_array().unwrap() {
+                        s.save("inhalt", f.clone());
+                        res.push(json!({"title": f["title"], "info": {"writeTo": "inhalt"}, "revision": "9"}));
+                    }
+                    Value::Array(res).to_string()
+                } else if url == "/recipe/w/batch/delete" {
+                    for t in input["titles"].as_array().unwrap() {
+                        s.delete(t.as_str().unwrap());
+                    }
+                    "[]".into()
+                } else {
+                    "?".into()
+                };
+                drop(s);
+                let _ = req.respond(tiny_http::Response::from_string(out));
+            }
+        });
+        (port, state)
+    }
+
+    #[test]
+    fn syncs_with_a_multiwikiserver_both_ways() {
+        let (_t, store, proj) = setup();
+        let (port, mws) = fake_mws();
+        {
+            let mut m = mws.lock().unwrap();
+            m.save("basis", json!({"title": "$:/DefaultTiddlers", "text": "Startseite"}));
+            m.save("inhalt", json!({"title": "Startseite", "text": "Hallo"}));
+            m.save("inhalt", json!({"title": "Notiz", "text": "alt"}));
+            m.save("inhalt", json!({"title": "Alt", "text": "kommt weg"}));
+        }
+        let mut r = recipe(&store, "M", &proj, Target { kind: "folder".into(), path: proj.join("mwiki").display().to_string() });
+        r.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/wiki/w"), user: String::new() });
+        store.put_recipe(r).unwrap();
+        // The first import links the wiki.
+        let p = store.web_fetch_as("M", None).unwrap();
+        let titles: Vec<String> = p.new.iter().map(|c| c.title.clone()).collect();
+        store.web_apply("M", &titles, &[]).unwrap();
+        assert!(store.mws_linked("M"));
+        let own = store.recipe("M").unwrap().bags.last().unwrap().clone();
+        // Nothing changed anywhere: nothing goes either way.
+        let rep = store.mws_sync("M", None).unwrap();
+        assert!(rep.pulled.is_empty() && rep.pushed.is_empty(), "{rep:?}");
+
+        // Another computer: changed, new, deleted on the server.
+        {
+            let mut m = mws.lock().unwrap();
+            m.save("inhalt", json!({"title": "Startseite", "text": "Hallo von unterwegs"}));
+            m.save("inhalt", json!({"title": "Unterwegs", "text": "neu"}));
+            m.delete("Alt");
+        }
+        // Here: a new tiddler in the wiki's own bag, a changed one in the mirror bag, a private one.
+        store.put_tiddler(&own, &f(&[("title", "Von brausa"), ("text", "hier geschrieben")])).unwrap();
+        store.put_tiddler("mws-inhalt", &f(&[("title", "Notiz"), ("text", "neu hier")])).unwrap();
+        store.put_tiddler(&own, &f(&[("title", "Geheim"), ("text", "x"), ("tags", "privat")])).unwrap();
+        let rep = store.mws_sync("M", None).unwrap();
+        assert_eq!(rep.pulled, ["Startseite", "Unterwegs"]);
+        assert_eq!(rep.deleted_here, ["Alt"]);
+        assert_eq!(rep.pushed, ["Notiz", "Von brausa"]);
+        let inhalt = store.bag_tiddlers("mws-inhalt").unwrap();
+        assert_eq!(inhalt["Startseite"].0["text"], "Hallo von unterwegs");
+        assert!(inhalt.contains_key("Unterwegs") && !inhalt.contains_key("Alt"));
+        // What went up lies in the mirror of the bag the server chose.
+        assert!(inhalt.contains_key("Von brausa") && !store.bag_tiddlers(&own).unwrap().contains_key("Von brausa"));
+        {
+            let m = mws.lock().unwrap();
+            assert_eq!(m.tiddlers["Notiz"].1["text"], "neu hier");
+            assert!(m.tiddlers.contains_key("Von brausa") && !m.tiddlers.contains_key("Geheim"), "private stays here");
+        }
+        // Our own saves come back as server changes: nothing to do.
+        let rep = store.mws_sync("M", None).unwrap();
+        assert!(rep.pulled.is_empty() && rep.pushed.is_empty(), "{rep:?}");
+
+        // Changed on both sides: the local version stays, the server's is kept beside it, nothing goes up.
+        mws.lock().unwrap().save("inhalt", json!({"title": "Notiz", "text": "dort geändert"}));
+        store.put_tiddler("mws-inhalt", &f(&[("title", "Notiz"), ("text", "hier geändert")])).unwrap();
+        let rep = store.mws_sync("M", None).unwrap();
+        assert_eq!(rep.conflicts, ["Notiz"]);
+        assert!(rep.pushed.is_empty());
+        assert_eq!(store.bag_tiddlers("mws-inhalt").unwrap()["Notiz"].0["text"], "hier geändert");
+        let copy = store.bag_tiddlers(&own).unwrap().into_keys().find(|t| t.starts_with("Notiz (Server ")).unwrap();
+        assert_eq!(mws.lock().unwrap().tiddlers["Notiz"].1["text"], "dort geändert");
+        // Resolved by deleting the server copy: the local version goes up.
+        store.delete_tiddler(&own, &copy).unwrap();
+        let rep = store.mws_sync("M", None).unwrap();
+        assert_eq!(rep.pushed, ["Notiz"]);
+        assert_eq!(mws.lock().unwrap().tiddlers["Notiz"].1["text"], "hier geändert");
+        // Deleted here: deleted there.
+        store.delete_tiddler("mws-inhalt", "Unterwegs").unwrap();
+        let rep = store.mws_sync("M", None).unwrap();
+        assert_eq!(rep.deleted_there, ["Unterwegs"]);
+        assert!(!mws.lock().unwrap().tiddlers.contains_key("Unterwegs"));
     }
 
     #[test]

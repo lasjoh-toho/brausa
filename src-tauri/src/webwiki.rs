@@ -104,6 +104,11 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// A tiddler from JSON (values that are not strings become their JSON text).
+pub fn fields(v: &Value) -> Option<Fields> {
+    fields_of(v)
+}
+
 fn fields_of(v: &Value) -> Option<Fields> {
     let o = v.as_object()?;
     let f: Fields = o

@@ -14,6 +14,13 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.21
+
+- **MultiWikiServer both ways:** a wiki imported from a MultiWikiServer stays linked. Opening it, the globe at the wiki, and every save in the wiki fetch what changed on the server since the last time (also deletions) and send what changed in brausa – changes made in the browser on another computer come in, changes made in brausa go up. The server decides the bag; the tiddler lands in its mirror bag here.
+- **Conflicts:** changed on both sides, the version here stays and the server's lies beside it as "<title> (Server …)"; until that copy is deleted, nothing of this tiddler goes up.
+- Never sent: "lokal", notes tagged lokal/privat, maps, drafts, state tiddlers.
+- Tested end to end against MultiWikiServer 0.2.11 with a second browser as the "other computer".
+
 ### New in 0.20
 
 - **MultiWikiServer wikis are complete:** MWS bag names with "/" (like `editions/mws-docs`) made the import stop, so the normal tiddlers were missing. They now go into `mws-editions_mws-docs` and so on.
@@ -139,6 +146,12 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.21: Abgleich mit dem MultiWikiServer in beide Richtungen**
+- **Beide Richtungen:** Ein vom MultiWikiServer importiertes Wiki bleibt verbunden. Öffnen, die Weltkugel am Wiki und jedes Speichern im Wiki holen, was sich auf dem Server seit dem letzten Mal geändert hat (auch Löschungen), und senden, was sich in brausa geändert hat – Änderungen im Browser an einem anderen Computer kommen an, Änderungen in brausa gehen hoch. Den Bag bestimmt der Server; der Tiddler landet hier in dessen Spiegel-Bag.
+- **Konflikte:** Auf beiden Seiten geändert, bleibt die Fassung hier, die des Servers liegt daneben als „<Titel> (Server …)“; solange diese Kopie da ist, geht von dem Tiddler nichts hoch.
+- Nie gesendet: „lokal“, Notizen mit Tag lokal/privat, Maps, Entwürfe, Zustands-Tiddler.
+- Durchgehend gegen MultiWikiServer 0.2.11 geprüft, mit einem zweiten Browser als „anderem Computer“.
 
 **Neu in 0.20: MultiWikiServer-Wikis vollständig, Anmeldung über das Web-Fenster**
 - **MWS-Wikis sind vollständig:** Bagnamen des MWS mit „/“ (wie `editions/mws-docs`) ließen den Import abbrechen – deshalb fehlten die normalen Tiddler. Sie kommen jetzt nach `mws-editions_mws-docs` usw.

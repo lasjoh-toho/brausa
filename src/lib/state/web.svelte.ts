@@ -68,7 +68,14 @@ class WebState {
     else if (e.kind === 'download') void this.downloaded(e.path, e.success);
     else if (e.kind === 'saved') {
       if (e.error) app.toast(t('web.wikiSaveFailed', { error: e.error }), true);
-      else app.toast(e.wiki ? t('web.wikiSavedFolder', { name: e.wiki }) : t('web.wikiSaved', { name: basename(e.path) }));
+      else {
+        app.toast(e.wiki ? t('web.wikiSavedFolder', { name: e.wiki }) : t('web.wikiSaved', { name: basename(e.path) }));
+        // A wiki linked to a MultiWikiServer passes the change on (wikis imports this module: loaded late).
+        void import('./wikis.svelte').then(({ wikis }) => {
+          const name = e.wiki ?? wikis.recipes.find((r) => r.target.kind === 'file' && r.target.path === e.path)?.name;
+          if (name) wikis.afterSave(name);
+        });
+      }
     }
   }
 

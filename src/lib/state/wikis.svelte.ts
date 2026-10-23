@@ -78,7 +78,11 @@ class WikiState {
   /** Sync a wiki, then open it (TiddlyDesktop or the browser shows the story there). */
   /** Brings the wiki up to date (with its web version, if it has one) and shows it in the web panel (it saves back from there). */
   async openStory(name: string) {
-    if (this.recipes.find((x) => x.name === name)?.web) await this.webTakeNewer(name);
+    if (this.recipes.find((x) => x.name === name)?.web) {
+      // A MultiWikiServer wiki syncs both ways; any other web wiki brings what is new there.
+      if (await app.backend.wikiMwsLinked(name).catch(() => false)) await this.mwsSync(name, true);
+      else await this.webTakeNewer(name);
+    }
     await this.sync(name);
     try {
       await web.openLocal(await app.backend.wikiView(name));
@@ -176,6 +180,49 @@ class WikiState {
     } finally {
       this.webBusy = null;
     }
+  }
+
+  /** Sync with the MultiWikiServer wiki, both ways. `quiet`: only say something when something happened. */
+  async mwsSync(name: string, quiet = false) {
+    if (this.webBusy) return;
+    this.webBusy = name;
+    try {
+      const r = await app.backend.wikiMwsSync(name);
+      const parts: string[] = [];
+      if (r.pulled.length) parts.push(t('wikis.mwsPulled', { n: r.pulled.length }));
+      if (r.pushed.length) parts.push(t('wikis.mwsPushed', { n: r.pushed.length }));
+      if (r.deletedHere.length + r.deletedThere.length) parts.push(t('wikis.mwsDeleted', { n: r.deletedHere.length + r.deletedThere.length }));
+      if (parts.length || !quiet) app.toast(t('wikis.mwsSynced', { name, parts: parts.join(' · ') || t('wikis.mwsNothing') }));
+      if (r.conflicts.length) app.toast(t('wikis.mwsConflicts', { list: r.conflicts.join(', ') }), true);
+      if (parts.length) await this.load();
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    } finally {
+      this.webBusy = null;
+    }
+  }
+
+  /** The wiki saved itself in the web panel: into the bags, and on to its MultiWikiServer (gathered for a moment, a wiki saves often). */
+  private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  afterSave(name: string) {
+    clearTimeout(this.saveTimers.get(name));
+    this.saveTimers.set(
+      name,
+      setTimeout(async () => {
+        this.saveTimers.delete(name);
+        if (!(await app.backend.wikiMwsLinked(name).catch(() => false))) return;
+        await this.sync(name);
+        await this.mwsSync(name, true);
+      }, 3000)
+    );
+  }
+
+  /** The globe at a wiki: a MultiWikiServer wiki syncs both ways, any other compares with its web version. */
+  async webButton(name: string) {
+    if (await app.backend.wikiMwsLinked(name).catch(() => false)) {
+      await this.sync(name);
+      await this.mwsSync(name);
+    } else await this.webCompare(name);
   }
 
   /** Without asking: what is new on the web or newer there comes over (into the web bag). */

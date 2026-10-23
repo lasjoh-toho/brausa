@@ -549,6 +549,34 @@ async fn web_serve(web: State<'_, web::Web>, root: String, scripts: bool) -> Cmd
     web.serve(Path::new(&root), scripts)
 }
 
+/// The web panel's cookies for a wiki's web address: a login there (MultiWikiServer) reads and writes it.
+fn web_cookie(a: &AppHandle, name: &str) -> CmdResult<Option<String>> {
+    let url = a.state::<Wikis>().0.lock().map_err(err)?.web_url(name);
+    Ok(url
+        .and_then(|u| tauri::Url::parse(&u).ok())
+        .and_then(|u| a.get_webview(web::LABEL)?.cookies_for_url(u).ok())
+        .map(|cs| cs.iter().map(|c| format!("{}={}", c.name(), c.value())).collect::<Vec<_>>().join("; "))
+        .filter(|c| !c.is_empty()))
+}
+
+/// Is the wiki linked to a MultiWikiServer wiki (synced both ways through its API)?
+#[tauri::command]
+async fn tw_mws_linked(w: State<'_, Wikis>, name: String) -> CmdResult<bool> {
+    Ok(w.0.lock().map_err(err)?.mws_linked(&name))
+}
+
+/// Sync a wiki with its MultiWikiServer wiki, both ways.
+#[tauri::command]
+async fn tw_mws_sync(app: AppHandle, name: String) -> CmdResult<tw::MwsReport> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let cookie = web_cookie(&a, &name)?;
+        a.state::<Wikis>().0.lock().map_err(err)?.mws_sync(&name, cookie.as_deref()).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
 #[derive(Clone, Serialize)]
 struct WikiSaved {
     path: String,
@@ -603,13 +631,7 @@ async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
 async fn tw_web_fetch(app: AppHandle, name: String) -> CmdResult<tw::WebPreview> {
     let a = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Logged in to the wiki's server in the web panel (MultiWikiServer): that session reads it.
-        let url = a.state::<Wikis>().0.lock().map_err(err)?.web_url(&name);
-        let cookie = url
-            .and_then(|u| tauri::Url::parse(&u).ok())
-            .and_then(|u| a.get_webview(web::LABEL)?.cookies_for_url(u).ok())
-            .map(|cs| cs.iter().map(|c| format!("{}={}", c.name(), c.value())).collect::<Vec<_>>().join("; "))
-            .filter(|c| !c.is_empty());
+        let cookie = web_cookie(&a, &name)?;
         a.state::<Wikis>().0.lock().map_err(err)?.web_fetch_as(&name, cookie.as_deref()).map_err(err)
     })
     .await
@@ -1077,6 +1099,8 @@ pub fn run() {
             tw_web_apply,
             tw_web_discard,
             tw_web_texts,
+            tw_mws_linked,
+            tw_mws_sync,
             tw_web_upload,
             tw_web_password,
             tw_web_has_password,
