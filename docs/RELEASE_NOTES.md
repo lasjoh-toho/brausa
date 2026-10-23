@@ -14,6 +14,12 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.20
+
+- **MultiWikiServer wikis are complete:** MWS bag names with "/" (like `editions/mws-docs`) made the import stop, so the normal tiddlers were missing. They now go into `mws-editions_mws-docs` and so on.
+- **Login:** an MWS wiki can only be read when logged in. Log in once in brausa's web panel on the server; comparing and opening the wiki then use that session. Without a login brausa says so instead of failing silently.
+- Tested against a real MultiWikiServer (0.2.11): the wiki in brausa shows the same tiddlers, start page and title as on the server.
+
 ### New in 0.19
 
 - **Wikis from a MultiWikiServer show right:** MWS delivers a wiki's plugins as separate scripts (`plugin.js`), not in the page's store; brausa now loads them too, so an imported MWS wiki no longer opens as a standard wiki. MWS's sync client (and tiddlyweb) stays out – it has no server here.
@@ -133,6 +139,11 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.20: MultiWikiServer-Wikis vollständig, Anmeldung über das Web-Fenster**
+- **MWS-Wikis sind vollständig:** Bagnamen des MWS mit „/“ (wie `editions/mws-docs`) ließen den Import abbrechen – deshalb fehlten die normalen Tiddler. Sie kommen jetzt nach `mws-editions_mws-docs` usw.
+- **Anmeldung:** Ein MWS-Wiki ist nur angemeldet lesbar. Einmal im Web-Fenster von brausa beim Server anmelden – Abgleich und Öffnen des Wikis nutzen dann diese Sitzung. Ohne Anmeldung sagt brausa das, statt still zu scheitern.
+- Gegen einen echten MultiWikiServer (0.2.11) geprüft: Das Wiki zeigt in brausa dieselben Tiddler, dieselbe Startseite und denselben Titel wie auf dem Server.
 
 **Neu in 0.19: Wikis vom MultiWikiServer, Bags wie auf dem Server**
 - **MWS-Wikis werden richtig dargestellt:** Der MultiWikiServer liefert die Plugins eines Wikis als eigene Skripte (`plugin.js`), nicht im Speicher der Seite; brausa lädt sie jetzt mit, ein importiertes MWS-Wiki öffnet also nicht mehr als Standard-Wiki. Der Sync-Client des MWS (und tiddlyweb) bleibt draußen – hier gibt es keinen Server für ihn.

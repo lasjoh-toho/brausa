@@ -39,9 +39,15 @@ Auslieferung der Wiki-Seite neu bauen. MWS hat das alles; brausa wird zum Client
 - **Sync-Client** `$:/plugins/mws/client` (mit tiddlyweb). Lokal hat er keinen Server und bleibt
   deshalb beim Import draußen.
 
-Daraus folgt für den Import in brausa (umgesetzt in 0.19):
+**Anmeldung:** Ein MWS-Wiki ist nur für angemeldete Benutzer lesbar. Ohne Anmeldung kommt 403.
+Die Anmeldung läuft über OPAQUE, das Passwort geht nie im Klartext zum Server. brausa meldet
+sich deshalb nicht selbst an. Man meldet sich einmal im Web-Fenster von brausa beim Server an,
+und der Abgleich nutzt die Sitzung (das Cookie) des Web-Fensters (ab 0.20).
 
-- Jeder Tiddler kommt in einen gespiegelten Bag `mws-<Bagname>`.
+Daraus folgt für den Import in brausa (umgesetzt in 0.19/0.20):
+
+- Jeder Tiddler kommt in einen gespiegelten Bag `mws-<Bagname>`. Ein `/` im MWS-Namen wird
+  zu `_`, z. B. `editions/mws-docs` → `mws-editions_mws-docs`.
 - Die Reihenfolge stammt aus `GET /recipe/<slug>/status` (Feld `priority`).
 - Die Spiegel-Bags liegen über „lokal“ und unter dem eigenen Bag des Wikis.
 
@@ -114,7 +120,7 @@ Kompression **in den Aufbau dieses Caches**:
 
 | Phase | Inhalt | Stand |
 |---|---|---|
-| 1 | MWS-Wiki in brausa importieren: externe Plugins, Bags gespiegelt, Sync-Client draußen | 0.19 |
+| 1 | MWS-Wiki in brausa importieren: externe Plugins, Bags gespiegelt, Sync-Client draußen, Anmeldung über das Web-Fenster | 0.19/0.20, gegen MWS 0.2.11 getestet |
 | 2 | Abgleich über `updates` + `batch/read/save/delete` mit Revisionen und Konfliktdialog | offen |
 | 3 | Admin-Route im Fork + Abschnitt „Server“ in brausa: Bags, Wiki-Aufbau, Plugins | offen |
 | 4 | Uglify-Hook im Plugin-Cache des Forks, Docker-Compose mit Caddy | offen |

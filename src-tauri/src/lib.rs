@@ -602,7 +602,18 @@ async fn tw_overlays(w: State<'_, Wikis>) -> CmdResult<Vec<tw::Overlay>> {
 #[tauri::command]
 async fn tw_web_fetch(app: AppHandle, name: String) -> CmdResult<tw::WebPreview> {
     let a = app.clone();
-    tauri::async_runtime::spawn_blocking(move || a.state::<Wikis>().0.lock().map_err(err)?.web_fetch(&name).map_err(err)).await.map_err(err)?
+    tauri::async_runtime::spawn_blocking(move || {
+        // Logged in to the wiki's server in the web panel (MultiWikiServer): that session reads it.
+        let url = a.state::<Wikis>().0.lock().map_err(err)?.web_url(&name);
+        let cookie = url
+            .and_then(|u| tauri::Url::parse(&u).ok())
+            .and_then(|u| a.get_webview(web::LABEL)?.cookies_for_url(u).ok())
+            .map(|cs| cs.iter().map(|c| format!("{}={}", c.name(), c.value())).collect::<Vec<_>>().join("; "))
+            .filter(|c| !c.is_empty());
+        a.state::<Wikis>().0.lock().map_err(err)?.web_fetch_as(&name, cookie.as_deref()).map_err(err)
+    })
+    .await
+    .map_err(err)?
 }
 
 /// Take chosen tiddlers and plugins from the web version; the temporary bag goes.
