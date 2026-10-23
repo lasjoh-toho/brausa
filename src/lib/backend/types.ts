@@ -117,6 +117,16 @@ export interface WebChange {
   newer: boolean;
 }
 
+/** What a sync with a MultiWikiServer wiki did. */
+export interface MwsReport {
+  pulled: string[];
+  pushed: string[];
+  deletedHere: string[];
+  deletedThere: string[];
+  /** Changed on both sides: the server's version lies beside the local one as "<title> (Server …)". */
+  conflicts: string[];
+}
+
 /** What the web version of a wiki brings. */
 export interface WebPreview {
   new: WebChange[];
@@ -318,6 +328,10 @@ export interface Backend {
   /** Take chosen tiddlers (into the wiki's own bag) and plugins (into bag „plugins“); the temporary bag goes. */
   wikiWebApply(name: string, titles: string[], plugins: string[]): Promise<number>;
   wikiWebDiscard(name: string): Promise<void>;
+  /** Is the wiki linked to a MultiWikiServer wiki (after its first import)? */
+  wikiMwsLinked(name: string): Promise<boolean>;
+  /** Sync with the MultiWikiServer wiki, both ways (needs a login in the web panel). */
+  wikiMwsSync(name: string): Promise<MwsReport>;
   /** The start of a tiddler's text on the web and here (for the comparison). */
   wikiWebTexts(name: string, title: string): Promise<{ webText: string; localText: string }>;
   /** Upload the wiki as a new version of its web file. */

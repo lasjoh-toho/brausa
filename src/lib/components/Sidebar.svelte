@@ -337,7 +337,7 @@
         <Icon name="open" size={11} />
       </button>
       {#if w.web?.url}
-        <button class="sync" class:spin={wikis.webBusy === w.name} title={t('sidebar.webSync')} onclick={(e) => (e.stopPropagation(), wikis.webCompare(w.name))}><Icon name="globe" size={12} /></button>
+        <button class="sync" class:spin={wikis.webBusy === w.name} title={t('sidebar.webSync')} onclick={(e) => (e.stopPropagation(), wikis.webButton(w.name))}><Icon name="globe" size={12} /></button>
       {/if}
       <button
         class="sync"

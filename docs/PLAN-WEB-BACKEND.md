@@ -121,6 +121,6 @@ Kompression **in den Aufbau dieses Caches**:
 | Phase | Inhalt | Stand |
 |---|---|---|
 | 1 | MWS-Wiki in brausa importieren: externe Plugins, Bags gespiegelt, Sync-Client draußen, Anmeldung über das Web-Fenster | 0.19/0.20, gegen MWS 0.2.11 getestet |
-| 2 | Abgleich über `updates` + `batch/read/save/delete` mit Revisionen und Konfliktdialog | offen |
+| 2 | Abgleich in beide Richtungen über `updates` + `batch/read/save/delete`; Konflikte als „(Server …)“-Kopie | 0.21, gegen MWS 0.2.11 getestet |
 | 3 | Admin-Route im Fork + Abschnitt „Server“ in brausa: Bags, Wiki-Aufbau, Plugins | offen |
 | 4 | Uglify-Hook im Plugin-Cache des Forks, Docker-Compose mit Caddy | offen |

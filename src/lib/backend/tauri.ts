@@ -20,6 +20,7 @@ import type {
   OverlayResolution,
   WikiBag,
   WebPreview,
+  MwsReport,
   WikiHit,
   WikiLayer,
   WikiOverlay,
@@ -391,6 +392,14 @@ export class TauriBackend implements Backend {
 
   wikiWebApply(name: string, titles: string[], plugins: string[]) {
     return invoke<number>('tw_web_apply', { name, titles, plugins });
+  }
+
+  wikiMwsLinked(name: string) {
+    return invoke<boolean>('tw_mws_linked', { name });
+  }
+
+  wikiMwsSync(name: string) {
+    return invoke<MwsReport>('tw_mws_sync', { name });
   }
 
   wikiWebTexts(name: string, title: string) {
