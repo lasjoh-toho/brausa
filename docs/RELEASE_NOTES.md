@@ -14,6 +14,12 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.19
+
+- **Wikis from a MultiWikiServer show right:** MWS delivers a wiki's plugins as separate scripts (`plugin.js`), not in the page's store; brausa now loads them too, so an imported MWS wiki no longer opens as a standard wiki. MWS's sync client (and tiddlyweb) stays out – it has no server here.
+- **Bags as on the server:** each tiddler of an MWS wiki goes into a mirror of its bag there (`mws-<bag>`), stacked in the server's order, above "lokal".
+- Plan for a Node.js backend on the internet, controlled from brausa and delivering compressed ("uglified") wikis: `docs/PLAN-WEB-BACKEND.md`.
+
 ### New in 0.18
 
 - **Web wikis look as on the web:** the wiki's plugins and themes now come along (automatically when opening, ticked in the comparison) – without them its tiddlers did not show right. Its start tiddlers (`$:/DefaultTiddlers`), theme, palette, language strings and changed core tiddlers come along too.
@@ -127,6 +133,11 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.19: Wikis vom MultiWikiServer, Bags wie auf dem Server**
+- **MWS-Wikis werden richtig dargestellt:** Der MultiWikiServer liefert die Plugins eines Wikis als eigene Skripte (`plugin.js`), nicht im Speicher der Seite; brausa lädt sie jetzt mit, ein importiertes MWS-Wiki öffnet also nicht mehr als Standard-Wiki. Der Sync-Client des MWS (und tiddlyweb) bleibt draußen – hier gibt es keinen Server für ihn.
+- **Bags wie auf dem Server:** Jeder Tiddler eines MWS-Wikis kommt in einen Spiegel seines Bags dort (`mws-<Bag>`), in der Reihenfolge des Servers, über „lokal“.
+- Plan für ein Node.js-Backend im Internet, von brausa gesteuert, mit komprimierter („uglified“) Auslieferung: `docs/PLAN-WEB-BACKEND.md`.
 
 **Neu in 0.18: Web-Wikis sehen aus wie im Web**
 - Die Plugins und Themes des Wikis kommen jetzt mit (beim Öffnen automatisch, im Abgleich angehakt) – ohne sie wurden seine Tiddler nicht richtig dargestellt. Ebenso seine Start-Tiddler (`$:/DefaultTiddlers`), Theme, Palette, Sprachtexte und geänderte Core-Tiddler.
