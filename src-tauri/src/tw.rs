@@ -25,6 +25,13 @@ const MAP_BAG: &str = "@map:";
 const EMPTY_WIKI: &str = include_str!("../resources/tw-empty.html");
 /// Bags mirrored from a MultiWikiServer wiki: `mws-<its bag>`.
 const MWS_BAG: &str = "mws-";
+/// The brausa bag mirroring a MultiWikiServer bag (MWS names may hold `/`, e.g. `editions/docs`).
+fn mws_bag(name: &str) -> String {
+    let safe: String = name.chars().map(|c| if "/\\:|\0".contains(c) { '_' } else { c }).collect();
+    let s = format!("{MWS_BAG}{}", safe.trim_start_matches(['.', '@']));
+    s.chars().take(80).collect()
+}
+
 /// MultiWikiServer tells its client which bag each tiddler of the page comes from.
 const MWS_BAG_INFO: &str = "$:/state/multiwikiclient/tiddlers/bag";
 /// Where those views are kept, one folder per wiki.
@@ -951,10 +958,22 @@ impl Store {
     }
 
     fn download(url: &str) -> io::Result<String> {
-        let resp = ureq::get(url)
-            .timeout(std::time::Duration::from_secs(60))
-            .call()
-            .map_err(|e| err(crate::tr!(format!("Web-Wiki nicht erreichbar: {e}"), format!("Web wiki not reachable: {e}"))))?;
+        Self::download_as(url, None)
+    }
+
+    /// `cookie`: the session of the web panel (a MultiWikiServer wiki needs one to be read).
+    fn download_as(url: &str, cookie: Option<&str>) -> io::Result<String> {
+        let mut req = ureq::get(url).timeout(std::time::Duration::from_secs(60));
+        if let Some(c) = cookie {
+            req = req.set("Cookie", c);
+        }
+        let resp = req.call().map_err(|e| match e {
+            ureq::Error::Status(401 | 403, _) => err(crate::tr!(
+                "Das Web-Wiki verlangt eine Anmeldung: im Web-Fenster von brausa dort anmelden, dann erneut abgleichen",
+                "The web wiki needs a login: log in there in brausa's web panel, then compare again"
+            )),
+            e => err(crate::tr!(format!("Web-Wiki nicht erreichbar: {e}"), format!("Web wiki not reachable: {e}"))),
+        })?;
         let mut s = String::new();
         resp.into_reader().take(200 << 20).read_to_string(&mut s)?;
         Ok(s)
@@ -963,15 +982,15 @@ impl Store {
     /// A web wiki's page and all its tiddlers. A MultiWikiServer page loads its plugins (and on some
     /// setups its tiddlers) from scripts before booting: those are fetched too and added to the
     /// page's store, so the page alone holds the whole wiki.
-    fn download_wiki(url: &str) -> io::Result<(String, BTreeMap<String, Fields>)> {
-        let html = Self::download(url)?;
+    fn download_wiki(url: &str, cookie: Option<&str>) -> io::Result<(String, BTreeMap<String, Fields>)> {
+        let html = Self::download_as(url, cookie)?;
         let mut web = crate::webwiki::tiddlers(&html);
         let mut extra: BTreeMap<String, Fields> = BTreeMap::new();
         let base = tauri::Url::parse(url).map_err(|e| err(e.to_string()))?;
         let mut found = crate::webwiki::preloaded(&html, crate::webwiki::PRELOAD);
         for (src, func) in crate::webwiki::preload_scripts(&html) {
             let Ok(u) = base.join(&src) else { continue };
-            match Self::download(u.as_str()) {
+            match Self::download_as(u.as_str(), cookie) {
                 Ok(js) => found.extend(crate::webwiki::preloaded(&js, &func)),
                 Err(e) => return Err(err(crate::tr!(format!("Teil des Web-Wikis nicht ladbar ({u}): {e}"), format!("Part of the web wiki could not be loaded ({u}): {e}")))),
             }
@@ -997,12 +1016,16 @@ impl Store {
 
     /// A MultiWikiServer wiki's bags, bottom first: from the server's recipe status, else in the
     /// order the page lists its tiddlers (MWS writes the top bag's first). Empty for other wikis.
-    fn mws_bag_order(url: &str, web: &BTreeMap<String, Fields>) -> Vec<String> {
+    fn mws_bag_order(url: &str, web: &BTreeMap<String, Fields>, cookie: Option<&str>) -> Vec<String> {
         let Some(info) = web.get(MWS_BAG_INFO).and_then(|f| serde_json::from_str::<serde_json::Map<String, Value>>(f.get("text")?).ok()) else { return vec![] };
         // `…/wiki/<slug>` → `…/recipe/<slug>/status` (the default routes).
         let status = url.trim_end_matches('/').rsplit_once('/').and_then(|(head, slug)| Some(format!("{}/recipe/{slug}/status", head.rsplit_once('/')?.0)));
         let from_status = status.and_then(|u| {
-            let v: Value = ureq::get(&u).set("Referer", url).set("X-Requested-With", "TiddlyWiki").timeout(std::time::Duration::from_secs(15)).call().ok()?.into_string().ok().and_then(|s| serde_json::from_str(&s).ok())?;
+            let mut req = ureq::get(&u);
+            if let Some(c) = cookie {
+                req = req.set("Cookie", c);
+            }
+            let v: Value = req.set("Referer", url).set("X-Requested-With", "TiddlyWiki").timeout(std::time::Duration::from_secs(15)).call().ok()?.into_string().ok().and_then(|s| serde_json::from_str(&s).ok())?;
             let mut bags: Vec<(i64, String)> = v.get("bags")?.as_array()?.iter().filter_map(|b| Some((b.get("priority")?.as_i64()?, b.get("bag_name")?.as_str()?.to_string()))).collect();
             // Lowest priority number = top of the stack.
             bags.sort_by(|a, b| b.0.cmp(&a.0));
@@ -1028,16 +1051,26 @@ impl Store {
     /// Load the web version (kept as a file until the next comparison) and list what is new or
     /// different there. Nothing is written into bags yet.
     pub fn web_fetch(&self, name: &str) -> io::Result<WebPreview> {
+        self.web_fetch_as(name, None)
+    }
+
+    /// The address of a wiki's web version.
+    pub fn web_url(&self, name: &str) -> Option<String> {
+        self.recipe(name).ok()?.web.map(|w| w.url)
+    }
+
+    /// As `web_fetch`, with the web panel's cookies for the wiki's address (its login session).
+    pub fn web_fetch_as(&self, name: &str, cookie: Option<&str>) -> io::Result<WebPreview> {
         let r = self.recipe(name)?;
         let link = r.web.clone().ok_or_else(|| err(crate::tr!("Für dieses Wiki ist keine Webadresse eingetragen", "No web address is set for this wiki")))?;
-        let (html, web) = Self::download_wiki(&link.url)?;
+        let (html, web) = Self::download_wiki(&link.url, cookie)?;
         if web.is_empty() {
             return Err(err(crate::tr!("Unter der Adresse liegt kein TiddlyWiki", "There is no TiddlyWiki at that address")));
         }
         let cache = self.web_cache(name);
         fs::create_dir_all(cache.parent().unwrap())?;
         fs::write(&cache, &html)?;
-        fs::write(cache.with_extension("bags.json"), serde_json::to_vec(&Self::mws_bag_order(&link.url, &web))?)?;
+        fs::write(cache.with_extension("bags.json"), serde_json::to_vec(&Self::mws_bag_order(&link.url, &web, cookie))?)?;
         self.web_discard(name)?;
         let here = self.merged(&r)?;
         let bundled = self.layer(PLUGINS)?;
@@ -1094,14 +1127,14 @@ impl Store {
         let bag_of: BTreeMap<String, String> = web
             .get(MWS_BAG_INFO)
             .and_then(|f| serde_json::from_str::<serde_json::Map<String, Value>>(f.get("text")?).ok())
-            .map(|m| m.into_iter().filter_map(|(t, b)| Some((t, format!("{MWS_BAG}{}", b.as_str()?)))).collect())
+            .map(|m| m.into_iter().filter_map(|(t, b)| Some((t, mws_bag(b.as_str()?)))).collect())
             .unwrap_or_default();
         let order: Vec<String> = fs::read(self.web_cache(name).with_extension("bags.json"))
             .ok()
             .and_then(|b| serde_json::from_slice::<Vec<String>>(&b).ok())
             .unwrap_or_default()
             .into_iter()
-            .map(|b| format!("{MWS_BAG}{b}"))
+            .map(|b| mws_bag(&b))
             .collect();
         let mut by_bag: BTreeMap<String, Vec<&Fields>> = BTreeMap::new();
         for f in chosen {
@@ -1941,6 +1974,9 @@ mod tests {
         assert!(store.bag_tiddlers(OWN_PLUGINS).unwrap().contains_key("$:/plugins/tiddlywiki/menubar"));
         // Each tiddler into a mirror of its bag on the server, stacked as there, above lokal.
         assert!(store.bag_tiddlers("mws-inhalt").unwrap().contains_key("Startseite"));
+        // MWS bag names may hold "/": the mirror gets a name brausa accepts.
+        assert_eq!(mws_bag("editions/mws-docs"), "mws-editions_mws-docs");
+        assert!(valid_bag(&mws_bag("a/b\\c:d|e")));
         assert!(store.bag_tiddlers("mws-basis").unwrap().contains_key("$:/DefaultTiddlers"));
         let mut r = store.recipe("M").unwrap();
         r.local = true;
