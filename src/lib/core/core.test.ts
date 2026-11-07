@@ -488,3 +488,16 @@ describe('searching below the folder', () => {
     expect(filterEntries(merged, { search: 'urlaub', showDirs: true }).map((x) => x.name)).toEqual(['Urlaub', 'Urlaub 2024']);
   });
 });
+
+import { suggest } from './apps';
+
+describe('open with', () => {
+  const a = (name: string, kinds: string[] = [], exts: string[] = [], categories: string[] = []) => ({ name, path: '/A/' + name, kinds, exts, categories });
+  const list = [a('Vorschau', ['image', 'pdf']), a('Pages', [], ['docx'], ['office']), a('Word', [], [], ['office']), a('VLC', ['video']), a('Fotos', ['image'])];
+  it('suggests programs that open the extension or the kind, recent ones first', () => {
+    expect(suggest(list, { ext: 'jpg' }).map((x) => x.name)).toEqual(['Fotos', 'Vorschau']);
+    expect(suggest(list, { ext: 'jpg' }, ['/A/Vorschau']).map((x) => x.name)).toEqual(['Vorschau', 'Fotos']);
+    expect(suggest(list, { ext: 'docx' }).map((x) => x.name)).toEqual(['Pages', 'Word']);
+    expect(suggest(list, { ext: 'xyz' })).toEqual([]);
+  });
+});

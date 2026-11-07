@@ -12,7 +12,11 @@
   import Icon from './Icon.svelte';
   import FindBar from './FindBar.svelte';
   import { filterPages, shortUrl } from '../core/web';
-  import { board } from '../state/board.svelte';
+  import { board, READABLE, VIEWABLE } from '../state/board.svelte';
+  import FileViewer from './FileViewer.svelte';
+  import FileActions from './FileActions.svelte';
+  import { category } from '../core/format';
+  import type { Entry } from '../core/types';
   // pdf.js is large: load the reader only when a document is opened.
   const loadReader = () => import('./Reader.svelte');
   import { t, loc } from '../i18n/index.svelte';
@@ -101,6 +105,34 @@
     filterPages([...lib.bookmarks].reverse().concat(lib.history.filter((h) => !lib.bookmarks.some((b) => b.url === h.url))), address === web.url ? '' : address).slice(0, 12)
   );
   const docName = $derived(board.reader?.ref.name ?? '');
+
+  // ---------------------------------------------------------------- the file shown
+
+  const docPath = $derived(board.reader?.ref.kind === 'file' ? (board.reader.ref.path ?? null) : null);
+  const docCat = $derived(category((board.reader?.ref.ext ?? '').toLowerCase()));
+  /** Pictures, videos and sound show in brausa's viewer; documents in the reader. */
+  const isMedia = $derived(docCat === 'image' || docCat === 'video' || docCat === 'audio');
+  let docEntry = $state<Entry | null>(null);
+  $effect(() => {
+    const p = docPath;
+    docEntry = p ? (app.visible.find((e) => e.path === p) ?? null) : null;
+    if (p && !docEntry)
+      app.backend
+        .entries([p])
+        .then(([e]) => p === docPath && (docEntry = e ?? null))
+        .catch(() => {});
+  });
+
+  // List and file side by side: a click on another file in the list shows that one here.
+  let lastCurrent: string | null = app.current?.path ?? null;
+  $effect(() => {
+    const cur = app.current;
+    const path = cur?.path ?? null;
+    if (path === lastCurrent) return;
+    lastCurrent = path;
+    if (!cur || cur.kind !== 'file' || app.view === 'board' || web.mode !== 'doc' || !docPath || cur.path === docPath) return;
+    if (READABLE.has(cur.ext) || VIEWABLE.has(category(cur.ext) ?? '')) board.openReader({ kind: 'file', path: cur.path, name: cur.name, ext: cur.ext });
+  });
 
   const when = (ms: number) => new Date(ms).toLocaleString(loc(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -218,7 +250,14 @@
         {/each}
       </div>
     {:else if web.mode === 'doc' && board.reader}
-      {#await loadReader() then R}<R.default docked />{/await}
+      <div class="docwrap" class:with-actions={!!docEntry}>
+        {#if isMedia}
+          <FileViewer entry={docEntry} />
+        {:else}
+          {#await loadReader() then R}<R.default docked />{/await}
+        {/if}
+        {#if docEntry}<FileActions entry={docEntry} />{/if}
+      </div>
     {:else if web.suggest && suggestions.length}
       <ul class="suggest">
         {#each suggestions as p (p.url)}
@@ -372,6 +411,16 @@
   }
   .btn.warn {
     color: #a15c00;
+  }
+  .docwrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .docwrap > :global(*:first-child) {
+    flex: 1;
+    min-height: 0;
   }
   .view {
     position: relative;

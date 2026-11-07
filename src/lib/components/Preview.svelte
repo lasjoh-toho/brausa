@@ -44,19 +44,40 @@
   });
   let box = $state<Box | null>(null);
   let animate = $state(false);
+  /** While zooming or panning by hand the frame follows without easing. */
+  let direct = $state(false);
   let closing = false;
   let natural = { w: 4, h: 3 };
 
-  const files = $derived(app.visible.filter((x) => x.kind === 'file'));
+  /** Height of the menu band: the picture first fits below it. */
+  function barHeight(): number {
+    if (app.presenting) return 0;
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--toolbar-h')) || 52;
+  }
+  let bar = $state(52);
+
+  // Scrolling and swiping go through the selection (several files chosen) or else all files shown.
+  const files = $derived.by(() => {
+    const sel = app.selectedEntries.filter((x) => x.kind === 'file');
+    return sel.length > 1 && sel.some((x) => x.path === e.path) ? sel : app.visible.filter((x) => x.kind === 'file');
+  });
 
   function fitted(): Box {
+    bar = barHeight();
     const W = window.innerWidth;
-    const H = window.innerHeight;
+    const H = window.innerHeight - bar;
     const s = Math.min(W / natural.w, H / natural.h);
     const width = natural.w * s;
     const height = natural.h * s;
-    return { left: (W - width) / 2, top: (H - height) / 2, width, height };
+    return { left: (W - width) / 2, top: bar + (H - height) / 2, width, height };
   }
+
+  /** Zoomed in so far that the picture reaches under the menu band: the whole top row turns to glass. */
+  const under = $derived(!!box && family(e.ext) === 'image' && box.top < bar - 0.5);
+  $effect(() => {
+    app.previewUnderBar = under;
+  });
+  $effect(() => () => (app.previewUnderBar = false));
 
   function fromRect(r: DOMRect | null): Box {
     if (!r) {
@@ -69,6 +90,7 @@
   function loaded(ev: Event) {
     const img = ev.currentTarget as HTMLImageElement;
     natural = { w: img.naturalWidth || 4, h: img.naturalHeight || 3 };
+    direct = false;
     if (!animate) {
       box = fromRect(p.from);
       requestAnimationFrame(() =>
@@ -78,8 +100,11 @@
         })
       );
     } else box = fitted();
-    onaccent(averageColor(img));
+    const c = averageColor(img);
+    tint = c?.color ?? null;
+    onaccent(c);
   }
+  let tint = $state<string | null>(null);
 
   function averageColor(img: HTMLImageElement): { color: string; light: boolean } | null {
     try {
@@ -109,6 +134,7 @@
   function close() {
     if (closing) return;
     closing = true;
+    direct = false;
     const tile = document.querySelector<HTMLElement>(`.tile[data-path="${CSS.escape(e.path)}"] .thumb`);
     if (tile && box) box = fromRect(tile.getBoundingClientRect());
     onaccent(null);
@@ -118,16 +144,133 @@
   function step(d: number) {
     const i = files.findIndex((x) => x.path === e.path);
     const next = files[(i + d + files.length) % files.length];
-    if (next) {
-      app.select(next.path, 'replace');
+    if (next && next !== e) {
+      // Within a selection the selection stays; otherwise the file shown becomes the selection.
+      if (!(app.selection.size > 1 && app.selection.has(next.path))) app.select(next.path, 'replace');
+      else app.cursor = next.path;
       app.preview = { entry: next, from: null };
     }
   }
 
+  // ---------------------------------------------------------------- zoom and pan
+
+  const MAX_ZOOM = 12;
+
+  /** Scale the picture by `f` around the screen point (x, y); never smaller than fitting. */
+  function zoomBy(f: number, x: number, y: number) {
+    if (!box || family(e.ext) !== 'image') return;
+    const fit = fitted();
+    const w = Math.min(Math.max(box.width * f, fit.width), fit.width * MAX_ZOOM);
+    if (w <= fit.width + 0.5) {
+      box = fit;
+      return;
+    }
+    const k = w / box.width;
+    box = { left: x - (x - box.left) * k, top: y - (y - box.top) * k, width: w, height: box.height * k };
+  }
+
+  function panBy(dx: number, dy: number) {
+    if (!box || !zoomed()) return;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    // Keep some of the picture on screen.
+    const left = Math.min(Math.max(box.left + dx, W * 0.5 - box.width), W * 0.5);
+    const top = Math.min(Math.max(box.top + dy, H * 0.5 - box.height), H * 0.5);
+    box = { ...box, left, top };
+  }
+
+  const zoomed = () => !!box && box.width > fitted().width + 0.5;
+
+  // Wheel: a pinch on the trackpad (ctrl + wheel) zooms; scrolling and swiping step through the files.
+  let wheelSum = 0;
+  let wheelLock = 0;
+  function wheel(ev: WheelEvent) {
+    if ((ev.target as HTMLElement).closest('.sheet')) return;
+    ev.preventDefault();
+    if (ev.ctrlKey) {
+      direct = true;
+      zoomBy(Math.exp(-ev.deltaY * 0.01), ev.clientX, ev.clientY);
+      return;
+    }
+    const now = performance.now();
+    if (now < wheelLock) return;
+    wheelSum += Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+    if (Math.abs(wheelSum) >= 60) {
+      step(wheelSum > 0 ? 1 : -1);
+      wheelSum = 0;
+      wheelLock = now + 280;
+    }
+  }
+
+  // Pointers: two fingers pinch (and move); a mouse drag to the right zooms in, to the left out
+  // (up and down move a zoomed picture); one finger swipes to the next file or moves a zoomed one.
+  const pts = new Map<number, { x: number; y: number }>();
+  let start: { x: number; y: number; t: number; type: string } | null = null;
+  let last: { x: number; y: number } | null = null;
+  let pinch: { d: number; x: number; y: number } | null = null;
+
+  const ignore = (ev: PointerEvent) => !!(ev.target as HTMLElement).closest('.sheet, .info, .nav, .close, .doc .open');
+
+  function down(ev: PointerEvent) {
+    if (ignore(ev) || ev.button > 0) return;
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
+    if (pts.size === 1) {
+      start = { x: ev.clientX, y: ev.clientY, t: performance.now(), type: ev.pointerType };
+      last = { x: ev.clientX, y: ev.clientY };
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      start = null;
+    }
+  }
+
+  function move(ev: PointerEvent) {
+    if (!pts.has(ev.pointerId)) return;
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pinch && pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const x = (a.x + b.x) / 2;
+      const y = (a.y + b.y) / 2;
+      direct = true;
+      if (pinch.d > 0) zoomBy(d / pinch.d, x, y);
+      panBy(x - pinch.x, y - pinch.y);
+      pinch = { d, x, y };
+      return;
+    }
+    if (!start || !last) return;
+    const dx = ev.clientX - last.x;
+    const dy = ev.clientY - last.y;
+    last = { x: ev.clientX, y: ev.clientY };
+    if (start.type === 'mouse') {
+      direct = true;
+      if (dx) zoomBy(Math.exp(dx * 0.004), start.x, start.y);
+      if (dy) panBy(0, dy);
+    } else if (zoomed()) {
+      direct = true;
+      panBy(dx, dy);
+    }
+  }
+
+  function up(ev: PointerEvent) {
+    if (!pts.delete(ev.pointerId)) return;
+    if (pts.size < 2) pinch = null;
+    if (start && start.type !== 'mouse' && !zoomed()) {
+      const dx = ev.clientX - start.x;
+      const dy = ev.clientY - start.y;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && performance.now() - start.t < 800) step(dx < 0 ? 1 : -1);
+    }
+    if (!pts.size) start = last = null;
+  }
+
   function key(ev: KeyboardEvent) {
     if (ev.key === 'Escape' || ev.key === ' ') close();
-    else if (ev.key === 'ArrowRight') step(1);
-    else if (ev.key === 'ArrowLeft') step(-1);
+    else if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') step(1);
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') step(-1);
+    else if (ev.key === '+' || ev.key === '=') ((direct = false), zoomBy(1.4, innerWidth / 2, innerHeight / 2));
+    else if (ev.key === '-') ((direct = false), zoomBy(1 / 1.4, innerWidth / 2, innerHeight / 2));
+    else if (ev.key === '0') ((direct = false), (box = fitted()));
     else return;
     ev.preventDefault();
     ev.stopPropagation();
@@ -135,7 +278,7 @@
 
   onMount(() => {
     window.addEventListener('keydown', key, true);
-    const onResize = () => (box = fitted());
+    const onResize = () => ((direct = true), (box = fitted()));
     window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('keydown', key, true);
@@ -144,12 +287,28 @@
   });
 </script>
 
-<div class="preview" transition:fade={{ duration: 200 }} role="dialog" aria-label={e.name}>
-  <button class="scrim" onclick={close} aria-label={t('common.close')}></button>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div
+  class="preview"
+  transition:fade={{ duration: 200 }}
+  role="dialog"
+  tabindex="-1"
+  aria-label={e.name}
+  onwheel={wheel}
+  onpointerdown={down}
+  onpointermove={move}
+  onpointerup={up}
+  onpointercancel={up}
+  ondblclick={(ev) => family(e.ext) === 'image' && !ignore(ev as unknown as PointerEvent) && close()}
+>
+  <div class="scrim"></div>
+  <!-- The whole top row turns to tinted glass once the picture reaches under it. -->
+  <div class="band" class:on={under} style:height="{bar}px" style:--tint={tint}></div>
   {#if src && family(e.ext) === 'image'}
     <div
       class="frame"
       class:animate
+      class:direct
       style:left="{box?.left ?? 0}px"
       style:top="{box?.top ?? 0}px"
       style:width="{box?.width ?? 0}px"
@@ -196,6 +355,7 @@
       </div>
     {/if}
   </div>
+  <button class="close" style:top="{bar + 12}px" onclick={close} title={t('viewer.close')} aria-label={t('viewer.close')}><Icon name="x" size={18} /></button>
   <button class="nav l" onclick={() => step(-1)} aria-label={t('preview.previous')}><Icon name="back" size={20} /></button>
   <button class="nav r" onclick={() => step(1)} aria-label={t('preview.next')}><Icon name="forward" size={20} /></button>
 </div>
@@ -206,17 +366,57 @@
     inset: 0;
     z-index: 25;
   }
+  .preview {
+    touch-action: none;
+  }
   .scrim {
     position: absolute;
     inset: 0;
     background: #0b0b0a;
-    cursor: zoom-out;
+    cursor: ew-resize;
+  }
+  .band {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: transparent;
+    transition:
+      background 0.25s,
+      backdrop-filter 0.25s;
+  }
+  .band.on {
+    background: color-mix(in srgb, var(--tint, #000) 35%, transparent);
+    backdrop-filter: blur(24px) saturate(1.4);
+    -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  }
+  .close {
+    position: absolute;
+    right: 16px;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .close:hover {
+    background: rgba(255, 255, 255, 0.26);
   }
   .frame {
     position: absolute;
     overflow: hidden;
     border-radius: 10px;
     pointer-events: none;
+  }
+  .frame.animate.direct {
+    transition: none;
   }
   .frame.animate {
     border-radius: 0;

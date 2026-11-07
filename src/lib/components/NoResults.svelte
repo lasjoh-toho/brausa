@@ -14,6 +14,7 @@
     if (f.kind === 'type')
       return t('noresults.type', { type: f.label === 'medien' ? t('toolbar.media') : (CATEGORIES.find((c) => c.key === f.label)?.label ?? f.label) });
     if (f.kind === 'date') return t('noresults.date', { range: app.dateFilter ? formatRange(app.dateFilter) : '' });
+    if (f.kind === 'nodupes') return f.label;
     return t('noresults.funnel', { folder: f.label });
   }
 </script>
