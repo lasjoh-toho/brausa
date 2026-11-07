@@ -704,6 +704,36 @@ fn tw_plugins() -> Vec<(String, String)> {
     tw::bundled_plugins()
 }
 
+/// Every plugin brausa has, and the plugins each wiki uses.
+#[tauri::command]
+async fn tw_plugin_overview(w: State<'_, Wikis>) -> CmdResult<tw::PluginOverview> {
+    w.0.lock().map_err(err)?.plugin_overview().map_err(err)
+}
+
+/// Switch a plugin on or off for a wiki.
+#[tauri::command]
+async fn tw_set_wiki_plugin(w: State<'_, Wikis>, name: String, title: String, on: bool) -> CmdResult<Vec<String>> {
+    w.0.lock().map_err(err)?.set_wiki_plugin(&name, &title, on).map_err(err)
+}
+
+/// Add a plugin from a JSON file (chosen in the system's dialog); returns its title, none when cancelled.
+#[tauri::command]
+async fn tw_add_plugin_file(app: AppHandle) -> CmdResult<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(p) = a.dialog().file().add_filter("TiddlyWiki-Plugin", &["json"]).blocking_pick_file().and_then(|p| p.into_path().ok()) else { return Ok(None) };
+        a.state::<Wikis>().0.lock().map_err(err)?.add_plugin_file(&p).map(Some).map_err(err)
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+async fn tw_remove_own_plugin(w: State<'_, Wikis>, title: String) -> CmdResult<()> {
+    w.0.lock().map_err(err)?.remove_own_plugin(&title).map_err(err)
+}
+
 /// Two-way sync of one wiki; maps changed from the wiki are refreshed in the index too.
 #[tauri::command]
 async fn tw_sync(state: State<'_, Index>, projs: State<'_, Projs>, w: State<'_, Wikis>, name: String) -> CmdResult<tw::SyncReport> {
@@ -1100,6 +1130,10 @@ pub fn run() {
             tw_web_discard,
             tw_web_texts,
             tw_mws_linked,
+            tw_plugin_overview,
+            tw_set_wiki_plugin,
+            tw_add_plugin_file,
+            tw_remove_own_plugin,
             tw_mws_sync,
             tw_web_upload,
             tw_web_password,

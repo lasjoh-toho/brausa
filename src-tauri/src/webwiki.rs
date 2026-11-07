@@ -171,9 +171,10 @@ fn escape(s: &str) -> String {
 /// The wiki file with `tiddlers` as its complete store (the format of the original is kept).
 pub fn with_tiddlers(html: &str, tiddlers: &BTreeMap<String, Fields>) -> Option<String> {
     if let Some(i) = html.find(JSON_STORE) {
-        let list: Vec<&Fields> = tiddlers.values().collect();
-        // `<` inside the JSON would end the script element early.
-        let json = serde_json::to_string(&list).ok()?.replace('<', "\\u003C");
+        // As TiddlyWiki writes it: one tiddler per line (store.php and its Chunked Upload plugin
+        // send only changed lines). `<` inside the JSON would end the script element early.
+        let lines: Vec<String> = tiddlers.values().filter_map(|f| serde_json::to_string(f).ok()).collect();
+        let json = format!("[\n{}\n]", lines.join(",\n")).replace('<', "\\u003C");
         let start = i + JSON_STORE.len();
         let end = start + html[start..].find("</script>")?;
         let mut out = format!("{}{}{}", &html[..start], json, &html[end..]);

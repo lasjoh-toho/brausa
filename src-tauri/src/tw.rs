@@ -53,7 +53,7 @@ const SAVE_TO: &str = "brausa-bag";
 const GENERATED: &str = "brausa-generated";
 
 /// Plugin tiddlers bundled into brausa (rebuild with scripts/build-tw-plugins.sh).
-const BUNDLED_PLUGINS: [&str; 6] = [
+const BUNDLED_PLUGINS: [&str; 7] = [
     include_str!("../resources/tw-plugins/markdown.json"),
     include_str!("../resources/tw-plugins/graph.json"),
     include_str!("../resources/tw-plugins/vis-network.json"),
@@ -61,6 +61,8 @@ const BUNDLED_PLUGINS: [&str; 6] = [
     include_str!("../resources/tw-plugins/kanban.json"),
     // Renames follow into lists, story fields and Pinboard boards.
     include_str!("../resources/tw-plugins/relink.json"),
+    // Saves single-file wikis on PHP hosting through store.php, in pieces (lasjoh-toho/store_TW).
+    include_str!("../resources/tw-plugins/chunked-upload.json"),
 ];
 
 fn plugin_tiddlers() -> Vec<Fields> {
@@ -454,6 +456,11 @@ pub struct Recipe {
     /// The bags uploaded to the web; `None`: all but the maps (cards, snippets) and `lokal`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web_bags: Option<Vec<String>>,
+    /// The plugins in this wiki, chosen in the plugin overview (bundled ones and those taken
+    /// from web wikis). Unset: all bundled ones (if `plugins`) and, if the wiki has the bag
+    /// `plugins`, those in it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_set: Option<Vec<String>>,
 }
 
 impl Recipe {
@@ -568,6 +575,116 @@ fn mws_api(page: &str) -> Option<String> {
 
 /// The last change of the MultiWikiServer wiki the page was made at.
 const MWS_LAST_SEQ: &str = "$:/state/multiwikiclient/recipe/last_revision_id";
+
+/// A plugin brausa has, for the plugin overview.
+#[derive(Debug, Clone, Serialize)]
+pub struct PluginInfo {
+    pub title: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    /// plugin, theme or language.
+    pub kind: String,
+    /// "bundled" (comes with brausa) or "own" (taken from a web wiki or added).
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PluginOverview {
+    pub plugins: Vec<PluginInfo>,
+    /// Wiki → the plugins it uses.
+    pub wikis: BTreeMap<String, Vec<String>>,
+}
+
+/// Where store.php keeps a wiki: the upload settings TiddlyWiki stores in the wiki itself.
+struct StoreTarget {
+    url: String,
+    /// base64 of `user:password`.
+    auth: String,
+    file: String,
+    dir: String,
+    backup_dir: String,
+}
+
+/// A `multipart/form-data` body: text fields, and optionally the file part `data`.
+fn multipart(fields: &[(&str, String)], data: Option<&[u8]>) -> (String, Vec<u8>) {
+    let boundary = format!("----brausa{:016x}", xxhash_rust::xxh3::xxh3_64(format!("{:?}", std::time::SystemTime::now()).as_bytes()));
+    let mut body = Vec::new();
+    for (k, v) in fields {
+        body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n").as_bytes());
+    }
+    if let Some(d) = data {
+        body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"data\"; filename=\"chunk.bin\"\r\nContent-Type: application/octet-stream\r\n\r\n").as_bytes());
+        body.extend_from_slice(d);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}
+
+/// One request to store.php's chunked upload; its JSON answer, or the error it gives.
+fn store_php(t: &StoreTarget, action: &str, fields: &[(&str, String)], data: Option<&[u8]>) -> Result<Value, (u16, String)> {
+    let (ctype, body) = multipart(fields, data);
+    let url = format!("{}{}chunk={action}", t.url, if t.url.contains('?') { "&" } else { "?" });
+    let res = ureq::post(&url).timeout(std::time::Duration::from_secs(120)).set("X-Store-Auth", &t.auth).set("Content-Type", &ctype).send_bytes(&body);
+    let (status, text) = match res {
+        Ok(r) => (r.status(), r.into_string().unwrap_or_default()),
+        Err(ureq::Error::Status(s, r)) => (s, r.into_string().unwrap_or_default()),
+        Err(e) => return Err((0, e.to_string())),
+    };
+    match serde_json::from_str::<Value>(&text) {
+        Ok(v) if v.get("ok").and_then(Value::as_bool) == Some(true) => Ok(v),
+        Ok(v) => Err((status, v.get("error").and_then(Value::as_str).unwrap_or("?").to_string())),
+        Err(_) => Err((status, format!("{status} {}", text.chars().take(200).collect::<String>()))),
+    }
+}
+
+/// Save a wiki through store.php 2.1 the way the Chunked Upload plugin does: gzip-compressed,
+/// in pieces of at most 1 MB (smaller ones if the host rejects a piece), checked by SHA-256.
+fn store_php_upload(t: &StoreTarget, html: &[u8]) -> io::Result<()> {
+    use sha2::Digest;
+    let fail = |(status, msg): (u16, String)| {
+        err(match status {
+            404 => crate::tr!(format!("store.php nicht gefunden ({msg}) – stimmt die Upload-URL im Wiki? store.php 2.1 nötig"), format!("store.php not found ({msg}) – is the wiki's upload URL right? store.php 2.1 needed")),
+            _ => crate::tr!(format!("Speichern über store.php fehlgeschlagen: {msg}"), format!("Saving through store.php failed: {msg}")),
+        })
+    };
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    io::Write::write_all(&mut gz, html)?;
+    let payload = gz.finish()?;
+    let digest: String = sha2::Sha256::digest(&payload).iter().map(|b| format!("{b:02x}")).collect();
+    let begin = store_php(
+        t,
+        "begin",
+        &[
+            ("file", t.file.clone()),
+            ("dir", t.dir.clone()),
+            ("backupDir", t.backup_dir.clone()),
+            ("total", payload.len().to_string()),
+            ("encoding", "gzip".into()),
+            ("mode", "full".into()),
+        ],
+        None,
+    )
+    .map_err(fail)?;
+    let id = begin.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+    let mut size = begin.get("chunkSize").and_then(Value::as_u64).unwrap_or(1 << 20).clamp(16 << 10, 1 << 20) as usize;
+    let (mut offset, mut index) = (0usize, 0usize);
+    while offset < payload.len() {
+        let end = (offset + size).min(payload.len());
+        match store_php(t, "part", &[("id", id.clone()), ("index", index.to_string())], Some(&payload[offset..end])) {
+            Ok(_) => {
+                offset = end;
+                index += 1;
+            }
+            // Too large for the host: smaller pieces.
+            Err((413, _)) if size > 16 << 10 => size /= 2,
+            Err(e) => return Err(fail(e)),
+        }
+    }
+    store_php(t, "finish", &[("id", id), ("sha256", digest)], None).map_err(fail)?;
+    Ok(())
+}
 
 /// Writable bag for plugins of one's own (from web wikis), right above `@plugins`.
 pub const OWN_PLUGINS: &str = "plugins";
@@ -859,8 +976,19 @@ impl Store {
     fn merged(&self, r: &Recipe) -> io::Result<BTreeMap<String, (Fields, String)>> {
         let mut out = BTreeMap::new();
         let mut bags_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        let names = Self::layer_names(r);
+        let mut names = Self::layer_names(r);
+        // Plugins chosen for this wiki: the bundled and the own ones at the bottom, only those.
+        if r.plugin_set.is_some() {
+            names.retain(|b| b != PLUGINS && b != OWN_PLUGINS);
+            let own = self.bag_dir(OWN_PLUGINS)?.exists();
+            names.splice(0..0, [PLUGINS.to_string()].into_iter().chain(own.then(|| OWN_PLUGINS.to_string())));
+        }
         let mut layers: Vec<(String, BTreeMap<String, Fields>)> = names.iter().map(|b| Ok((b.clone(), self.layer(b)?))).collect::<io::Result<_>>()?;
+        if let Some(set) = &r.plugin_set {
+            for (_, l) in layers.iter_mut().filter(|(b, _)| b == PLUGINS || b == OWN_PLUGINS) {
+                l.retain(|t, f| !f.contains_key("plugin-type") || set.contains(t));
+            }
+        }
         // Map cards kept in one of the wiki's bags appear in that bag's layer.
         let mut moved: Vec<(String, Fields)> = vec![];
         for (b, l) in layers.iter_mut().filter(|(b, _)| b.starts_with(MAP_BAG)) {
@@ -1438,6 +1566,76 @@ impl Store {
         Ok(rep)
     }
 
+    // ------------------------------------------------------------ plugins
+
+    /// Every plugin brausa has (bundled, and own ones taken from web wikis or added), and the
+    /// plugins each wiki uses.
+    pub fn plugin_overview(&self) -> io::Result<PluginOverview> {
+        let info = |f: &Fields, source: &str| PluginInfo {
+            title: f["title"].clone(),
+            name: f.get("name").cloned().unwrap_or_else(|| f["title"].rsplit('/').next().unwrap_or("").to_string()),
+            version: f.get("version").cloned().unwrap_or_default(),
+            description: f.get("description").cloned().unwrap_or_default(),
+            kind: f.get("plugin-type").cloned().unwrap_or_default(),
+            source: source.to_string(),
+        };
+        let mut plugins: Vec<PluginInfo> = plugin_tiddlers().iter().filter(|f| f.contains_key("plugin-type")).map(|f| info(f, "bundled")).collect();
+        for (_, (f, _)) in self.bag_tiddlers(OWN_PLUGINS).unwrap_or_default() {
+            if f.contains_key("plugin-type") {
+                plugins.retain(|p| p.title != f["title"]);
+                plugins.push(info(&f, "own"));
+            }
+        }
+        let wikis = self.recipes().into_iter().map(|r| (r.name.clone(), self.wiki_plugins(&r, &plugins))).collect();
+        Ok(PluginOverview { plugins, wikis })
+    }
+
+    /// The plugins a wiki uses.
+    fn wiki_plugins(&self, r: &Recipe, all: &[PluginInfo]) -> Vec<String> {
+        match &r.plugin_set {
+            Some(set) => all.iter().filter(|p| set.contains(&p.title)).map(|p| p.title.clone()).collect(),
+            None => all
+                .iter()
+                .filter(|p| if p.source == "bundled" { r.plugins } else { r.bags.iter().any(|b| b == OWN_PLUGINS) })
+                .map(|p| p.title.clone())
+                .collect(),
+        }
+    }
+
+    /// Switch a plugin on or off for a wiki (from then on the wiki has its own plugin list).
+    pub fn set_wiki_plugin(&self, name: &str, title: &str, on: bool) -> io::Result<Vec<String>> {
+        let mut r = self.recipe(name)?;
+        let all = self.plugin_overview()?.plugins;
+        let mut set = self.wiki_plugins(&r, &all);
+        set.retain(|t| t != title);
+        if on {
+            set.push(title.to_string());
+        }
+        r.plugin_set = Some(set.clone());
+        self.put_recipe(r)?;
+        Ok(set)
+    }
+
+    /// A plugin file (TiddlyWiki's JSON, e.g. dragged out of a wiki) joins the own plugins.
+    pub fn add_plugin_file(&self, path: &Path) -> io::Result<String> {
+        let v: Value = serde_json::from_str(&fs::read_to_string(path)?).map_err(|e| err(e.to_string()))?;
+        let f = match &v {
+            Value::Array(a) => a.iter().filter_map(fields_from_json).find(|f| f.contains_key("plugin-type")),
+            v => fields_from_json(v).filter(|f| f.contains_key("plugin-type")),
+        }
+        .ok_or_else(|| err(crate::tr!("Die Datei enthält kein TiddlyWiki-Plugin", "The file holds no TiddlyWiki plugin")))?;
+        if !self.bag_dir(OWN_PLUGINS)?.exists() {
+            self.put_bag(&BagInfo { name: OWN_PLUGINS.into(), description: crate::tr!("Eigene Plugins (aus Web-Wikis), über den mitgelieferten", "Own plugins (from web wikis), above the bundled ones").into(), ..Default::default() })?;
+        }
+        self.put_tiddler(OWN_PLUGINS, &f)?;
+        Ok(f["title"].clone())
+    }
+
+    /// Remove an own plugin from brausa (and so from every wiki).
+    pub fn remove_own_plugin(&self, title: &str) -> io::Result<()> {
+        self.delete_tiddler(OWN_PLUGINS, title)
+    }
+
     /// A snippet, note or card dropped onto a wiki: a tiddler in the wiki's own bag, under a free title.
     pub fn add_to_wiki(&self, name: &str, mut f: Fields) -> io::Result<String> {
         let r = self.recipe(name)?;
@@ -1486,6 +1684,21 @@ impl Store {
             }
         }
         let out = crate::webwiki::with_tiddlers(&html, &all).ok_or_else(|| err(crate::tr!("Das Web-Wiki hat ein unbekanntes Format", "The web wiki has an unknown format")))?;
+        // Saved through store.php (the wiki's upload settings): in pieces, as its Chunked Upload plugin does.
+        let text = |t: &str| all.get(t).and_then(|f| f.get("text")).map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        if let Some(url) = text("$:/UploadURL") {
+            let user = text("$:/UploadName").unwrap_or_else(|| link.user.clone());
+            let target = StoreTarget {
+                url,
+                auth: crate::webwiki::basic_auth(&user, &password).trim_start_matches("Basic ").to_string(),
+                file: text("$:/UploadFilename").unwrap_or_else(|| "index.html".into()),
+                dir: text("$:/UploadDir").unwrap_or_else(|| ".".into()),
+                backup_dir: text("$:/UploadBackupDir").unwrap_or_else(|| ".".into()),
+            };
+            store_php_upload(&target, out.as_bytes())?;
+            fs::write(cache, out)?;
+            return Ok(());
+        }
         ureq::put(&link.url)
             .timeout(std::time::Duration::from_secs(120))
             .set("Authorization", &crate::webwiki::basic_auth(&link.user, &password))
@@ -2395,6 +2608,31 @@ mod tests {
     }
 
     #[test]
+    fn each_wiki_uses_the_plugins_chosen_for_it() {
+        let (t, store, proj) = setup();
+        let w = t.path().join("w");
+        let r = recipe(&store, "a", &proj, Target { kind: "folder".into(), path: w.display().to_string() });
+        let plugin = t.path().join("p.json");
+        fs::write(&plugin, r#"[{"title":"$:/plugins/x/eigen","plugin-type":"plugin","version":"1.0","name":"Eigen","description":"Test","text":"{\"tiddlers\":{}}"}]"#).unwrap();
+        assert_eq!(store.add_plugin_file(&plugin).unwrap(), "$:/plugins/x/eigen");
+        let o = store.plugin_overview().unwrap();
+        assert!(o.plugins.iter().any(|p| p.title == "$:/plugins/storephp/chunked-upload" && p.source == "bundled"));
+        assert!(o.plugins.iter().any(|p| p.title == "$:/plugins/x/eigen" && p.source == "own"));
+        // Without a choice: all bundled ones, no own ones (the wiki has no bag "plugins").
+        assert!(o.wikis["a"].contains(&"$:/plugins/lasjoh-toho/pinboard".to_string()) && !o.wikis["a"].contains(&"$:/plugins/x/eigen".to_string()));
+        // Own plugin on, Pinboard off: the wiki gets exactly that.
+        store.set_wiki_plugin("a", "$:/plugins/x/eigen", true).unwrap();
+        store.set_wiki_plugin("a", "$:/plugins/lasjoh-toho/pinboard", false).unwrap();
+        let m = store.merged(&store.recipe("a").unwrap()).unwrap();
+        assert!(m.contains_key("$:/plugins/x/eigen") && !m.contains_key("$:/plugins/lasjoh-toho/pinboard"));
+        assert!(m.contains_key("$:/plugins/flibbles/graph") && m.contains_key("$:/config/markdown/renderWikiText"));
+        assert!(!store.bag_tiddlers(OWN_PLUGINS).unwrap().is_empty());
+        let _ = r;
+        store.remove_own_plugin("$:/plugins/x/eigen").unwrap();
+        assert!(!store.plugin_overview().unwrap().plugins.iter().any(|p| p.title == "$:/plugins/x/eigen"));
+    }
+
+    #[test]
     fn thousands_of_web_tiddlers_come_over_quickly() {
         let (_t, store, proj) = setup();
         let mut r = recipe(&store, "W", &proj, Target { kind: "folder".into(), path: proj.join("wiki").display().to_string() });
@@ -2454,6 +2692,7 @@ mod tests {
                 kept: vec![],
                 web: None,
                 web_bags: None,
+                plugin_set: None,
             })
             .unwrap()
     }

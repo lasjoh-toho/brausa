@@ -7,7 +7,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
 import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WebPreview,
-  MwsReport, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
+  MwsReport, PluginInfo, PluginOverview, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
 import { WALK_LIMIT } from './types';
 import { addCard, addLink, newMap, type NoteCard, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
@@ -832,6 +832,36 @@ export class DemoBackend implements Backend {
       return Array.from({ length: n }, (_, i) => (i < 2 ? glossary[i] : `${bag} ${i + 1}`));
     };
     return Promise.all(stack.map(async (bag) => ({ bag, titles: await titles(bag) })));
+  }
+
+  private ownPlugins: PluginInfo[] = [
+    { title: '$:/plugins/tiddlywiki/menubar', name: 'Menu Bar', version: '5.4.1', description: 'Menu bar', kind: 'plugin', source: 'own' }
+  ];
+  private pluginSets: Record<string, string[]> = {};
+  async wikiPluginOverview(): Promise<PluginOverview> {
+    const bundled: PluginInfo[] = [
+      ['markdown', 'Markdown', '5.4.1', 'Markdown parser based on markdown-it'],
+      ['graph', 'Graph', '1.11.0', 'Graphen aus Tiddlern'],
+      ['pinboard', 'Pinboard', '0.8.0', 'Pinnwand mit Karten und Präsentationspfaden'],
+      ['kanban', 'Kanban', '0.4.0', 'Kanban-Board'],
+      ['chunked-upload', 'Chunked Upload', '1.1.0', 'Speichern über store.php in Stücken und nur mit Änderungen']
+    ].map(([id, name, version, description]) => ({ title: `$:/plugins/brausa/${id}`, name, version, description, kind: 'plugin', source: 'bundled' as const }));
+    const plugins = [...bundled, ...this.ownPlugins];
+    const wikis = Object.fromEntries(
+      this.recipes.map((r) => [r.name, this.pluginSets[r.name] ?? plugins.filter((p) => (p.source === 'bundled' ? r.plugins : r.bags.includes('plugins'))).map((p) => p.title)])
+    );
+    return { plugins, wikis };
+  }
+  async wikiSetPlugin(name: string, title: string, on: boolean) {
+    const now = (await this.wikiPluginOverview()).wikis[name] ?? [];
+    this.pluginSets[name] = on ? [...now.filter((t) => t !== title), title] : now.filter((t) => t !== title);
+    return this.pluginSets[name];
+  }
+  async wikiAddPluginFile() {
+    return null;
+  }
+  async wikiRemoveOwnPlugin(title: string) {
+    this.ownPlugins = this.ownPlugins.filter((p) => p.title !== title);
   }
 
   async wikiPlugins(): Promise<[string, string][]> {

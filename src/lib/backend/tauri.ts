@@ -21,6 +21,7 @@ import type {
   WikiBag,
   WebPreview,
   MwsReport,
+  PluginOverview,
   WikiHit,
   WikiLayer,
   WikiOverlay,
@@ -440,6 +441,22 @@ export class TauriBackend implements Backend {
 
   resolveOverlay(title: string, bag: string, how: OverlayResolution) {
     return invoke<void>('tw_resolve_overlay', { title, bag, how });
+  }
+
+  wikiPluginOverview() {
+    return invoke<PluginOverview>('tw_plugin_overview');
+  }
+
+  wikiSetPlugin(name: string, title: string, on: boolean) {
+    return invoke<string[]>('tw_set_wiki_plugin', { name, title, on });
+  }
+
+  wikiAddPluginFile() {
+    return invoke<string | null>('tw_add_plugin_file');
+  }
+
+  wikiRemoveOwnPlugin(title: string) {
+    return invoke<void>('tw_remove_own_plugin', { title });
   }
 
   wikiPlugins() {
