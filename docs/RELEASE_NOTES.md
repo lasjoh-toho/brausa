@@ -14,6 +14,13 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.22
+
+- **Plugin overview:** wiki settings → Plugins shows every plugin in brausa – bundled ones and your own (taken from web wikis, or added from a plugin file with "Add plugin …") – with version, description and origin, and a switch per wiki: which plugins that wiki uses. Own plugins can be removed again.
+- **Saving through store.php:** brausa now bundles the "Chunked Upload" plugin (from store_TW), so wikis on PHP hosting save themselves in small pieces and, after the first save, only with their changes. brausa's own upload uses the same way when the wiki has upload settings (`$:/UploadURL` …): gzip-compressed, in pieces of at most 1 MB, checked by SHA-256. Wikis are written one tiddler per line, as TiddlyWiki does, so the plugin can send just the changes afterwards.
+- **TiddlyWiki 5.4.1** for the wiki view and Markdown (was 5.3.8) – the same version as current web wikis, so their 5.4 themes and plugins look right.
+- Tested with store.php 2.1 on PHP 8.3 with low upload limits: upload from brausa in 4 pieces, then saving in the browser through the plugin (only the change, one piece).
+
 ### New in 0.21
 
 - **MultiWikiServer both ways:** a wiki imported from a MultiWikiServer stays linked. Opening it, the globe at the wiki, and every save in the wiki fetch what changed on the server since the last time (also deletions) and send what changed in brausa – changes made in the browser on another computer come in, changes made in brausa go up. The server decides the bag; the tiddler lands in its mirror bag here.
@@ -146,6 +153,12 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.22: Plugin-Überblick pro Wiki, Speichern über store.php, TiddlyWiki 5.4.1**
+- **Plugin-Überblick:** Wiki-Einstellungen → Plugins zeigt alle Plugins in brausa – mitgelieferte und eigene (aus Web-Wikis übernommen oder mit „Plugin hinzufügen …“ aus einer Plugin-Datei) – mit Version, Beschreibung und Herkunft, und pro Wiki einen Schalter: welche Plugins dieses Wiki verwendet. Eigene Plugins lassen sich wieder entfernen.
+- **Speichern über store.php:** brausa bringt jetzt das Plugin „Chunked Upload“ (aus store_TW) mit – Wikis auf PHP-Webspace speichern sich damit in kleinen Stücken und nach dem ersten Mal nur mit ihren Änderungen. Auch brausa selbst lädt so hoch, wenn das Wiki Upload-Einstellungen hat (`$:/UploadURL` …): gzip-komprimiert, in Stücken von höchstens 1 MB, mit SHA-256-Prüfung. Wikis werden wie von TiddlyWiki selbst mit einem Tiddler pro Zeile geschrieben, damit das Plugin danach nur Änderungen schicken kann.
+- **TiddlyWiki 5.4.1** für die Wiki-Ansicht und Markdown (bisher 5.3.8) – dieselbe Version wie aktuelle Web-Wikis, damit deren 5.4-Themes und -Plugins richtig aussehen.
+- Geprüft mit store.php 2.1 unter PHP 8.3 und knappen Upload-Grenzen: Hochladen aus brausa in 4 Stücken, danach Speichern im Browser über das Plugin (nur die Änderung, ein Stück).
 
 **Neu in 0.21: Abgleich mit dem MultiWikiServer in beide Richtungen**
 - **Beide Richtungen:** Ein vom MultiWikiServer importiertes Wiki bleibt verbunden. Öffnen, die Weltkugel am Wiki und jedes Speichern im Wiki holen, was sich auf dem Server seit dem letzten Mal geändert hat (auch Löschungen), und senden, was sich in brausa geändert hat – Änderungen im Browser an einem anderen Computer kommen an, Änderungen in brausa gehen hoch. Den Bag bestimmt der Server; der Tiddler landet hier in dessen Spiegel-Bag.

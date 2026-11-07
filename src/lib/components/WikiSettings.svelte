@@ -5,9 +5,12 @@
   import { wikis } from '../state/wikis.svelte';
   import type { WikiHit } from '../backend/types';
   import Icon from './Icon.svelte';
+  import PluginOverview from './PluginOverview.svelte';
   import { t, tn } from '../i18n/index.svelte';
 
-  let tab = $state<'bags' | 'plugins' | 'search'>('bags');
+  // svelte-ignore state_referenced_locally
+  let tab = $state(wikis.settingsTab);
+  wikis.settingsTab = 'bags';
   let confirming = $state<string | null>(null);
 
   /** Wikis using each bag. */
@@ -15,10 +18,6 @@
     Object.fromEntries(wikis.bags.map((b) => [b.name, wikis.recipes.filter((r) => r.bags.includes(b.name)).map((r) => r.name)]))
   );
 
-  let plugins = $state<[string, string][]>([]);
-  $effect(() => {
-    if (tab === 'plugins' && !plugins.length) void app.backend.wikiPlugins().then((p) => (plugins = p));
-  });
 
   let query = $state('');
   let hits = $state<WikiHit[]>([]);
@@ -104,12 +103,7 @@
           </tbody>
         </table>
       {:else if tab === 'plugins'}
-        <p class="muted">{t('wikisettings.pluginsInfo')}</p>
-        <ul class="plugins">
-          {#each plugins as [name, version] (name)}
-            <li><Icon name="book" size={13} /><span class="name">{name}</span><span class="ver">{version}</span></li>
-          {/each}
-        </ul>
+        <PluginOverview />
       {:else}
         <!-- svelte-ignore a11y_autofocus -->
         <input class="q" bind:value={query} placeholder={t('wikisettings.searchPlaceholder', { n: wikis.searchMin })} autofocus />
@@ -148,7 +142,7 @@
   .panel {
     display: flex;
     flex-direction: column;
-    width: min(760px, calc(100% - 32px));
+    width: min(960px, calc(100% - 32px));
     max-height: calc(100% - 48px);
     padding: 14px 16px;
     border-radius: 16px;
@@ -244,24 +238,10 @@
     font-size: 12px;
     color: var(--fg-faint);
   }
-  .plugins,
   .hits {
     margin: 0;
     padding: 0;
     list-style: none;
-  }
-  .plugins li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 4px;
-    border-top: 1px solid var(--line);
-    font-size: 13px;
-  }
-  .ver {
-    margin-left: auto;
-    color: var(--fg-faint);
-    font-size: 12px;
   }
   .q {
     width: 100%;

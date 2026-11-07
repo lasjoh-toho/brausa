@@ -128,6 +128,8 @@ class WikiState {
 
   /** Wiki settings (bags, plugins, search), opened with the gear in the sidebar. */
   settingsOpen = $state(false);
+  /** The tab the wiki settings open on. */
+  settingsTab = $state<'bags' | 'plugins' | 'search'>('bags');
   /** The search across wikis starts at this many characters. */
   searchMin = $state(store.get('wikiSearchMin', 5));
 

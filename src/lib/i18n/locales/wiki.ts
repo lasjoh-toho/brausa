@@ -34,6 +34,8 @@ export const de = {
   fileNote:
     'Ein vorhandenes Wiki (TiddlyWiki ≥ 5.2), z. B. in TiddlyDesktop-RS neu angelegt. Vor jedem Abgleich speichern und schließen; brausa legt eine Sicherung in <code>.backups/</code> an.',
   plugins: 'Plugins mitliefern:',
+  pluginsChosen: '{n} Plugins, einzeln gewählt –',
+  pluginsOverview: 'im Plugin-Überblick ändern',
   local: 'Bag „lokal“ einbeziehen (Dateiverweise und private Notizen)',
   pluginsNote: 'Karten erscheinen im Wiki als Pinboard und Kanban, Markdown wird gerendert. Nichts muss im Wiki installiert werden.',
   bagsHere: 'Bags in diesem Wiki',
@@ -153,6 +155,8 @@ export const en: typeof de = {
   fileNote:
     'An existing wiki (TiddlyWiki ≥ 5.2), e.g. newly created in TiddlyDesktop-RS. Save and close it before each sync; brausa keeps a backup in <code>.backups/</code>.',
   plugins: 'Include plugins:',
+  pluginsChosen: '{n} plugins, chosen one by one –',
+  pluginsOverview: 'change in the plugin overview',
   local: 'Include the bag “lokal” (file links and private notes)',
   pluginsNote: 'Cards show up in the wiki as a pinboard and kanban, Markdown is rendered. Nothing needs to be installed in the wiki.',
   bagsHere: 'Bags in this wiki',

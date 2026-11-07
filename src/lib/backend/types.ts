@@ -106,6 +106,8 @@ export interface WikiRecipe {
   web?: { url: string; user: string } | null;
   /** The bags uploaded to the web; unset: all but the maps (cards, snippets) and „lokal“. */
   webBags?: string[] | null;
+  /** The plugins in this wiki, chosen in the plugin overview; unset: all bundled ones (if `plugins`). */
+  pluginSet?: string[] | null;
 }
 
 /** A tiddler that is new or different in the web version. */
@@ -115,6 +117,24 @@ export interface WebChange {
   localModified: string | null;
   /** The web version is new or newer: taken over unless unticked. */
   newer: boolean;
+}
+
+/** A plugin brausa has. */
+export interface PluginInfo {
+  title: string;
+  name: string;
+  version: string;
+  description: string;
+  /** plugin, theme or language. */
+  kind: string;
+  /** Comes with brausa, or taken from a web wiki / added. */
+  source: 'bundled' | 'own';
+}
+
+export interface PluginOverview {
+  plugins: PluginInfo[];
+  /** Wiki → the plugins it uses. */
+  wikis: Record<string, string[]>;
 }
 
 /** What a sync with a MultiWikiServer wiki did. */
@@ -349,6 +369,13 @@ export interface Backend {
   resolveOverlay(title: string, bag: string, how: OverlayResolution): Promise<void>;
   /** [name, version] of the plugins brausa bundles. */
   wikiPlugins(): Promise<[string, string][]>;
+  /** Every plugin brausa has, and the plugins each wiki uses. */
+  wikiPluginOverview(): Promise<PluginOverview>;
+  /** Switch a plugin on or off for a wiki; returns the wiki's plugins. */
+  wikiSetPlugin(name: string, title: string, on: boolean): Promise<string[]>;
+  /** Add a plugin from a JSON file chosen in the system's dialog; null when cancelled. */
+  wikiAddPluginFile(): Promise<string | null>;
+  wikiRemoveOwnPlugin(title: string): Promise<void>;
 }
 
 /** Marked text, a picture or a link being dragged out of the web panel (see webdrag.js). */

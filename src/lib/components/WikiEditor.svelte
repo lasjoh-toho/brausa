@@ -139,14 +139,25 @@
       <p class="muted">{t('wiki.webNote')}</p>
     {/if}
 
-    <label class="plugins">
-      <input type="checkbox" bind:checked={r.plugins} />
-      <span>
-        <b>{t('wiki.plugins')}</b>
-        {plugins.map(([n, v]) => `${n} ${v}`).join(' · ')}
-        <span class="muted">– {t('wiki.pluginsNote')}</span>
-      </span>
-    </label>
+    {#if r.pluginSet}
+      <!-- Chosen one by one in the plugin overview. -->
+      <div class="plugins">
+        <span>
+          <b>{t('wiki.plugins')}</b>
+          {t('wiki.pluginsChosen', { n: r.pluginSet.length })}
+          <button class="btn link" onclick={() => ((wikis.settingsTab = 'plugins'), (wikis.settingsOpen = true))}>{t('wiki.pluginsOverview')}</button>
+        </span>
+      </div>
+    {:else}
+      <label class="plugins">
+        <input type="checkbox" bind:checked={r.plugins} />
+        <span>
+          <b>{t('wiki.plugins')}</b>
+          {plugins.map(([n, v]) => `${n} ${v}`).join(' · ')}
+          <span class="muted">– {t('wiki.pluginsNote')}</span>
+        </span>
+      </label>
+    {/if}
     <label class="plugins">
       <input type="checkbox" bind:checked={r.local} />
       <span><b>{t('wiki.local')}</b></span>
