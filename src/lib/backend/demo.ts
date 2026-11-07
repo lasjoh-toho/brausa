@@ -8,7 +8,7 @@ import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
 import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WebPreview,
   MwsReport, PluginInfo, PluginOverview, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
-import { WALK_LIMIT } from './types';
+import { WALK_LIMIT, type AppInfo } from './types';
 import { addCard, addLink, newMap, type NoteCard, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 import { t } from '../i18n/index.svelte';
@@ -435,6 +435,33 @@ export class DemoBackend implements Backend {
 
   async openDefault(path: string) {
     throw new Error(t('demo.wouldOpen', { name: basename(path) }));
+  }
+
+  async apps(): Promise<AppInfo[]> {
+    const a = (name: string, categories: string[], kinds: string[] = [], exts: string[] = []) => ({ name, path: `/Applications/${name}.app`, categories, kinds, exts });
+    return [
+      a('Affinity Photo', ['graphics'], ['image']),
+      a('Firefox', ['web'], ['web']),
+      a('Fotos', ['graphics'], ['image', 'video']),
+      a('Keynote', ['office'], [], ['key', 'pptx']),
+      a('Numbers', ['office'], [], ['numbers', 'xlsx', 'csv']),
+      a('Pages', ['office', 'writing'], [], ['pages', 'docx']),
+      a('Rechner', ['utilities']),
+      a('Safari', ['web'], ['web']),
+      a('Terminal', ['dev']),
+      a('TextEdit', ['writing'], ['text']),
+      a('Visual Studio Code', ['dev', 'writing'], ['text']),
+      a('VLC', ['media'], ['video', 'audio']),
+      a('Vorschau', ['graphics', 'office'], ['image', 'pdf'])
+    ];
+  }
+
+  async appFolders() {
+    return ['/Applications'];
+  }
+
+  async launchApp(program: string, paths: string[]) {
+    throw new Error(t('demo.wouldOpen', { name: paths.length ? `${paths.map(basename).join(', ')} → ${basename(program)}` : basename(program) }));
   }
 
   async reveal(path: string) {

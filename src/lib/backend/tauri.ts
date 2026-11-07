@@ -5,7 +5,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
 import { t } from '../i18n/index.svelte';
 import type { NoteCard, ProjectMap } from '../core/map';
-import { WALK_LIMIT, type OsDrag, type WebDrag } from './types';
+import { WALK_LIMIT, type AppInfo, type OsDrag, type WebDrag } from './types';
 import type {
   Backend,
   IndexReport,
@@ -194,6 +194,18 @@ export class TauriBackend implements Backend {
 
   openDefault(path: string) {
     return invoke<void>('open_default', { path });
+  }
+
+  apps() {
+    return invoke<AppInfo[]>('apps');
+  }
+
+  appFolders() {
+    return invoke<string[]>('app_folders');
+  }
+
+  launchApp(program: string, paths: string[]) {
+    return invoke<void>('launch_app', { program, paths });
   }
 
   reveal(path: string) {

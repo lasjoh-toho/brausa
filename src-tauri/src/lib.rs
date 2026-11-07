@@ -1,3 +1,4 @@
+mod apps;
 mod archive;
 mod content;
 mod dupes;
@@ -951,6 +952,25 @@ fn open_default(app: AppHandle, path: String) -> CmdResult<()> {
     app.opener().open_path(real.to_string_lossy(), None::<&str>).map_err(err)
 }
 
+/// Installed programs (sidebar "Programme", "Öffnen mit …").
+#[tauri::command]
+async fn apps() -> CmdResult<Vec<apps::AppInfo>> {
+    Ok(apps::list())
+}
+
+/// The folders programs live in.
+#[tauri::command]
+fn app_folders() -> Vec<String> {
+    apps::folders().into_iter().map(|p| p.to_string_lossy().to_string()).collect()
+}
+
+/// Start a program, optionally with files ("Öffnen mit …").
+#[tauri::command]
+fn launch_app(app: AppHandle, program: String, paths: Vec<String>) -> CmdResult<()> {
+    let files = paths.iter().map(|p| real_path(&app, p).map(|r| r.to_string_lossy().to_string())).collect::<CmdResult<Vec<_>>>()?;
+    apps::launch(&program, &files).map_err(err)
+}
+
 /// Show the item in Finder / Explorer / the desktop file manager.
 #[tauri::command]
 fn reveal(app: AppHandle, path: String) -> CmdResult<()> {
@@ -1070,6 +1090,9 @@ pub fn run() {
             trash,
             watch,
             open_default,
+            apps,
+            app_folders,
+            launch_app,
             reveal,
             libraries,
             add_library,

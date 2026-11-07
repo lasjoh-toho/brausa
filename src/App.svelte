@@ -45,6 +45,12 @@
     app.scheduleFind();
   });
 
+  // "Keine Dubletten": look for copies again when the files shown change.
+  $effect(() => {
+    void [app.undated, app.noDupes];
+    app.scheduleDupeHide();
+  });
+
   onMount(() => {
     app.init();
     updates.startup();
