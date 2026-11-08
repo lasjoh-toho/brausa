@@ -17,6 +17,14 @@ import { addVisit, setTitle, toggleBookmark, toUrl, type WebLibrary, type WebPag
 
 export { toUrl };
 
+export interface WebTab {
+  id: number;
+  url: string;
+  title: string;
+  /** A local website: its folder and whether its scripts run. */
+  local: { root: string; file: string; scripts: boolean } | null;
+}
+
 class WebState {
   open = $state(store.get('webOpen', false));
   url = $state(store.get('webUrl', ''));
@@ -48,6 +56,63 @@ class WebState {
   rect: WebBounds | null = null;
   private listening = false;
 
+  /** Open tabs; the panel shows the active one (switching loads its page again). */
+  tabs = $state<WebTab[]>([]);
+  activeTab = $state(0);
+  private tabSeq = 0;
+  /** The panel fills the whole window. */
+  fullscreen = $state(false);
+
+  private get tab(): WebTab | undefined {
+    return this.tabs.find((x) => x.id === this.activeTab);
+  }
+
+  /** A new tab, with a page or the speed dial. */
+  newTab(url?: string) {
+    const tab: WebTab = { id: ++this.tabSeq, url: '', title: '', local: null };
+    this.tabs = [...this.tabs, tab];
+    this.activeTab = tab.id;
+    if (url) void this.go(url);
+    else {
+      this.toggle(true);
+      this.goHome();
+    }
+  }
+
+  switchTab(id: number) {
+    const tab = this.tabs.find((x) => x.id === id);
+    if (!tab || id === this.activeTab) return;
+    this.activeTab = id;
+    if (!tab.url) return this.goHome();
+    this.local = tab.local;
+    void this.show(tab.url);
+  }
+
+  closeTab(id: number) {
+    const i = this.tabs.findIndex((x) => x.id === id);
+    if (i < 0) return;
+    const rest = this.tabs.filter((x) => x.id !== id);
+    this.tabs = rest;
+    if (id !== this.activeTab) return;
+    const next = rest[Math.min(i, rest.length - 1)];
+    if (next) {
+      this.activeTab = -1;
+      this.switchTab(next.id);
+    } else this.newTab();
+  }
+
+  /** The page shown before any tab existed becomes the first tab. */
+  private newTabFor(url: string) {
+    const tab: WebTab = { id: ++this.tabSeq, url, title: '', local: this.local };
+    this.tabs = [...this.tabs, tab];
+    this.activeTab = tab.id;
+  }
+
+  toggleFullscreen(on = !this.fullscreen) {
+    this.fullscreen = on;
+    if (on) this.toggle(true);
+  }
+
   private async listen() {
     if (this.listening) return;
     this.listening = true;
@@ -60,12 +125,19 @@ class WebState {
       this.url = e.url;
       this.loading = e.loading;
       store.set('webUrl', e.url);
+      if (!this.tab) this.newTabFor(e.url);
+      const tab = this.tab!;
+      if (tab.url !== e.url) tab.title = '';
+      tab.url = e.url;
+      tab.local = this.local;
       if (!e.loading) this.visit();
     } else if (e.kind === 'title') {
       this.title = e.title;
+      if (this.tab) this.tab.title = e.title;
       this.edit(this.visitScope, (l) => ({ history: setTitle(l.history, this.url, e.title), bookmarks: setTitle(l.bookmarks, this.url, e.title) }));
     }
     else if (e.kind === 'download') void this.downloaded(e.path, e.success);
+    else if (e.kind === 'newtab') this.newTab(e.url);
     else if (e.kind === 'saved') {
       if (e.error) app.toast(t('web.wikiSaveFailed', { error: e.error }), true);
       else {

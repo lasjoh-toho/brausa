@@ -78,7 +78,10 @@ class WikiState {
   /** Sync a wiki, then open it (TiddlyDesktop or the browser shows the story there). */
   /** Brings the wiki up to date (with its web version, if it has one) and shows it in the web panel (it saves back from there). */
   async openStory(name: string) {
-    if (this.recipes.find((x) => x.name === name)?.web) {
+    const r = this.recipes.find((x) => x.name === name);
+    // "In the URL": the wiki at its web address, it saves itself there.
+    if (r?.web && (await this.saveModeOf(name)) === 'url') return web.go(r.web.url);
+    if (r?.web) {
       // A MultiWikiServer wiki syncs both ways; any other web wiki brings what is new there.
       if (await app.backend.wikiMwsLinked(name).catch(() => false)) await this.mwsSync(name, true);
       else await this.webTakeNewer(name);
@@ -204,7 +207,15 @@ class WikiState {
     }
   }
 
-  /** The wiki saved itself in the web panel: into the bags, and on to its MultiWikiServer (gathered for a moment, a wiki saves often). */
+  /** Where the wiki saves (its own choice, or "both" for a MultiWikiServer wiki, else "local"). */
+  async saveModeOf(name: string): Promise<'local' | 'both' | 'url'> {
+    const r = this.recipes.find((x) => x.name === name);
+    if (r?.saveMode) return r.saveMode;
+    return (await app.backend.wikiMwsLinked(name).catch(() => false)) ? 'both' : 'local';
+  }
+
+  /** The wiki saved itself in the web panel: into the bags, and – saving "local and on the web" – on to
+   *  its web address (its MultiWikiServer, or its file there). Gathered for a moment, a wiki saves often. */
   private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   afterSave(name: string) {
     clearTimeout(this.saveTimers.get(name));
@@ -212,11 +223,27 @@ class WikiState {
       name,
       setTimeout(async () => {
         this.saveTimers.delete(name);
-        if (!(await app.backend.wikiMwsLinked(name).catch(() => false))) return;
         await this.sync(name);
-        await this.mwsSync(name, true);
+        const r = this.recipes.find((x) => x.name === name);
+        if (!r?.web || (await this.saveModeOf(name)) !== 'both') return;
+        if (await app.backend.wikiMwsLinked(name).catch(() => false)) await this.mwsSync(name, true);
+        else await this.webUpload(name);
       }, 3000)
     );
+  }
+
+  /** The wiki as a new version of its file on the web (through store.php if it has upload settings). */
+  async webUpload(name: string) {
+    if (this.webBusy) return;
+    this.webBusy = name;
+    try {
+      await app.backend.wikiWebUpload(name);
+      app.toast(t('wikis.webUploaded', { name }));
+    } catch (e) {
+      app.toast(String(e).replace(/^Error: /, ''), true);
+    } finally {
+      this.webBusy = null;
+    }
   }
 
   /** The globe at a wiki: a MultiWikiServer wiki syncs both ways, any other compares with its web version. */
@@ -291,6 +318,7 @@ class WikiState {
       if (r.conflicts.length) app.toast(t('wikis.conflicts', { list: r.conflicts.join(', ') }), true);
       for (const w of r.warnings) app.toast(w, true);
       for (const [root, id] of r.maps) if (board.root === root && board.map?.id === id) await board.load(id);
+      if (r.saveMode) app.toast(t('wikis.saveModeSet', { name, mode: t(`wikis.saveMode.${r.saveMode}`) }));
       await this.load();
       if (this.pending) app.toast(tn('wikis.pending', this.pending));
     } catch (e) {

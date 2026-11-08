@@ -34,6 +34,8 @@ export const de = {
   fileNote:
     'Ein vorhandenes Wiki (TiddlyWiki ≥ 5.2), z. B. in TiddlyDesktop-RS neu angelegt. Vor jedem Abgleich speichern und schließen; brausa legt eine Sicherung in <code>.backups/</code> an.',
   plugins: 'Plugins mitliefern:',
+  saveTo: 'Speichern:',
+  saveToNote: 'Nur lokal: Änderungen bleiben auf diesem Rechner. Lokal und im Web: nach jedem Speichern geht das Wiki auch an seine Webadresse (über store.php, wenn das Wiki Upload-Einstellungen hat, sonst per PUT; ein MultiWikiServer wird abgeglichen). In der URL: „Wiki öffnen“ zeigt das Wiki direkt unter seiner Webadresse, dort speichert es selbst. Auch im Wiki einstellbar: Kontrollpanel → Speichern → brausa.',
   pluginsChosen: '{n} Plugins, einzeln gewählt –',
   pluginsOverview: 'im Plugin-Überblick ändern',
   local: 'Bag „lokal“ einbeziehen (Dateiverweise und private Notizen)',
@@ -155,6 +157,8 @@ export const en: typeof de = {
   fileNote:
     'An existing wiki (TiddlyWiki ≥ 5.2), e.g. newly created in TiddlyDesktop-RS. Save and close it before each sync; brausa keeps a backup in <code>.backups/</code>.',
   plugins: 'Include plugins:',
+  saveTo: 'Saving:',
+  saveToNote: 'Local only: changes stay on this computer. Local and on the web: after each save the wiki also goes to its web address (through store.php if the wiki has upload settings, else by PUT; a MultiWikiServer is synced). In the URL: “Open wiki” shows the wiki right at its web address, where it saves itself. Also set in the wiki: control panel → Saving → brausa.',
   pluginsChosen: '{n} plugins, chosen one by one –',
   pluginsOverview: 'change in the plugin overview',
   local: 'Include the bag “lokal” (file links and private notes)',
