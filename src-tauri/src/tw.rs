@@ -47,6 +47,8 @@ const LOCAL_TAGS: [&str; 2] = ["lokal", "privat"];
 /// brausa's own layer in every wiki: which bag each tiddler comes from (also when it is
 /// in several), the bags a tiddler can be saved to, and the edit-mode line showing both.
 const INFO: &str = "@brausa";
+/// The wiki's own setting of where it saves (control panel → Saving → brausa), see `Recipe::save_mode`.
+const SAVE_MODE: &str = "$:/config/brausa/save-to";
 /// Field set in the wiki's edit mode: the bag a changed tiddler goes to on the next sync.
 const SAVE_TO: &str = "brausa-bag";
 /// Marks tiddlers brausa generates in `lokal` for linked files.
@@ -461,6 +463,11 @@ pub struct Recipe {
     /// `plugins`, those in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_set: Option<Vec<String>>,
+    /// Where the wiki saves: "local" (here only), "both" (here and on to its web address), "url"
+    /// (opened at its web address, it saves itself there). Unset: "both" for a wiki linked to a
+    /// MultiWikiServer, else "local". Also chosen in the wiki's own control panel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save_mode: Option<String>,
 }
 
 impl Recipe {
@@ -749,6 +756,9 @@ pub struct SyncReport {
     /// (project root, map id) whose cards were changed from the wiki
     pub maps: Vec<(String, String)>,
     pub warnings: Vec<String>,
+    /// Chosen anew in the wiki's control panel (where it saves).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub save_mode: Option<String>,
 }
 
 pub struct Store {
@@ -1011,7 +1021,8 @@ impl Store {
             }
         }
         let writable: Vec<String> = r.bags.iter().filter(|b| !self.bag_readonly(b)).cloned().chain(r.local.then(|| LOCAL.to_string())).collect();
-        for f in info_tiddlers(&bags_of, &writable, r.bags.last().map(String::as_str).unwrap_or("")) {
+        let mode = r.save_mode.clone().unwrap_or_else(|| if self.mws_linked(&r.name) { "both".into() } else { "local".into() });
+        for f in info_tiddlers(&bags_of, &writable, r.bags.last().map(String::as_str).unwrap_or(""), &mode, r.web.is_some()) {
             out.insert(f["title"].clone(), (f, INFO.to_string()));
         }
         Ok(out)
@@ -1914,8 +1925,14 @@ impl Store {
             let before = self.merged(&r)?;
             let stamp = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
             let mut map_edits: HashMap<String, Vec<Fields>> = HashMap::new();
+            let mut new_mode: Option<String> = None;
             for (title, (f, _)) in &wiki {
                 if ignored(f) || state.wiki.get(title) == Some(&hash(f)) {
+                    continue;
+                }
+                // Chosen in the wiki's control panel: brausa's setting, not a tiddler of a bag.
+                if title == SAVE_MODE {
+                    new_mode = f.get("text").map(|t| t.trim().to_string()).filter(|t| ["local", "both", "url"].contains(&t.as_str()));
                     continue;
                 }
                 // Cards go back into their map (by id, so a rename in the wiki renames the card).
@@ -1973,6 +1990,10 @@ impl Store {
                 if apply_card_edits(Path::new(root), id, &edits, &state, &mut rep)? {
                     rep.maps.push((root.to_string(), id.to_string()));
                 }
+            }
+            if let Some(m) = new_mode {
+                r.save_mode = Some(m);
+                rep.save_mode = r.save_mode.clone();
             }
         }
 
@@ -2724,6 +2745,7 @@ mod tests {
                 web: None,
                 web_bags: None,
                 plugin_set: None,
+                save_mode: None,
             })
             .unwrap()
     }
@@ -2962,6 +2984,24 @@ mod tests {
     }
 
     #[test]
+    fn where_the_wiki_saves_is_chosen_in_its_control_panel() {
+        let (t, store, proj) = setup();
+        let wa = t.path().join("wiki-a");
+        recipe(&store, "a", &proj, Target { kind: "folder".into(), path: wa.display().to_string() });
+        store.sync("a").unwrap();
+        let wiki = read_tiddler_dir(&wa.join("tiddlers"));
+        assert_eq!(wiki[SAVE_MODE].0["text"], "local");
+        assert!(wiki["$:/brausa/ui/ControlPanel/Saving"].0["tags"].contains("$:/tags/ControlPanel/Saving"));
+        // Chosen in the wiki: brausa takes it over; it is no tiddler of a bag.
+        fs::write(&wiki[SAVE_MODE].1, format!("title: {SAVE_MODE}\n\nboth")).unwrap();
+        let rep = store.sync("a").unwrap();
+        assert_eq!(rep.save_mode.as_deref(), Some("both"));
+        assert_eq!(store.recipe("a").unwrap().save_mode.as_deref(), Some("both"));
+        assert!(!store.bag_tiddlers("wiki-a").unwrap().contains_key(SAVE_MODE));
+        assert_eq!(read_tiddler_dir(&wa.join("tiddlers"))[SAVE_MODE].0["text"], "both");
+    }
+
+    #[test]
     fn read_only_bags_can_not_take_promotions() {
         let (t, store, proj) = setup();
         store.put_bag(&BagInfo { name: "glossar".into(), readonly: true, ..Default::default() }).unwrap();
@@ -3008,7 +3048,7 @@ mod tests {
 
 /// brausa's info layer: `$:/brausa/bags` (title → the bags holding it, lowest first),
 /// `$:/brausa/writable` (bags a tiddler can be saved to) and the edit-mode line.
-fn info_tiddlers(bags_of: &BTreeMap<String, Vec<String>>, writable: &[String], default: &str) -> Vec<Fields> {
+fn info_tiddlers(bags_of: &BTreeMap<String, Vec<String>>, writable: &[String], default: &str, save_mode: &str, has_web: bool) -> Vec<Fields> {
     let index: serde_json::Map<String, Value> =
         bags_of.iter().filter(|(t, _)| !t.starts_with("$:/brausa/")).map(|(t, b)| (t.clone(), Value::String(stringify_list(b)))).collect();
     let f = |pairs: &[(&str, &str)]| -> Fields { pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect() };
@@ -3035,5 +3075,23 @@ fn info_tiddlers(bags_of: &BTreeMap<String, Vec<String>>, writable: &[String], d
         f(&[("title", "$:/brausa/bags"), ("type", "application/json"), ("text", &serde_json::to_string(&index).unwrap_or_default())]),
         f(&[("title", "$:/brausa/writable"), ("list", &stringify_list(writable)), ("text", "")]),
         f(&[("title", "$:/brausa/ui/EditTemplate/bag"), ("tags", "$:/tags/EditTemplate"), ("list-after", "$:/core/ui/EditTemplate/title"), ("text", &template)]),
+        f(&[("title", SAVE_MODE), ("text", save_mode)]),
+        f(&[("title", "$:/brausa/ui/ControlPanel/Saving"), ("tags", "$:/tags/ControlPanel/Saving"), ("caption", "brausa"), ("text", &save_panel(has_web))]),
     ]
+}
+
+/// The tab "brausa" under control panel → Saving: where this wiki saves.
+fn save_panel(has_web: bool) -> String {
+    let (title, local, both, url, note, no_web) = (
+        crate::tr!("Speichern dieses Wikis in brausa", "Saving this wiki in brausa"),
+        crate::tr!("Nur lokal (auf diesem Rechner)", "Local only (on this computer)"),
+        crate::tr!("Lokal und parallel im Web (an die Webadresse des Wikis)", "Local and in parallel on the web (to the wiki's web address)"),
+        crate::tr!("In der URL: das Wiki direkt unter seiner Webadresse öffnen, es speichert dort selbst", "In the URL: open the wiki right at its web address, it saves there itself"),
+        crate::tr!("Gilt ab dem nächsten Speichern; brausa übernimmt die Einstellung beim Abgleich.", "Applies from the next save; brausa takes the setting over when syncing."),
+        crate::tr!("Für „im Web“ und „in der URL“ braucht das Wiki in brausa eine Webadresse (Wiki bearbeiten).", "“On the web” and “in the URL” need a web address for the wiki in brausa (edit wiki)."),
+    );
+    format!(
+        "\\whitespace trim\n!! {title}\n\n<$radio tiddler=\"{SAVE_MODE}\" value=\"local\"> {local}</$radio>\n\n<$radio tiddler=\"{SAVE_MODE}\" value=\"both\"> {both}</$radio>\n\n<$radio tiddler=\"{SAVE_MODE}\" value=\"url\"> {url}</$radio>\n\n//{note}//{}",
+        if has_web { String::new() } else { format!("\n\n//{no_web}//") }
+    )
 }

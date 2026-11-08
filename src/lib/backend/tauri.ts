@@ -330,7 +330,8 @@ export class TauriBackend implements Backend {
       listen<{ url: string; loading: boolean }>('web-nav', (ev) => cb({ kind: 'nav', ...ev.payload })),
       listen<string>('web-title', (ev) => cb({ kind: 'title', title: ev.payload })),
       listen<{ url: string; path: string | null; success: boolean }>('web-download', (ev) => cb({ kind: 'download', ...ev.payload })),
-      listen<{ path: string; wiki: string | null; error: string | null }>('wiki-saved', (ev) => cb({ kind: 'saved', ...ev.payload }))
+      listen<{ path: string; wiki: string | null; error: string | null }>('wiki-saved', (ev) => cb({ kind: 'saved', ...ev.payload })),
+      listen<string>('web-newtab', (ev) => cb({ kind: 'newtab', url: ev.payload }))
     ]);
     return () => offs.forEach((off) => off());
   }

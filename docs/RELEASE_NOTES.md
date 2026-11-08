@@ -14,6 +14,13 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.24
+
+- **Tabs in the web panel:** links that want a new window (like external links in a wiki, Ctrl/Cmd or middle click, `window.open`) open as a tab. Next to "Scripts run" / "sealed off": the tab list (switch, close) and + for a new tab.
+- **Full screen for the browser:** the button next to ✕ shows the web panel over the whole window (Esc or the button again ends it).
+- **Where a wiki saves:** "local only", "local and on the web" (after each save the wiki also goes to its web address – through store.php in pieces if it has upload settings, else by PUT; a MultiWikiServer is synced) or "in the URL" ("Open wiki" shows the wiki at its web address, where it saves itself). Set in brausa (edit wiki) or in the wiki itself: control panel → Saving → brausa.
+- Tested in the app against store.php: a tiddler saved in the wiki was in the file on the server a few seconds later; a wiki link opened as a second tab.
+
 ### New in 0.23
 
 - **Viewer in the right column:** pictures, videos and sound now open in brausa's own viewer next to the list (like documents and the web), so list and file are visible together. A click on another file in the list shows that one. Moving the pointer over the viewer (on touch: tapping the handle) slides in a side menu at the right edge: large preview, open with the default app, open with …, show in Finder/file manager, tag, tray, copy path, trash.
@@ -162,6 +169,12 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.24: Tabs und Vollbild im Browser, wohin ein Wiki speichert**
+- **Tabs im Web-Fenster:** Links, die ein neues Fenster wollen (wie externe Links im Wiki, Strg/Cmd- oder Mittelklick, `window.open`), öffnen sich als Tab. Neben „Skripte laufen“ / „abgeschottet“: die Tab-Liste (wechseln, schließen) und + für einen neuen Tab.
+- **Vollbild für den Browser:** Der Knopf neben ✕ zeigt das Web-Fenster über das ganze Fenster (Esc oder der Knopf beendet es).
+- **Wohin ein Wiki speichert:** „nur lokal“, „lokal und im Web“ (nach jedem Speichern geht das Wiki auch an seine Webadresse – über store.php in Stücken, wenn es Upload-Einstellungen hat, sonst per PUT; ein MultiWikiServer wird abgeglichen) oder „in der URL“ („Wiki öffnen“ zeigt das Wiki direkt unter seiner Webadresse, dort speichert es selbst). Einstellbar in brausa (Wiki bearbeiten) oder im Wiki selbst: Kontrollpanel → Speichern → brausa.
+- In der App gegen store.php geprüft: Ein im Wiki gespeicherter Tiddler lag Sekunden später in der Datei auf dem Server; ein Link im Wiki öffnete sich als zweiter Tab.
 
 **Neu in 0.23: Viewer in der rechten Spalte, große Vorschau mit Zoom, Programme, „Öffnen mit …“, ohne Dubletten**
 - **Viewer in der rechten Spalte:** Bilder, Videos und Ton öffnen sich jetzt in brausas eigenem Viewer neben der Liste (wie Dokumente und das Web), Liste und Datei sind also gleichzeitig sichtbar. Ein Klick auf eine andere Datei in der Liste zeigt diese. Fährt der Zeiger über den Viewer (auf Touch: Tipp auf den Griff), erscheint ganz rechts ein Seitenmenü: große Vorschau, mit Standard-App öffnen, öffnen mit …, im Finder/Dateimanager zeigen, taggen, in die Ablage, Pfad kopieren, Papierkorb.

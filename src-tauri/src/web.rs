@@ -125,6 +125,10 @@ pub struct Web {
 const ADBLOCK: &str = include_str!("adblock.js");
 /// Lets marked text, pictures and links be dragged out of the panel (see webdrag.js).
 const DRAG: &str = include_str!("webdrag.js");
+/// Turns links for a new window into tabs of the panel.
+const TABS: &str = include_str!("webtabs.js");
+/// The address webtabs.js asks for a new tab with (never loaded).
+const NEW_TAB_HOST: &str = "brausa-newtab.invalid";
 /// The page as shown, or a TiddlyWiki as the complete wiki file it would save.
 const SAVE_PAGE: &str = r#"(() => {
   const w = window.$tw && $tw.wiki && $tw.wiki.renderTiddler ? $tw.wiki : null;
@@ -192,12 +196,28 @@ impl Web {
         }
         let window = app.get_window("main").ok_or_else(|| crate::tr!("Kein Hauptfenster", "No main window"))?;
         let data = app.path().app_data_dir().map_err(|e| e.to_string())?.join("web");
-        let (title, load) = (app.clone(), app.clone());
+        let (title, load, tab, nav_tab) = (app.clone(), app.clone(), app.clone(), app.clone());
         let me = app.clone();
         let mut builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url))
             .data_directory(data)
             // The address bar follows page loads (not navigations: a download is one, too).
-            .on_navigation(allowed)
+            .on_navigation(move |u| {
+                // A link that wants a new window (see webtabs.js): a tab instead, the page stays.
+                if u.host_str() == Some(NEW_TAB_HOST) {
+                    if let Some((_, target)) = u.query_pairs().find(|(k, _)| k == "u") {
+                        let _ = nav_tab.emit("web-newtab", target.to_string());
+                    }
+                    return false;
+                }
+                allowed(u)
+            })
+            // Links for a new window (target="_blank", window.open) open as a tab of the panel.
+            .on_new_window(move |url, _| {
+                if allowed(&url) {
+                    let _ = tab.emit("web-newtab", url.to_string());
+                }
+                tauri::webview::NewWindowResponse::Deny
+            })
             .on_document_title_changed(move |_, t| {
                 let _ = title.emit("web-title", t);
             })
@@ -232,7 +252,7 @@ impl Web {
                 }
                 true
             });
-        builder = builder.initialization_script(DRAG);
+        builder = builder.initialization_script(DRAG).initialization_script(TABS);
         if adblock {
             builder = builder.initialization_script(ADBLOCK);
         }

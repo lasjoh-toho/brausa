@@ -50,7 +50,9 @@ export type WebEvent =
   | { kind: 'title'; title: string }
   | { kind: 'download'; url: string; path: string | null; success: boolean }
   /** A page saved itself (a TiddlyWiki); `wiki`: the folder wiki it showed. */
-  | { kind: 'saved'; path: string; wiki: string | null; error: string | null };
+  | { kind: 'saved'; path: string; wiki: string | null; error: string | null }
+  /** A link asked for a new window (target="_blank", window.open): it opens as a tab. */
+  | { kind: 'newtab'; url: string };
 
 /** A project: a named collection of files and folders from anywhere (not a folder). */
 export interface ProjectInfo {
@@ -108,6 +110,8 @@ export interface WikiRecipe {
   webBags?: string[] | null;
   /** The plugins in this wiki, chosen in the plugin overview; unset: all bundled ones (if `plugins`). */
   pluginSet?: string[] | null;
+  /** Where the wiki saves: here only, here and on to its web address, or at its web address itself. Unset: "both" for a wiki linked to a MultiWikiServer, else "local". */
+  saveMode?: 'local' | 'both' | 'url' | null;
 }
 
 /** A tiddler that is new or different in the web version. */
@@ -184,6 +188,8 @@ export interface WikiSyncReport {
   pushed: number;
   maps: [string, string][];
   warnings: string[];
+  /** Where the wiki saves, chosen anew in its control panel. */
+  saveMode?: 'local' | 'both' | 'url';
 }
 
 /** What a background reconcile changed. */

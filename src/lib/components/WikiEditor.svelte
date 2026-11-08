@@ -137,6 +137,14 @@
         <label class="grow">{t('wiki.webPassword')} <input type="password" bind:value={webPassword} placeholder={hasPassword ? t('wiki.webPasswordStored') : t('wiki.optional')} autocomplete="new-password" /></label>
       </div>
       <p class="muted">{t('wiki.webNote')}</p>
+      <!-- Also chosen in the wiki: control panel → Saving → brausa. -->
+      <div class="row savemode">
+        <span>{t('wiki.saveTo')}</span>
+        {#each ['local', 'both', 'url'] as const as m (m)}
+          <label><input type="radio" name="savemode" value={m} checked={(r.saveMode ?? 'local') === m} onchange={() => (r.saveMode = m)} />{t(`wikis.saveMode.${m}`)}</label>
+        {/each}
+      </div>
+      <p class="muted">{t('wiki.saveToNote')}</p>
     {/if}
 
     {#if r.pluginSet}
@@ -376,5 +384,15 @@
   }
   .danger {
     color: var(--danger);
+  }
+  .savemode {
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .savemode label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 </style>
