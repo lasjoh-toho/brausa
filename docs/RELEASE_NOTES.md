@@ -14,12 +14,21 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
-### New in 0.23
+### New in 0.24
 
 - **Tabs in the web panel:** links that want a new window (like external links in a wiki, Ctrl/Cmd or middle click, `window.open`) open as a tab. Next to "Scripts run" / "sealed off": the tab list (switch, close) and + for a new tab.
 - **Full screen for the browser:** the button next to ✕ shows the web panel over the whole window (Esc or the button again ends it).
 - **Where a wiki saves:** "local only", "local and on the web" (after each save the wiki also goes to its web address – through store.php in pieces if it has upload settings, else by PUT; a MultiWikiServer is synced) or "in the URL" ("Open wiki" shows the wiki at its web address, where it saves itself). Set in brausa (edit wiki) or in the wiki itself: control panel → Saving → brausa.
 - Tested in the app against store.php: a tiddler saved in the wiki was in the file on the server a few seconds later; a wiki link opened as a second tab.
+
+### New in 0.23
+
+- **Viewer in the right column:** pictures, videos and sound now open in brausa's own viewer next to the list (like documents and the web), so list and file are visible together. A click on another file in the list shows that one. Moving the pointer over the viewer (on touch: tapping the handle) slides in a side menu at the right edge: large preview, open with the default app, open with …, show in Finder/file manager, tag, tray, copy path, trash.
+- **Large preview:** opens below the menu band; only when you zoom further does the whole top row turn to glass. Close button top right, double click closes. Scrolling and swiping step through the selection (or all files shown); pinching and dragging left/right with the mouse zoom, up/down moves a zoomed picture. Keys: arrows, + / − / 0.
+- **Programs in the sidebar:** "Programs" lists the installed programs sorted by function (office, images, music & video, internet …) as a drill-down. A program can sit under several functions; the pencil changes them, and you can add your own functions. The folder button opens the programs folder; a click starts the program. On macOS an `.app` opened in the file view starts too.
+- **Right click:** "Open with …" lists the matching programs first (by file type, then those used before) and all others below, with a search field. "Go to folder" on a search hit below the current folder narrows the search to that hit's folder.
+- **Filter "No duplicates":** in the kind menu (tick) – of identical files only one is shown, the one a cleanup would keep.
+- **Web wikis keep their look:** plugins and themes brausa already had (from another wiki, or bundled) did not come on for the next wiki taken from the web, and plugins taken into a wiki with its own plugin list stayed off. Now every plugin the web wiki uses is switched on for it. Checked against szen.io/Geschichte (TiddlyWiki 5.3.6, 52 plugins, 19 own stylesheets).
 
 ### New in 0.22
 
@@ -161,11 +170,19 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 
 ### Was drin ist
 
-**Neu in 0.23: Tabs und Vollbild im Browser, wohin ein Wiki speichert**
+**Neu in 0.24: Tabs und Vollbild im Browser, wohin ein Wiki speichert**
 - **Tabs im Web-Fenster:** Links, die ein neues Fenster wollen (wie externe Links im Wiki, Strg/Cmd- oder Mittelklick, `window.open`), öffnen sich als Tab. Neben „Skripte laufen“ / „abgeschottet“: die Tab-Liste (wechseln, schließen) und + für einen neuen Tab.
 - **Vollbild für den Browser:** Der Knopf neben ✕ zeigt das Web-Fenster über das ganze Fenster (Esc oder der Knopf beendet es).
 - **Wohin ein Wiki speichert:** „nur lokal“, „lokal und im Web“ (nach jedem Speichern geht das Wiki auch an seine Webadresse – über store.php in Stücken, wenn es Upload-Einstellungen hat, sonst per PUT; ein MultiWikiServer wird abgeglichen) oder „in der URL“ („Wiki öffnen“ zeigt das Wiki direkt unter seiner Webadresse, dort speichert es selbst). Einstellbar in brausa (Wiki bearbeiten) oder im Wiki selbst: Kontrollpanel → Speichern → brausa.
 - In der App gegen store.php geprüft: Ein im Wiki gespeicherter Tiddler lag Sekunden später in der Datei auf dem Server; ein Link im Wiki öffnete sich als zweiter Tab.
+
+**Neu in 0.23: Viewer in der rechten Spalte, große Vorschau mit Zoom, Programme, „Öffnen mit …“, ohne Dubletten**
+- **Viewer in der rechten Spalte:** Bilder, Videos und Ton öffnen sich jetzt in brausas eigenem Viewer neben der Liste (wie Dokumente und das Web), Liste und Datei sind also gleichzeitig sichtbar. Ein Klick auf eine andere Datei in der Liste zeigt diese. Fährt der Zeiger über den Viewer (auf Touch: Tipp auf den Griff), erscheint ganz rechts ein Seitenmenü: große Vorschau, mit Standard-App öffnen, öffnen mit …, im Finder/Dateimanager zeigen, taggen, in die Ablage, Pfad kopieren, Papierkorb.
+- **Große Vorschau:** öffnet sich unter dem Menüband; erst wenn weiter hineingezoomt wird, wird die ganze obere Zeile zu Glas. Schließen-Knopf oben rechts, Doppelklick schließt. Scrollen und Wischen blättern durch die Auswahl (oder alle gezeigten Dateien); Pinchen und mit der Maus nach rechts/links ziehen zoomt, hoch/runter verschiebt ein gezoomtes Bild. Tasten: Pfeile, + / − / 0.
+- **Programme im Seitenmenü:** „Programme“ zeigt die installierten Programme nach Funktion sortiert (Büro, Bild & Grafik, Musik & Video, Internet …) als Drilldown. Ein Programm kann unter mehreren Funktionen stehen; der Stift ändert sie, eigene Funktionen lassen sich anlegen. Der Ordner-Knopf öffnet den Programme-Ordner, ein Klick startet das Programm. Unter macOS startet auch eine `.app`, die in der Dateiansicht geöffnet wird.
+- **Rechtsklick:** „Öffnen mit …“ zeigt zuerst die passenden Programme (nach Dateityp, dann die zuletzt benutzten) und darunter alle anderen, mit Suchfeld. „Zum Ordner“ an einem Suchtreffer unterhalb des aktuellen Ordners schränkt die Suche auf dessen Ordner ein.
+- **Filter „Keine Dubletten“:** im Typ-Menü per Haken – von gleichen Dateien wird nur eine gezeigt, die, die ein Aufräumen behalten würde.
+- **Web-Wikis behalten ihr Aussehen:** Plugins und Themes, die brausa schon hatte (aus einem anderen Wiki oder mitgeliefert), wurden für das nächste aus dem Web übernommene Wiki nicht eingeschaltet, und Plugins in einem Wiki mit eigener Plugin-Liste blieben aus. Jetzt wird jedes Plugin, das das Web-Wiki nutzt, für dieses Wiki eingeschaltet. Geprüft an szen.io/Geschichte (TiddlyWiki 5.3.6, 52 Plugins, 19 eigene Stylesheets).
 
 **Neu in 0.22: Plugin-Überblick pro Wiki, Speichern über store.php, TiddlyWiki 5.4.1**
 - **Plugin-Überblick:** Wiki-Einstellungen → Plugins zeigt alle Plugins in brausa – mitgelieferte und eigene (aus Web-Wikis übernommen oder mit „Plugin hinzufügen …“ aus einer Plugin-Datei) – mit Version, Beschreibung und Herkunft, und pro Wiki einen Schalter: welche Plugins dieses Wiki verwendet. Eigene Plugins lassen sich wieder entfernen.

@@ -89,7 +89,7 @@
   </div>
 {/if}
 
-<header data-tauri-drag-region class="toolbar" class:compact use:fit class:bare={!app.sidebarOpen} class:over={!!app.preview} class:light={accent?.light} style:--tint={accent?.color}>
+<header data-tauri-drag-region class="toolbar" class:compact use:fit class:bare={!app.sidebarOpen} class:over={!!app.preview} class:light={accent?.light && app.previewUnderBar} style:--tint={accent?.color}>
   {#if !app.sidebarOpen}
     <button class="btn icon menu-btn" onclick={() => app.toggleSidebar()} title={t('toolbar.showSidebar')} aria-label={t('toolbar.showSidebar')}><Icon name="menu" size={15} /></button>
   {/if}
@@ -178,12 +178,12 @@
         <Icon name="stream" size={14} /><span class="lbl">{t('toolbar.modeFlat')}</span>
       </button>
     </div>
-    <label class="btn types" class:on={!!app.typeFilter || (app.showSystem && app.systemAllowed) || app.contentSearch} title={t('toolbar.typeHint')}>
+    <label class="btn types" class:on={!!app.typeFilter || (app.showSystem && app.systemAllowed) || app.contentSearch || app.noDupes} title={t('toolbar.typeHint')}>
       <span class="icon-only"><Icon name={app.contentSearch ? 'search' : 'filter'} size={13} /></span>
       {#if app.contentSearch}
         <span class="lbl two">{t('toolbar.searchIn')}<br />{t('toolbar.inDocuments')}{app.typeFilter ? ` · ${typeLabel}` : ''}</span>
       {:else}
-        <span class="lbl">{typeLabel}{app.showSystem && app.systemAllowed ? ' + ' + t('toolbar.system') : ''}</span>
+        <span class="lbl">{typeLabel}{app.showSystem && app.systemAllowed ? ' + ' + t('toolbar.system') : ''}{app.noDupes ? ' · ' + t('toolbar.noDupesShort') : ''}</span>
       {/if}
       <select
         value={app.typeFilter ?? ''}
@@ -192,6 +192,9 @@
           if (v === '__system') {
             ev.currentTarget.value = app.typeFilter ?? '';
             app.setShowSystem(!app.showSystem);
+          } else if (v === '__nodupes') {
+            ev.currentTarget.value = app.typeFilter ?? '';
+            app.setNoDupes(!app.noDupes);
           } else if (v === '__content') {
             ev.currentTarget.value = app.typeFilter ?? '';
             app.setContentSearch(!app.contentSearch);
@@ -202,6 +205,7 @@
         <option value="medien">{t('toolbar.media')}</option>
         {#each CATEGORIES as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
         <option disabled>──────</option>
+        <option value="__nodupes">{app.noDupes ? '✓ ' : ''}{t('toolbar.noDupes')}</option>
         <option value="__content">{app.contentSearch ? '✓ ' : ''}{t('toolbar.searchDocs')}</option>
         {#if app.systemAllowed}
           <option value="__system">{app.showSystem ? '✓ ' : ''}{t('toolbar.showSystem')}</option>
@@ -324,11 +328,10 @@
       border-color 0.35s,
       color 0.35s;
   }
-  /* While previewing, the image flows underneath: the toolbar becomes glass tinted by the image. */
+  /* While previewing, the toolbar sits on the dark preview; once the picture is zoomed under it,
+     the preview lays tinted glass under the whole top row (see Preview). */
   .toolbar.over {
-    background: color-mix(in srgb, var(--tint, #000) 35%, transparent);
-    backdrop-filter: blur(24px) saturate(1.4);
-    -webkit-backdrop-filter: blur(24px) saturate(1.4);
+    background: transparent;
     border-color: transparent;
     color: #fff;
   }

@@ -41,6 +41,9 @@ type Snapshot = string;
 /** Opened in brausa's reader instead of the default app (snippets need it). */
 export const READABLE = new Set(['pdf', 'html', 'htm', 'md', 'markdown', 'txt', 'csv', 'json', 'xml', 'yml', 'yaml', 'log', 'tex', 'rtf']);
 
+/** File kinds brausa's own viewer shows in the web panel (besides the readable documents). */
+export const VIEWABLE = new Set(['image', 'video', 'audio', 'text']);
+
 const HISTORY = 100;
 
 class BoardState {

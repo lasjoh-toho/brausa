@@ -262,6 +262,8 @@ class AppState {
   children = new SvelteMap<string, Entry[]>();
 
   preview = $state<{ entry: Entry; from: DOMRect | null } | null>(null);
+  /** The large preview is zoomed so far that the picture lies under the menu band. */
+  previewUnderBar = $state(false);
 
   /** Large view of the first selected file, growing out of its tile. */
   openPreview() {
@@ -301,7 +303,7 @@ class AppState {
   renaming = $state<string | null>(null);
   /** Entries in the batch rename dialog (null: closed). */
   batchRenaming = $state<Entry[] | null>(null);
-  menu = $state<{ x: number; y: number; entry: Entry | null } | null>(null);
+  menu = $state<{ x: number; y: number; entry: Entry | null; withOpen?: boolean } | null>(null);
   /** Open confirmation dialog (see ask()). */
   dialog = $state<{ title: string; text: string; ok: string; danger?: boolean; resolve: (yes: boolean) => void } | null>(null);
 
@@ -345,9 +347,42 @@ class AppState {
     JSON.stringify([this.cwd, this.project, this.view, this.recursive, this.searchMode === 'filter' ? this.search : '', this.typeFilter, this.dateFilter, this.funnel, this.sort, this.desc, !!this.dupes])
   );
 
+  /** "Keine Dubletten": of files with the same content only one is shown (the one a cleanup would keep). */
+  noDupes = $state<boolean>(store.get('noDupes', false));
+  /** Copies hidden by it (paths), worked out in the background. */
+  dupeHidden = $state.raw<Set<string>>(new Set());
+  private dupeSeq = 0;
+  private dupeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  setNoDupes(on: boolean) {
+    this.noDupes = on;
+    store.set('noDupes', on);
+    if (!on) this.dupeHidden = new Set();
+    else this.scheduleDupeHide();
+  }
+
+  /** Look for copies among the files shown (after the listing settles). */
+  scheduleDupeHide() {
+    clearTimeout(this.dupeTimer);
+    if (!this.noDupes) return;
+    const files = this.undated.filter((e) => e.kind === 'file' && e.size > 0);
+    const seq = ++this.dupeSeq;
+    this.dupeTimer = setTimeout(async () => {
+      try {
+        const groups = await this.backend.findDuplicates(files.map((e) => e.path));
+        if (seq !== this.dupeSeq) return;
+        const by = new Map(files.map((e) => [e.path, e]));
+        this.dupeHidden = new Set(extras(groups.map((g) => g.flatMap((p) => by.get(p) ?? []))).map((e) => e.path));
+      } catch (e) {
+        if (seq === this.dupeSeq) this.toast(String(e).replace(/^Error: /, ''), true);
+      }
+    }, 250);
+  }
+
   /** What the canvas shows. */
   visible = $derived.by(() => {
-    const dated = this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated;
+    let dated = this.dateFilter ? this.undated.filter((e) => e.kind === 'file' && inRange(e, this.dateFilter!)) : this.undated;
+    if (this.noDupes && !this.dupes && this.dupeHidden.size) dated = dated.filter((e) => !this.dupeHidden.has(e.path));
     if (!this.dupes) return dated;
     const keep = new Set(this.dupes.flat());
     return dated.filter((e) => keep.has(e.path));
@@ -796,6 +831,12 @@ class AppState {
     await this.refresh();
   }
 
+  /** A search hit's folder: the search goes on there only, with the hit selected. */
+  async goToFolderOf(e: Entry) {
+    await this.navigate(dirname(e.path));
+    this.select(e.path, 'replace');
+  }
+
   back() {
     const p = this.history.pop();
     if (p) {
@@ -1039,7 +1080,8 @@ class AppState {
 
   /** Filters narrowing the view right now (the empty view offers to remove them). */
   activeFilters = $derived.by(() => {
-    const f: { kind: 'search' | 'type' | 'date' | 'funnel'; label: string }[] = [];
+    const f: { kind: 'search' | 'type' | 'date' | 'funnel' | 'nodupes'; label: string }[] = [];
+    if (this.noDupes && this.dupeHidden.size) f.push({ kind: 'nodupes', label: t('toolbar.noDupes') });
     if (this.searchMode === 'filter' && this.search.trim()) f.push({ kind: 'search', label: this.search.trim() });
     if (this.typeFilter) f.push({ kind: 'type', label: this.typeFilter });
     if (this.dateFilter) f.push({ kind: 'date', label: '' });
@@ -1047,8 +1089,9 @@ class AppState {
     return f;
   });
 
-  clearFilter(kind: 'search' | 'type' | 'date' | 'funnel') {
-    if (kind === 'search') this.search = '';
+  clearFilter(kind: 'search' | 'type' | 'date' | 'funnel' | 'nodupes') {
+    if (kind === 'nodupes') this.setNoDupes(false);
+    else if (kind === 'search') this.search = '';
     else if (kind === 'type') this.setTypeFilter(null);
     else if (kind === 'date') this.setDateFilter(null);
     else this.setFunnel(null);
@@ -1420,14 +1463,16 @@ class AppState {
   }
 
   async open(e: Entry) {
+    // A program (macOS bundle) starts instead of opening as a folder.
+    if (e.kind === 'dir' && /\.app$/i.test(e.name) && !inArchive(e.path)) return this.openExternal(e);
     if (e.kind === 'dir') return this.navigate(e.path);
     // Archives open like folders (read only).
     if (isArchive(e.path) && !inArchive(e.path)) return this.navigate(archiveRoot(e.path));
     // Documents brausa can show open in the side panel (snippets go from there onto the map).
     if (!inArchive(e.path)) {
       if (e.ext === 'html' || e.ext === 'htm') return (await import('./web.svelte')).web.openLocal(e.path);
-      const { board, READABLE } = await import('./board.svelte');
-      if (READABLE.has(e.ext) || category(e.ext) === 'text') return board.openReader({ kind: 'file', path: e.path, name: e.name, ext: e.ext });
+      const { board, READABLE, VIEWABLE } = await import('./board.svelte');
+      if (READABLE.has(e.ext) || VIEWABLE.has(category(e.ext) ?? '')) return board.openReader({ kind: 'file', path: e.path, name: e.name, ext: e.ext });
     }
     return this.openExternal(e);
   }

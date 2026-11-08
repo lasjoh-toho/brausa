@@ -11,6 +11,7 @@
   import Icon from './Icon.svelte';
   import { basename } from '../core/paths';
   import Settings from './Settings.svelte';
+  import AppsSection from './AppsSection.svelte';
   import { updates } from '../state/updates.svelte';
   import { t, tn, loc } from '../i18n/index.svelte';
 
@@ -185,6 +186,8 @@
   {:else}
     <div class="none-media">{t('sidebar.noMedia')}</div>
   {/each}
+
+  <AppsSection />
 
   <div class="section with-action" title={t('sidebar.projectsEmpty')}>
     {t('sidebar.projects')}

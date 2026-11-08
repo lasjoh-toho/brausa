@@ -1387,8 +1387,27 @@ impl Store {
                     self.put_tiddler(OWN_PLUGINS, f)?;
                 }
             }
-            if !r.bags.iter().any(|b| b == OWN_PLUGINS) {
-                r.bags.insert(0, OWN_PLUGINS.into());
+        }
+        // Every plugin and theme the web wiki uses that brausa has (bundled, just taken, or taken
+        // from another wiki before) is switched on for this wiki. Without this a plugin already
+        // in brausa never reached a second wiki, and one taken into a wiki with its own plugin
+        // list stayed off: the wiki then lacked its look.
+        let used: Vec<String> = web.iter().filter(|(t, f)| f.contains_key("plugin-type") && !crate::webwiki::ephemeral(t)).map(|(t, _)| t.clone()).collect();
+        if !used.is_empty() {
+            let all = self.plugin_overview()?.plugins;
+            let mut set = self.wiki_plugins(&r, &all);
+            let before = set.clone();
+            for t in used.into_iter().filter(|t| all.iter().any(|p| &p.title == t)) {
+                if !set.contains(&t) {
+                    set.push(t);
+                }
+            }
+            let own_missing = self.bag_dir(OWN_PLUGINS)?.exists() && !r.bags.iter().any(|b| b == OWN_PLUGINS) && set.iter().any(|t| all.iter().any(|p| &p.title == t && p.source == "own"));
+            if set != before || own_missing {
+                if own_missing {
+                    r.bags.insert(0, OWN_PLUGINS.into());
+                }
+                r.plugin_set = Some(set);
                 self.put_recipe(r)?;
             }
         }
@@ -2383,6 +2402,18 @@ mod tests {
         assert!(store.bag_tiddlers("web-W").unwrap().contains_key("Neu"));
         assert!(!store.bag_tiddlers(own.bags.last().unwrap()).unwrap().contains_key("Neu"));
         assert!(store.bag_tiddlers(OWN_PLUGINS).unwrap().contains_key("$:/plugins/x/y"));
+        assert!(own.plugin_set.as_ref().unwrap().contains(&"$:/plugins/x/y".to_string()), "the plugin is on for this wiki");
+        assert!(store.merged(&own).unwrap().contains_key("$:/plugins/x/y"));
+        // A second wiki from the same address: the plugin is in brausa already (not offered
+        // again) and still comes on for it.
+        let mut r2 = recipe(&store, "W2", &proj, Target { kind: "folder".into(), path: proj.join("wiki2").display().to_string() });
+        r2.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/wiki.html"), user: "ich".into() });
+        store.put_recipe(r2).unwrap();
+        let p2 = store.web_fetch_as("W2", None).unwrap();
+        assert!(p2.plugins.iter().all(|p| p.have));
+        store.web_apply("W2", &["Neu".into()], &[]).unwrap();
+        let w2 = store.recipe("W2").unwrap();
+        assert!(store.merged(&w2).unwrap().contains_key("$:/plugins/x/y"), "a plugin brausa has reaches a second wiki");
         // The web bag lies above lokal, below the wiki's own bag.
         let mut r = store.recipe("W").unwrap();
         r.local = true;

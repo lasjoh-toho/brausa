@@ -269,6 +269,12 @@ export interface Backend {
   /** Move to the system trash (inside an archive: remove from it). `moved` lists the removed paths. */
   trash(paths: string[]): Promise<TransferResult>;
   openDefault(path: string): Promise<void>;
+  /** Installed programs, by name. */
+  apps(): Promise<AppInfo[]>;
+  /** The folders programs live in (/Applications, start menus, …). */
+  appFolders(): Promise<string[]>;
+  /** Start a program, with files to open in it (none: just start it). */
+  launchApp(program: string, paths: string[]): Promise<void>;
   reveal(path: string): Promise<void>;
   /** Watch one folder; `onChange` fires with changed paths. Returns an unsubscribe function. */
   watch(path: string, recursive: boolean): Promise<void>;
@@ -400,4 +406,17 @@ export interface WebDrag {
   src?: string;
   alt?: string;
   href?: string;
+}
+
+/** An installed program. */
+export interface AppInfo {
+  name: string;
+  /** Bundle, shortcut or desktop file. */
+  path: string;
+  /** Guessed category keys (office, writing, graphics, media, web, dev, utilities, games, learn, system). */
+  categories: string[];
+  /** Extensions it says it opens. */
+  exts: string[];
+  /** File kinds it says it opens: image, video, audio, text, pdf, web, any. */
+  kinds: string[];
 }
