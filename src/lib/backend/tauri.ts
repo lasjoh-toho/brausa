@@ -20,6 +20,7 @@ import type {
   OverlayResolution,
   WikiBag,
   WebPreview,
+  WebUploadReport,
   MwsReport,
   PluginOverview,
   WikiHit,
@@ -424,7 +425,7 @@ export class TauriBackend implements Backend {
   }
 
   wikiWebUpload(name: string) {
-    return invoke<void>('tw_web_upload', { name });
+    return invoke<WebUploadReport>('tw_web_upload', { name });
   }
 
   wikiWebPassword(name: string, password: string | null) {

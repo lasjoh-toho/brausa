@@ -35,6 +35,8 @@ class WikiState {
       );
       this.maps = perProject.flat();
       this.overlays = await app.backend.wikiOverlays();
+      // Uploads still waiting from last time (brausa was closed offline).
+      this.scheduleRetry();
     } catch (e) {
       app.toast(String(e), true);
     }
@@ -204,19 +206,92 @@ class WikiState {
     }
   }
 
-  /** The wiki saved itself in the web panel: into the bags, and on to its MultiWikiServer (gathered for a moment, a wiki saves often). */
+  /** The wiki saved itself in the web panel: into the bags, and on to its MultiWikiServer or, if
+   * switched on, to its web file (gathered for a moment, a wiki saves often). */
   private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  afterSave(name: string) {
+  afterSave(name: string, delay = 3000) {
     clearTimeout(this.saveTimers.get(name));
     this.saveTimers.set(
       name,
       setTimeout(async () => {
         this.saveTimers.delete(name);
-        if (!(await app.backend.wikiMwsLinked(name).catch(() => false))) return;
-        await this.sync(name);
-        await this.mwsSync(name, true);
-      }, 3000)
+        if (await app.backend.wikiMwsLinked(name).catch(() => false)) {
+          await this.sync(name, true);
+          await this.mwsSync(name, true);
+        } else if (this.recipes.find((x) => x.name === name)?.web?.auto) {
+          await this.sync(name, true);
+          await this.webAutoUpload(name);
+        }
+      }, delay)
     );
+  }
+
+  /** Wikis whose automatic upload failed (offline, server away): tried again later. */
+  private webPending = new Set<string>(store.get<string[]>('webPending', []));
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryDelay = 60_000;
+
+  constructor() {
+    if (typeof window !== 'undefined')
+      window.addEventListener('online', () => {
+        this.retryDelay = 60_000;
+        void this.retryPending();
+      });
+  }
+
+  private setPending(name: string, on: boolean) {
+    if (on === this.webPending.has(name)) return;
+    if (on) this.webPending.add(name);
+    else this.webPending.delete(name);
+    store.set('webPending', [...this.webPending]);
+  }
+
+  /** Try the waiting uploads again: soon, then less and less often (at most every 15 minutes). */
+  private scheduleRetry() {
+    if (this.retryTimer || !this.webPending.size) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.retryPending();
+    }, this.retryDelay);
+    this.retryDelay = Math.min(this.retryDelay * 2, 15 * 60_000);
+  }
+
+  /** Back online, or brausa started: upload what is still waiting. */
+  async retryPending() {
+    for (const name of [...this.webPending]) {
+      if (!this.recipes.find((x) => x.name === name)?.web?.auto) this.setPending(name, false);
+      else await this.webAutoUpload(name);
+    }
+  }
+
+  /** Upload the changes by themselves; what others saved comes into the wiki. Quiet unless something happened. */
+  async webAutoUpload(name: string) {
+    if (this.webBusy) {
+      // A comparison or upload is running: a moment later.
+      this.afterSave(name, 5000);
+      return;
+    }
+    this.webBusy = name;
+    try {
+      const r = await app.backend.wikiWebUpload(name);
+      this.setPending(name, false);
+      this.retryDelay = 60_000;
+      if (r.pulled.length) {
+        const n = await app.backend.wikiWebApply(name, r.pulled, []);
+        await this.load();
+        this.webBusy = null;
+        await this.sync(name, true);
+        if (n) app.toast(t('wikis.webPulled', { n, name }));
+      }
+      if (r.conflicts.length) app.toast(t('wikis.webConflicts', { list: r.conflicts.join(', ') }), true);
+    } catch (e) {
+      const first = !this.webPending.has(name);
+      this.setPending(name, true);
+      if (first) app.toast(t('wikis.webLater', { name, error: String(e).replace(/^Error: /, '') }), true);
+      this.scheduleRetry();
+    } finally {
+      this.webBusy = null;
+    }
   }
 
   /** The globe at a wiki: a MultiWikiServer wiki syncs both ways, any other compares with its web version. */
@@ -262,8 +337,16 @@ class WikiState {
       await this.sync(s.name);
       if (upload) {
         this.webBusy = s.name;
-        await app.backend.wikiWebUpload(s.name);
-        app.toast(t('wikis.webUploaded', { name: s.name }));
+        const r = await app.backend.wikiWebUpload(s.name);
+        app.toast(r.merged ? t('wikis.webMerged', { n: r.sent, name: s.name }) : t('wikis.webUploaded', { name: s.name }));
+        if (r.pulled.length) {
+          const n = await app.backend.wikiWebApply(s.name, r.pulled, []);
+          await this.load();
+          this.webBusy = null;
+          await this.sync(s.name, true);
+          if (n) app.toast(t('wikis.webPulled', { n, name: s.name }));
+        }
+        if (r.conflicts.length) app.toast(t('wikis.webConflicts', { list: r.conflicts.join(', ') }), true);
       }
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
@@ -278,7 +361,8 @@ class WikiState {
     if (s) await app.backend.wikiWebDiscard(s.name).catch(() => {});
   }
 
-  async sync(name: string) {
+  /** `quiet`: only say something when tiddlers came from the wiki, went, or clashed. */
+  async sync(name: string, quiet = false) {
     if (this.syncing) return;
     this.syncing = name;
     try {
@@ -287,7 +371,7 @@ class WikiState {
       const parts = [t('wikis.pushed', { n: r.pushed })];
       if (r.pulled.length) parts.push(t('wikis.pulled', { n: r.pulled.length }));
       if (r.deleted.length) parts.push(t('wikis.deleted', { n: r.deleted.length }));
-      app.toast(t('wikis.synced', { name, parts: parts.join(' · ') }));
+      if (!quiet || r.pulled.length || r.deleted.length) app.toast(t('wikis.synced', { name, parts: parts.join(' · ') }));
       if (r.conflicts.length) app.toast(t('wikis.conflicts', { list: r.conflicts.join(', ') }), true);
       for (const w of r.warnings) app.toast(w, true);
       for (const [root, id] of r.maps) if (board.root === root && board.map?.id === id) await board.load(id);

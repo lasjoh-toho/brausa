@@ -14,6 +14,13 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.24
+
+- **Saving to the web without overwriting others:** with store.php 2.2 (store_TW) brausa uploads only the tiddlers that changed, merged into what is on the server now. Whatever someone else saved there in the meantime (another browser, another device) stays, and comes into the wiki afterwards. If both changed the same tiddler, the web keeps its version and yours lies next to it as "Title (Konflikt …)". With an older store.php brausa uploads the whole wiki as before.
+- **"Save to the web automatically"** (per wiki, in the wiki settings under "On the web", needs the upload password): after each save in the wiki brausa uploads the changes a few seconds later and brings in what others saved. If the server cannot be reached, it tries again later (also after a restart). Notes in "lokal" and tagged lokal/privat stay on this computer.
+- The bundled "Chunked Upload" plugin is now version 1.2 and saves per tiddler too. Order for switching over: first store.php 2.2 on the server, then the plugin in the web wikis, then brausa 0.24. Every mix keeps working.
+- Tested against the real store.php 2.2 and 2.1 on PHP 8.3: up to four browsers saving at once, conflict copies, deletes, and brausa between them.
+
 ### New in 0.23
 
 - **Viewer in the right column:** pictures, videos and sound now open in brausa's own viewer next to the list (like documents and the web), so list and file are visible together. A click on another file in the list shows that one. Moving the pointer over the viewer (on touch: tapping the handle) slides in a side menu at the right edge: large preview, open with the default app, open with …, show in Finder/file manager, tag, tray, copy path, trash.
@@ -162,6 +169,12 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.24: Ins Web speichern, ohne andere zu überschreiben; automatisch ins Web speichern**
+- **Ins Web speichern, ohne andere zu überschreiben:** Mit store.php 2.2 (store_TW) lädt brausa nur die geänderten Tiddler hoch und baut sie in den aktuellen Stand auf dem Server ein. Was jemand anders dort inzwischen gespeichert hat (anderer Browser, anderes Gerät), bleibt erhalten und kommt danach ins Wiki. Haben beide denselben Tiddler geändert, bleibt im Web die dortige Fassung, deine liegt als „Titel (Konflikt …)“ daneben. Mit einer älteren store.php lädt brausa wie bisher das ganze Wiki hoch.
+- **„Automatisch ins Web speichern“** (pro Wiki, in den Wiki-Einstellungen unter „Im Web“, braucht das Passwort zum Hochladen): Nach jedem Speichern im Wiki lädt brausa die Änderungen nach ein paar Sekunden hoch und holt, was andere gespeichert haben. Ist der Server nicht erreichbar, versucht brausa es später noch einmal (auch nach einem Neustart). Notizen in „lokal“ und mit Tag lokal/privat bleiben auf diesem Rechner.
+- Das mitgelieferte Plugin „Chunked Upload“ ist jetzt Version 1.2 und speichert ebenfalls pro Tiddler. Reihenfolge beim Umstieg: erst store.php 2.2 auf den Server, dann das Plugin in den Web-Wikis, dann brausa 0.24. Jede Mischung funktioniert weiter.
+- Geprüft gegen die echte store.php 2.2 und 2.1 unter PHP 8.3: bis zu vier Browser speichern gleichzeitig, Konfliktkopien, Löschen, und brausa dazwischen.
 
 **Neu in 0.23: Viewer in der rechten Spalte, große Vorschau mit Zoom, Programme, „Öffnen mit …“, ohne Dubletten**
 - **Viewer in der rechten Spalte:** Bilder, Videos und Ton öffnen sich jetzt in brausas eigenem Viewer neben der Liste (wie Dokumente und das Web), Liste und Datei sind also gleichzeitig sichtbar. Ein Klick auf eine andere Datei in der Liste zeigt diese. Fährt der Zeiger über den Viewer (auf Touch: Tipp auf den Griff), erscheint ganz rechts ein Seitenmenü: große Vorschau, mit Standard-App öffnen, öffnen mit …, im Finder/Dateimanager zeigen, taggen, in die Ablage, Pfad kopieren, Papierkorb.
