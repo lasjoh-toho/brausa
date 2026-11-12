@@ -659,7 +659,7 @@ async fn tw_web_discard(w: State<'_, Wikis>, name: String) -> CmdResult<()> {
 
 /// Upload the wiki as a new version of its web file (needs the stored password).
 #[tauri::command]
-async fn tw_web_upload(app: AppHandle, name: String) -> CmdResult<()> {
+async fn tw_web_upload(app: AppHandle, name: String) -> CmdResult<tw::WebUploadReport> {
     let a = app.clone();
     tauri::async_runtime::spawn_blocking(move || a.state::<Wikis>().0.lock().map_err(err)?.web_upload(&name).map_err(err)).await.map_err(err)?
 }

@@ -6,7 +6,7 @@ import type { SmartFolder } from '../core/smart';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
-import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WebPreview,
+import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WebPreview, WebUploadReport,
   MwsReport, PluginInfo, PluginOverview, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
 import { WALK_LIMIT, type AppInfo } from './types';
 import { addCard, addLink, newMap, type NoteCard, type ProjectMap } from '../core/map';
@@ -817,7 +817,7 @@ export class DemoBackend implements Backend {
   async wikiWebTexts() {
     return { webText: '', localText: '' };
   }
-  async wikiWebUpload() {
+  async wikiWebUpload(): Promise<WebUploadReport> {
     throw new Error(t('demo.webAppOnly'));
   }
   async wikiWebPassword() {}

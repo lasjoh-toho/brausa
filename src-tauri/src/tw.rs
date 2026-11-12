@@ -646,19 +646,25 @@ fn store_php(t: &StoreTarget, action: &str, fields: &[(&str, String)], data: Opt
     }
 }
 
-/// Save a wiki through store.php 2.1 the way the Chunked Upload plugin does: gzip-compressed,
-/// in pieces of at most 1 MB (smaller ones if the host rejects a piece), checked by SHA-256.
-fn store_php_upload(t: &StoreTarget, html: &[u8]) -> io::Result<()> {
+fn store_php_error((status, msg): (u16, String)) -> io::Error {
+    err(match status {
+        404 => crate::tr!(format!("store.php nicht gefunden ({msg}) – stimmt die Upload-URL im Wiki? store.php 2.1 nötig"), format!("store.php not found ({msg}) – is the wiki's upload URL right? store.php 2.1 needed")),
+        _ => crate::tr!(format!("Speichern über store.php fehlgeschlagen: {msg}"), format!("Saving through store.php failed: {msg}")),
+    })
+}
+
+/// Send `data` through store.php's chunked upload the way the Chunked Upload plugin does:
+/// gzip-compressed, in pieces of at most 1 MB (smaller ones if the host rejects a piece), checked
+/// by SHA-256. `mode`: "full" (the whole wiki) or "merge" (changed tiddlers, store.php 2.2).
+/// Returns the answer to `finish`.
+fn store_php_send(t: &StoreTarget, data: &[u8], mode: &str) -> Result<Value, (u16, String)> {
     use sha2::Digest;
-    let fail = |(status, msg): (u16, String)| {
-        err(match status {
-            404 => crate::tr!(format!("store.php nicht gefunden ({msg}) – stimmt die Upload-URL im Wiki? store.php 2.1 nötig"), format!("store.php not found ({msg}) – is the wiki's upload URL right? store.php 2.1 needed")),
-            _ => crate::tr!(format!("Speichern über store.php fehlgeschlagen: {msg}"), format!("Saving through store.php failed: {msg}")),
-        })
+    let zip = || -> io::Result<Vec<u8>> {
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        io::Write::write_all(&mut gz, data)?;
+        gz.finish()
     };
-    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    io::Write::write_all(&mut gz, html)?;
-    let payload = gz.finish()?;
+    let payload = zip().map_err(|e| (0, e.to_string()))?;
     let digest: String = sha2::Sha256::digest(&payload).iter().map(|b| format!("{b:02x}")).collect();
     let begin = store_php(
         t,
@@ -669,11 +675,10 @@ fn store_php_upload(t: &StoreTarget, html: &[u8]) -> io::Result<()> {
             ("backupDir", t.backup_dir.clone()),
             ("total", payload.len().to_string()),
             ("encoding", "gzip".into()),
-            ("mode", "full".into()),
+            ("mode", mode.into()),
         ],
         None,
-    )
-    .map_err(fail)?;
+    )?;
     let id = begin.get("id").and_then(Value::as_str).unwrap_or("").to_string();
     let mut size = begin.get("chunkSize").and_then(Value::as_u64).unwrap_or(1 << 20).clamp(16 << 10, 1 << 20) as usize;
     let (mut offset, mut index) = (0usize, 0usize);
@@ -686,11 +691,58 @@ fn store_php_upload(t: &StoreTarget, html: &[u8]) -> io::Result<()> {
             }
             // Too large for the host: smaller pieces.
             Err((413, _)) if size > 16 << 10 => size /= 2,
-            Err(e) => return Err(fail(e)),
+            Err(e) => return Err(e),
         }
     }
-    store_php(t, "finish", &[("id", id), ("sha256", digest)], None).map_err(fail)?;
-    Ok(())
+    store_php(t, "finish", &[("id", id), ("sha256", digest)], None)
+}
+
+const STORE_OPEN: &str = "<script class=\"tiddlywiki-tiddler-store\" type=\"application/json\">[";
+
+/// A wiki file as TiddlyWiki writes it: head, one tiddler per line, rest (like store.php's
+/// split_store). None for any other layout.
+fn split_store(html: &str) -> Option<(&str, Vec<&str>, &str)> {
+    let i = html.find(STORE_OPEN)?;
+    if html[i + 1..].contains(STORE_OPEN) {
+        return None;
+    }
+    let b = i + STORE_OPEN.len();
+    let j = b + html[b..].find("]</script>")?;
+    let body = &html[b..j];
+    if body.len() < 2 || !body.starts_with('\n') || !body.ends_with('\n') {
+        return None;
+    }
+    let lines: Vec<&str> = if body == "\n\n" { vec![] } else { body[1..body.len() - 1].split(",\n").collect() };
+    Some((&html[..b], lines, &html[j..]))
+}
+
+/// store.php's checksum of a tiddler line: the first 16 hex digits of its SHA-256.
+fn line_hash(line: &str) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(line.as_bytes()).iter().take(8).map(|b| format!("{b:02x}")).collect()
+}
+
+fn line_title(line: &str) -> Option<String> {
+    serde_json::from_str::<Value>(line).ok()?.get("title")?.as_str().map(str::to_string)
+}
+
+/// One tiddler line as brausa writes it (as `webwiki::with_tiddlers` does).
+fn tiddler_line(f: &Fields) -> String {
+    serde_json::to_string(f).unwrap_or_default().replace('<', "\\u003C")
+}
+
+/// What an upload did.
+#[derive(Debug, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WebUploadReport {
+    /// Tiddlers sent (all of them when the whole wiki went up).
+    pub sent: usize,
+    /// Only the changes went up; what others saved meanwhile stayed.
+    pub merged: bool,
+    /// Tiddlers others saved on the web in the meantime (now in the web copy, not yet here).
+    pub pulled: Vec<String>,
+    /// Changed on the web and here at the same time: the web keeps its version, ours lies next to it under this title.
+    pub conflicts: Vec<String>,
 }
 
 /// Writable bag for plugins of one's own (from web wikis), right above `@plugins`.
@@ -1695,9 +1747,11 @@ impl Store {
         Ok(())
     }
 
-    /// Upload the wiki as a new version of the web file (HTTP PUT, e.g. WebDAV) with the stored password.
+    /// Upload the wiki to the web with the stored password: through store.php (the wiki's upload
+    /// settings) only the changed tiddlers, merged into what is there now (store.php 2.2; older
+    /// ones get the whole wiki), else as a new version of the file (HTTP PUT, e.g. WebDAV).
     /// Notes of the bag `lokal` and tiddlers tagged lokal/privat stay on this computer.
-    pub fn web_upload(&self, name: &str) -> io::Result<()> {
+    pub fn web_upload(&self, name: &str) -> io::Result<WebUploadReport> {
         let r = self.recipe(name)?;
         let link = r.web.clone().ok_or_else(|| err(crate::tr!("Für dieses Wiki ist keine Webadresse eingetragen", "No web address is set for this wiki")))?;
         let password = self.secrets().get(name).cloned().ok_or_else(|| err(crate::tr!("Kein Passwort gespeichert: nur abgleichen, nicht hochladen", "No password stored: compare only, no upload")))?;
@@ -1725,9 +1779,7 @@ impl Store {
                 dir: text("$:/UploadDir").unwrap_or_else(|| ".".into()),
                 backup_dir: text("$:/UploadBackupDir").unwrap_or_else(|| ".".into()),
             };
-            store_php_upload(&target, out.as_bytes())?;
-            fs::write(cache, out)?;
-            return Ok(());
+            return self.store_php_save(name, &target, &html, &all, &out);
         }
         ureq::put(&link.url)
             .timeout(std::time::Duration::from_secs(120))
@@ -1736,7 +1788,103 @@ impl Store {
             .send_string(&out)
             .map_err(|e| err(crate::tr!(format!("Hochladen fehlgeschlagen: {e}"), format!("Upload failed: {e}"))))?;
         fs::write(cache, out)?;
-        Ok(())
+        Ok(WebUploadReport { sent: all.len(), ..Default::default() })
+    }
+
+    /// The version of the web file the web copy shows (store.php's sha256 of the file), kept
+    /// next to it with a checksum of the copy; a copy downloaded since is the file itself.
+    fn web_version(&self, name: &str, cache_html: &str) -> String {
+        use sha2::Digest;
+        let sum: String = sha2::Sha256::digest(cache_html.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+        let kept = fs::read_to_string(self.web_cache(name).with_extension("version")).unwrap_or_default();
+        match kept.split_once(' ') {
+            Some((copy, version)) if copy == sum => version.trim().to_string(),
+            _ => sum,
+        }
+    }
+
+    fn put_web_version(&self, name: &str, cache_html: &str, version: &str) -> io::Result<()> {
+        use sha2::Digest;
+        let sum: String = sha2::Sha256::digest(cache_html.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+        fs::write(self.web_cache(name).with_extension("version"), format!("{sum} {version}"))
+    }
+
+    /// Save through store.php. With 2.2: only the tiddlers that differ from the web copy, each
+    /// with the checksum of the version it replaces, so store.php keeps what others saved
+    /// meanwhile (and writes a conflict copy where both changed the same tiddler); then what
+    /// others saved comes into the web copy. Older store.php: the whole wiki, as before.
+    fn store_php_save(&self, name: &str, t: &StoreTarget, cache_html: &str, all: &BTreeMap<String, Fields>, out: &str) -> io::Result<WebUploadReport> {
+        let cache = self.web_cache(name);
+        let full = || -> io::Result<WebUploadReport> {
+            let v = store_php_send(t, out.as_bytes(), "full").map_err(store_php_error)?;
+            fs::write(&cache, out)?;
+            if let Some(version) = v.get("version").and_then(Value::as_str).filter(|v| !v.is_empty()) {
+                self.put_web_version(name, out, version)?;
+            }
+            Ok(WebUploadReport { sent: all.len(), ..Default::default() })
+        };
+        let Some((head, lines, tail)) = split_store(cache_html) else { return full() };
+        let known: BTreeMap<String, String> = lines.iter().filter_map(|l| Some((line_title(l)?, l.to_string()))).collect();
+        let web = crate::webwiki::tiddlers(cache_html);
+        let mut set = vec![];
+        let mut sent: BTreeMap<String, String> = BTreeMap::new();
+        for (title, f) in all {
+            if web.get(title) == Some(f) || crate::webwiki::ephemeral(title) {
+                continue;
+            }
+            let line = tiddler_line(f);
+            set.push(serde_json::json!({ "title": title, "line": line, "prev": known.get(title).map(|l| line_hash(l)).unwrap_or_default() }));
+            sent.insert(title.clone(), line);
+        }
+        if set.is_empty() {
+            return Ok(WebUploadReport { merged: true, ..Default::default() });
+        }
+        let seen = self.web_version(name, cache_html);
+        let payload = serde_json::json!({ "set": set, "del": [] }).to_string();
+        let res = match store_php_send(t, payload.as_bytes(), "merge") {
+            Ok(v) => v,
+            // store.php before 2.2 does not know the mode (nor the actions, "Upload-ID").
+            Err((400, m)) if ["Modus", "mode", "Aktion", "Upload-ID"].iter().any(|k| m.contains(k)) => return full(),
+            // Nothing on the server yet.
+            Err((409, m)) if m.contains("noch kein Wiki") => return full(),
+            Err(e) => return Err(store_php_error(e)),
+        };
+        let list = |k: &str, f: &str| -> Vec<String> { res.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.get(f)?.as_str().map(str::to_string)).collect()).unwrap_or_default() };
+        let conflicts = list("conflicts", "copy");
+        let clashed = list("conflicts", "title");
+        let mut version = res.get("version").and_then(Value::as_str).unwrap_or("").to_string();
+        // The web copy as the server has it now: what it knew, plus what went up.
+        let mut now = known;
+        for (title, line) in sent.iter().filter(|(t, _)| !clashed.contains(t)) {
+            now.insert(title.clone(), line.clone());
+        }
+        let mut pulled = vec![];
+        if res.get("before").and_then(Value::as_str) != Some(seen.as_str()) || !conflicts.is_empty() {
+            // Someone else saved in between: their tiddlers come into the web copy.
+            let where_ = [("file", t.file.clone()), ("dir", t.dir.clone())];
+            let index = store_php(t, "index", &where_, None).map_err(store_php_error)?;
+            let server: BTreeMap<String, String> = index.get("tiddlers").and_then(Value::as_object).map(|o| o.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string()))).collect()).unwrap_or_default();
+            now.retain(|title, _| server.contains_key(title));
+            let want: Vec<&String> = server.iter().filter(|(title, h)| now.get(*title).map(|l| line_hash(l) != **h).unwrap_or(true)).map(|(title, _)| title).collect();
+            version = index.get("version").and_then(Value::as_str).unwrap_or(&version).to_string();
+            if !want.is_empty() {
+                let mut fields = where_.to_vec();
+                fields.push(("titles", serde_json::to_string(&want)?));
+                let got = store_php(t, "fetch", &fields, None).map_err(store_php_error)?;
+                version = got.get("version").and_then(Value::as_str).unwrap_or(&version).to_string();
+                for (title, line) in got.get("lines").and_then(Value::as_object).into_iter().flatten() {
+                    if let Some(l) = line.as_str() {
+                        now.insert(title.clone(), l.to_string());
+                        pulled.push(title.clone());
+                    }
+                }
+            }
+        }
+        let lines: Vec<&str> = now.values().map(String::as_str).collect();
+        let copy = format!("{head}\n{}\n{tail}", lines.join(",\n"));
+        fs::write(&cache, &copy)?;
+        self.put_web_version(name, &copy, &version)?;
+        Ok(WebUploadReport { sent: sent.len().saturating_sub(clashed.len()), merged: true, pulled, conflicts })
     }
 
     // ------------------------------------------------------------ bag „lokal“
@@ -2355,6 +2503,122 @@ mod tests {
         store.put_bag(&BagInfo { name: "glossar".into(), ..Default::default() }).unwrap();
         store.put_tiddler("glossar", &f(&[("title", "ZUI"), ("text", "Zoomable UI")])).unwrap();
         (t, store, proj)
+    }
+
+    #[test]
+    fn tiddler_lines_like_store_php() {
+        assert_eq!(line_hash("abc"), "ba7816bf8f01cfea");
+        let html = format!("<html>{STORE_OPEN}\n{{\"title\":\"A\"}},\n{{\"title\":\"B\",\"text\":\"x,\\ny\"}}\n]</script></html>");
+        let (head, lines, tail) = split_store(&html).unwrap();
+        assert!(head.ends_with('['));
+        assert_eq!(lines.len(), 2);
+        assert_eq!(line_title(lines[1]).as_deref(), Some("B"));
+        assert_eq!(tail, "]</script></html>");
+        assert!(split_store(&format!("<html>{STORE_OPEN}{{\"title\":\"A\"}}]</script>")).is_none(), "not one tiddler per line");
+        // What with_tiddlers writes splits again.
+        let t = crate::webwiki::tiddlers(&html);
+        assert_eq!(split_store(&crate::webwiki::with_tiddlers(&html, &t).unwrap()).unwrap().1.len(), 2);
+    }
+
+    /// Against the real store.php (2.2, and optionally 2.1): `BRAUSA_STORE_PHP=…/store.php`
+    /// (`BRAUSA_STORE_PHP_OLD` for the old one) and `php` on the path; skipped otherwise.
+    #[test]
+    fn saves_through_store_php_without_overwriting_others() {
+        let Ok(script) = std::env::var("BRAUSA_STORE_PHP") else { return };
+        let old = std::env::var("BRAUSA_STORE_PHP_OLD").ok();
+        let (t, store, proj) = setup();
+        let www = t.path().join("www");
+        fs::create_dir_all(www.join("old")).unwrap();
+        fs::copy(&script, www.join("store.php")).unwrap();
+        let hash = std::process::Command::new("php").args(["-r", "echo password_hash(\"pw\", PASSWORD_DEFAULT);"]).output().unwrap().stdout;
+        let auth = format!("<?php\n$USERS = ['jo' => '{}'];\n", String::from_utf8(hash).unwrap());
+        fs::write(www.join("auth.php"), &auth).unwrap();
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let php = std::process::Command::new("php").args(["-S", &format!("127.0.0.1:{port}"), "-t"]).arg(&www).stderr(std::process::Stdio::null()).stdout(std::process::Stdio::null()).spawn().unwrap();
+        struct Kill(std::process::Child);
+        impl Drop for Kill {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+            }
+        }
+        let wiki = |dir: &str, extra: &str| {
+            let url = format!("http://127.0.0.1:{port}/{dir}store.php");
+            format!(
+                "<!doctype html><html><head><meta name=\"application-name\" content=\"TiddlyWiki\"><title>T</title></head><body>{STORE_OPEN}\n{}\n]</script><script>$tw.boot</script></body></html>",
+                [
+                    r#"{"title":"$:/core","text":"{}","plugin-type":"plugin","type":"application/json","version":"5.4.1"}"#.to_string(),
+                    format!(r#"{{"title":"$:/UploadURL","text":"{url}"}}"#),
+                    r#"{"title":"$:/UploadName","text":"jo"}"#.to_string(),
+                    r#"{"title":"$:/UploadFilename","text":"wiki.html"}"#.to_string(),
+                    r#"{"text":"aus dem Web","title":"Start"}"#.to_string(),
+                    extra.to_string(),
+                ]
+                .iter()
+                .filter(|l| !l.is_empty())
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(",\n")
+            )
+        };
+        fs::write(www.join("wiki.html"), wiki("", "")).unwrap();
+        let _php = Kill(php);
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let server = || crate::webwiki::tiddlers(&fs::read_to_string(www.join("wiki.html")).unwrap());
+
+        let mut r = recipe(&store, "W", &proj, Target { kind: "folder".into(), path: proj.join("wiki").display().to_string() });
+        r.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/wiki.html"), user: "jo".into() });
+        let r = store.put_recipe(r).unwrap();
+        store.set_web_password("W", Some("pw")).unwrap();
+        store.web_fetch_as("W", None).unwrap();
+        let own = r.bags.last().unwrap().clone();
+        store.put_tiddler(&own, &f(&[("title", "Hier"), ("text", "von brausa")])).unwrap();
+        let rep = store.web_upload("W").unwrap();
+        assert!(rep.merged && rep.sent >= 1, "{rep:?}");
+        let html = fs::read_to_string(www.join("wiki.html")).unwrap();
+        assert!(html.contains(r#"{"text":"aus dem Web","title":"Start"}"#), "untouched lines stay as they were");
+        assert_eq!(server()["Hier"]["text"], "von brausa");
+
+        // Someone else saves in between: a new tiddler, and a change to "Hier".
+        let target = StoreTarget { url: format!("http://127.0.0.1:{port}/store.php"), auth: crate::webwiki::basic_auth("jo", "pw")[6..].to_string(), file: "wiki.html".into(), dir: ".".into(), backup_dir: String::new() };
+        let lines = split_store(&html).unwrap().1.iter().map(|l| l.to_string()).collect::<Vec<_>>();
+        let hier = lines.iter().find(|l| line_title(l).as_deref() == Some("Hier")).unwrap();
+        let other = json!({"set": [
+            {"title": "Anderer", "line": r#"{"title":"Anderer","text":"von woanders"}"#, "prev": ""},
+            {"title": "Hier", "line": r#"{"title":"Hier","text":"woanders geändert"}"#, "prev": line_hash(hier)}
+        ], "del": []});
+        store_php_send(&target, other.to_string().as_bytes(), "merge").unwrap();
+        // brausa changes "Hier" too and a new one, then saves.
+        store.put_tiddler(&own, &f(&[("title", "Hier"), ("text", "in brausa geändert")])).unwrap();
+        store.put_tiddler(&own, &f(&[("title", "Noch"), ("text", "neu")])).unwrap();
+        let rep = store.web_upload("W").unwrap();
+        let s = server();
+        assert_eq!(s["Anderer"]["text"], "von woanders", "what others saved stays");
+        assert_eq!(s["Hier"]["text"], "woanders geändert", "their version stays");
+        assert_eq!(rep.conflicts.len(), 1);
+        assert_eq!(s[&rep.conflicts[0]]["text"], "in brausa geändert", "ours lies next to it");
+        assert_eq!(s["Noch"]["text"], "neu");
+        assert!(rep.pulled.contains(&"Anderer".to_string()) && rep.pulled.contains(&"Hier".to_string()), "{rep:?}");
+        // Taken into the wiki, the next save sends nothing.
+        store.web_apply("W", &rep.pulled, &[]).unwrap();
+        assert_eq!(store.merged(&store.recipe("W").unwrap()).unwrap()["Hier"].0["text"], "woanders geändert");
+        let rep = store.web_upload("W").unwrap();
+        assert_eq!(rep.sent, 0, "{rep:?}");
+
+        // store.php 2.1: the whole wiki, as before.
+        if let Some(old) = old {
+            fs::copy(old, www.join("old/store.php")).unwrap();
+            fs::write(www.join("old/auth.php"), &auth).unwrap();
+            fs::write(www.join("old/wiki.html"), wiki("old/", "")).unwrap();
+            let mut r2 = recipe(&store, "Alt", &proj, Target { kind: "folder".into(), path: proj.join("alt").display().to_string() });
+            r2.web = Some(WebLink { url: format!("http://127.0.0.1:{port}/old/wiki.html"), user: "jo".into() });
+            let r2 = store.put_recipe(r2).unwrap();
+            store.set_web_password("Alt", Some("pw")).unwrap();
+            store.web_fetch_as("Alt", None).unwrap();
+            store.put_tiddler(r2.bags.last().unwrap(), &f(&[("title", "Hier2"), ("text", "x")])).unwrap();
+            let rep = store.web_upload("Alt").unwrap();
+            assert!(!rep.merged, "{rep:?}");
+            assert_eq!(crate::webwiki::tiddlers(&fs::read_to_string(www.join("old/wiki.html")).unwrap())["Hier2"]["text"], "x");
+        }
     }
 
     #[test]

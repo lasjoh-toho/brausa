@@ -114,6 +114,18 @@ export interface WikiRecipe {
   saveMode?: 'local' | 'both' | 'url' | null;
 }
 
+/** What an upload to the web did. */
+export interface WebUploadReport {
+  /** Tiddlers sent. */
+  sent: number;
+  /** Only the changes went up (store.php 2.2); what others saved stayed. */
+  merged: boolean;
+  /** Saved on the web by others in the meantime; now in the web copy. */
+  pulled: string[];
+  /** Changed here and there at once: the web keeps its version, ours lies next to it under these titles. */
+  conflicts: string[];
+}
+
 /** A tiddler that is new or different in the web version. */
 export interface WebChange {
   title: string;
@@ -367,7 +379,7 @@ export interface Backend {
   /** The start of a tiddler's text on the web and here (for the comparison). */
   wikiWebTexts(name: string, title: string): Promise<{ webText: string; localText: string }>;
   /** Upload the wiki as a new version of its web file. */
-  wikiWebUpload(name: string): Promise<void>;
+  wikiWebUpload(name: string): Promise<WebUploadReport>;
   /** Store (or with null forget) the upload password. */
   wikiWebPassword(name: string, password: string | null): Promise<void>;
   wikiWebHasPassword(name: string): Promise<boolean>;

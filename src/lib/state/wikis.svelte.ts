@@ -7,7 +7,7 @@ import { store } from '../platform';
 import { board } from './board.svelte';
 import { web } from './web.svelte';
 import { t, tn } from '../i18n/index.svelte';
-import type { OverlayResolution, WebPreview, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
+import type { OverlayResolution, WebPreview, WebUploadReport, WikiBag, WikiOverlay, WikiRecipe } from '../backend/types';
 
 class WikiState {
   recipes = $state<WikiRecipe[]>([]);
@@ -35,6 +35,8 @@ class WikiState {
       );
       this.maps = perProject.flat();
       this.overlays = await app.backend.wikiOverlays();
+      // Uploads still waiting from last time (brausa was closed offline).
+      this.scheduleRetry();
     } catch (e) {
       app.toast(String(e), true);
     }
@@ -217,7 +219,7 @@ class WikiState {
   /** The wiki saved itself in the web panel: into the bags, and – saving "local and on the web" – on to
    *  its web address (its MultiWikiServer, or its file there). Gathered for a moment, a wiki saves often. */
   private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  afterSave(name: string) {
+  afterSave(name: string, delay = 3000) {
     clearTimeout(this.saveTimers.get(name));
     this.saveTimers.set(
       name,
@@ -228,19 +230,79 @@ class WikiState {
         if (!r?.web || (await this.saveModeOf(name)) !== 'both') return;
         if (await app.backend.wikiMwsLinked(name).catch(() => false)) await this.mwsSync(name, true);
         else await this.webUpload(name);
-      }, 3000)
+      }, delay)
     );
   }
 
-  /** The wiki as a new version of its file on the web (through store.php if it has upload settings). */
+  /** Wikis whose upload after a save failed (offline, server away): tried again later. */
+  private webPending = new Set<string>(store.get<string[]>('webPending', []));
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryDelay = 60_000;
+
+  constructor() {
+    if (typeof window !== 'undefined')
+      window.addEventListener('online', () => {
+        this.retryDelay = 60_000;
+        void this.retryPending();
+      });
+  }
+
+  private setPending(name: string, on: boolean) {
+    if (on === this.webPending.has(name)) return;
+    if (on) this.webPending.add(name);
+    else this.webPending.delete(name);
+    store.set('webPending', [...this.webPending]);
+  }
+
+  /** Try the waiting uploads again: soon, then less and less often (at most every 15 minutes). */
+  private scheduleRetry() {
+    if (this.retryTimer || !this.webPending.size) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.retryPending();
+    }, this.retryDelay);
+    this.retryDelay = Math.min(this.retryDelay * 2, 15 * 60_000);
+  }
+
+  /** Back online, or brausa started: upload what is still waiting. */
+  async retryPending() {
+    for (const name of [...this.webPending]) {
+      if (!this.recipes.find((x) => x.name === name)?.web || (await this.saveModeOf(name)) !== 'both') this.setPending(name, false);
+      else await this.webUpload(name);
+    }
+  }
+
+  /** What an upload did, for the user; tiddlers others saved on the web meanwhile come into the wiki. */
+  private async afterUpload(name: string, r: WebUploadReport, quiet: boolean) {
+    if (!quiet) app.toast(r.merged ? t('wikis.webMerged', { n: r.sent, name }) : t('wikis.webUploaded', { name }));
+    if (r.pulled.length) {
+      const n = await app.backend.wikiWebApply(name, r.pulled, []);
+      await this.load();
+      await this.sync(name, true);
+      if (n) app.toast(t('wikis.webPulled', { n, name }));
+    }
+    if (r.conflicts.length) app.toast(t('wikis.webConflicts', { list: r.conflicts.join(', ') }), true);
+  }
+
+  /** After a save: the changes to the wiki's file on the web (through store.php only the changed
+   *  tiddlers, keeping what others saved). Offline it is tried again later. */
   async webUpload(name: string) {
-    if (this.webBusy) return;
+    if (this.webBusy) {
+      // A comparison or upload is running: a moment later.
+      this.afterSave(name, 5000);
+      return;
+    }
     this.webBusy = name;
     try {
-      await app.backend.wikiWebUpload(name);
-      app.toast(t('wikis.webUploaded', { name }));
+      const r = await app.backend.wikiWebUpload(name);
+      this.setPending(name, false);
+      this.retryDelay = 60_000;
+      await this.afterUpload(name, r, r.merged);
     } catch (e) {
-      app.toast(String(e).replace(/^Error: /, ''), true);
+      const first = !this.webPending.has(name);
+      this.setPending(name, true);
+      if (first) app.toast(t('wikis.webLater', { name, error: String(e).replace(/^Error: /, '') }), true);
+      this.scheduleRetry();
     } finally {
       this.webBusy = null;
     }
@@ -289,8 +351,7 @@ class WikiState {
       await this.sync(s.name);
       if (upload) {
         this.webBusy = s.name;
-        await app.backend.wikiWebUpload(s.name);
-        app.toast(t('wikis.webUploaded', { name: s.name }));
+        await this.afterUpload(s.name, await app.backend.wikiWebUpload(s.name), false);
       }
     } catch (e) {
       app.toast(String(e).replace(/^Error: /, ''), true);
@@ -305,7 +366,8 @@ class WikiState {
     if (s) await app.backend.wikiWebDiscard(s.name).catch(() => {});
   }
 
-  async sync(name: string) {
+  /** `quiet`: only say something when tiddlers came from the wiki, went, or clashed. */
+  async sync(name: string, quiet = false) {
     if (this.syncing) return;
     this.syncing = name;
     try {
@@ -314,7 +376,7 @@ class WikiState {
       const parts = [t('wikis.pushed', { n: r.pushed })];
       if (r.pulled.length) parts.push(t('wikis.pulled', { n: r.pulled.length }));
       if (r.deleted.length) parts.push(t('wikis.deleted', { n: r.deleted.length }));
-      app.toast(t('wikis.synced', { name, parts: parts.join(' · ') }));
+      if (!quiet || r.pulled.length || r.deleted.length) app.toast(t('wikis.synced', { name, parts: parts.join(' · ') }));
       if (r.conflicts.length) app.toast(t('wikis.conflicts', { list: r.conflicts.join(', ') }), true);
       for (const w of r.warnings) app.toast(w, true);
       for (const [root, id] of r.maps) if (board.root === root && board.map?.id === id) await board.load(id);

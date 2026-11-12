@@ -14,6 +14,13 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.25
+
+- **Saving to the web without overwriting others:** with store.php 2.2 (store_TW) brausa uploads only the tiddlers that changed, merged into what is on the server now. Whatever someone else saved there in the meantime (another browser, another device) stays, and comes into the wiki afterwards. If both changed the same tiddler, the web keeps its version and yours lies next to it as "Title (Konflikt …)". With an older store.php brausa uploads the whole wiki as before.
+- **"Local and on the web" catches up:** if the upload after a save fails (offline, server away), brausa tries again later, also after a restart.
+- The bundled "Chunked Upload" plugin is now version 1.2 and saves per tiddler too. Order for switching over: first store.php 2.2 on the server, then the plugin in the web wikis, then brausa 0.25. Every mix keeps working.
+- Tested against the real store.php 2.2 and 2.1 on PHP 8.3: up to four browsers saving at once, conflict copies, deletes, and brausa between them.
+
 ### New in 0.24
 
 - **Tabs in the web panel:** links that want a new window (like external links in a wiki, Ctrl/Cmd or middle click, `window.open`) open as a tab. Next to "Scripts run" / "sealed off": the tab list (switch, close) and + for a new tab.
@@ -169,6 +176,12 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.25: Ins Web speichern, ohne andere zu überschreiben**
+- **Ins Web speichern, ohne andere zu überschreiben:** Mit store.php 2.2 (store_TW) lädt brausa nur die geänderten Tiddler hoch und baut sie in den aktuellen Stand auf dem Server ein. Was jemand anders dort inzwischen gespeichert hat (anderer Browser, anderes Gerät), bleibt erhalten und kommt danach ins Wiki. Haben beide denselben Tiddler geändert, bleibt im Web die dortige Fassung, deine liegt als „Titel (Konflikt …)“ daneben. Mit einer älteren store.php lädt brausa wie bisher das ganze Wiki hoch.
+- **„Lokal und im Web“ holt nach:** Scheitert das Hochladen nach dem Speichern (offline, Server nicht erreichbar), versucht brausa es später noch einmal, auch nach einem Neustart.
+- Das mitgelieferte Plugin „Chunked Upload“ ist jetzt Version 1.2 und speichert ebenfalls pro Tiddler. Reihenfolge beim Umstieg: erst store.php 2.2 auf den Server, dann das Plugin in den Web-Wikis, dann brausa 0.25. Jede Mischung funktioniert weiter.
+- Geprüft gegen die echte store.php 2.2 und 2.1 unter PHP 8.3: bis zu vier Browser speichern gleichzeitig, Konfliktkopien, Löschen, und brausa dazwischen.
 
 **Neu in 0.24: Tabs und Vollbild im Browser, wohin ein Wiki speichert**
 - **Tabs im Web-Fenster:** Links, die ein neues Fenster wollen (wie externe Links im Wiki, Strg/Cmd- oder Mittelklick, `window.open`), öffnen sich als Tab. Neben „Skripte laufen“ / „abgeschottet“: die Tab-Liste (wechseln, schließen) und + für einen neuen Tab.
