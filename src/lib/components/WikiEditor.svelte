@@ -29,7 +29,6 @@
   let webUrl = $state(original?.web?.url ?? '');
   let webUser = $state(original?.web?.user ?? '');
   let webPassword = $state('');
-  let webAuto = $state(original?.web?.auto ?? false);
   let hasPassword = $state(false);
   if (original) app.backend.wikiWebHasPassword(original.name).then((h) => (hasPassword = h)).catch(() => {});
   let plugins = $state<[string, string][]>([]);
@@ -67,7 +66,7 @@
     if (!r.name.trim() || !r.target.path.trim()) return void (error = t('wiki.missing'));
     try {
       const plain = $state.snapshot(r);
-      const web = webUrl.trim() ? { url: webUrl.trim(), user: webUser.trim(), auto: webAuto } : null;
+      const web = webUrl.trim() ? { url: webUrl.trim(), user: webUser.trim() } : null;
       const saved = await wikis.save({ ...plain, web, name: plain.name.trim(), target: { ...plain.target, path: plain.target.path.trim() } }, original?.name ?? null);
       if (webPassword) await app.backend.wikiWebPassword(saved.name, webPassword);
       else if (!web && hasPassword) await app.backend.wikiWebPassword(saved.name, null);
@@ -137,11 +136,15 @@
         <label>{t('wiki.webUser')} <input bind:value={webUser} autocomplete="username" /></label>
         <label class="grow">{t('wiki.webPassword')} <input type="password" bind:value={webPassword} placeholder={hasPassword ? t('wiki.webPasswordStored') : t('wiki.optional')} autocomplete="new-password" /></label>
       </div>
-      <label class="plugins">
-        <input type="checkbox" bind:checked={webAuto} disabled={!hasPassword && !webPassword} />
-        <span><b>{t('wiki.webAuto')}</b> <span class="muted">– {hasPassword || webPassword ? t('wiki.webAutoNote') : t('wiki.webAutoNeedsPassword')}</span></span>
-      </label>
       <p class="muted">{t('wiki.webNote')}</p>
+      <!-- Also chosen in the wiki: control panel → Saving → brausa. -->
+      <div class="row savemode">
+        <span>{t('wiki.saveTo')}</span>
+        {#each ['local', 'both', 'url'] as const as m (m)}
+          <label><input type="radio" name="savemode" value={m} checked={(r.saveMode ?? 'local') === m} onchange={() => (r.saveMode = m)} />{t(`wikis.saveMode.${m}`)}</label>
+        {/each}
+      </div>
+      <p class="muted">{t('wiki.saveToNote')}</p>
     {/if}
 
     {#if r.pluginSet}
@@ -381,5 +384,15 @@
   }
   .danger {
     color: var(--danger);
+  }
+  .savemode {
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .savemode label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 </style>

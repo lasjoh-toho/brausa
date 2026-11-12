@@ -19,7 +19,7 @@
   import type { Entry } from '../core/types';
   // pdf.js is large: load the reader only when a document is opened.
   const loadReader = () => import('./Reader.svelte');
-  import { t, loc } from '../i18n/index.svelte';
+  import { t, tn, loc } from '../i18n/index.svelte';
 
   let view = $state<HTMLElement>();
   /** Choosing the project for the marked text. */
@@ -40,9 +40,11 @@
     if (!editing) address = web.url;
   });
 
+  let tabsOpen = $state(false);
+
   // Anything brausa draws over the panel must not end up under the native page.
   const covered = $derived(
-    !!web.listOpen || web.suggest || sendOpen || web.collectDialog || !!app.preview || !!app.menu || !!app.dialog || app.sizeSelectOpen || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || wikis.settingsOpen || !!wikis.webSync || (drag.active && drag.source !== 'web')
+    !!web.listOpen || web.suggest || sendOpen || tabsOpen || web.collectDialog || !!app.preview || !!app.menu || !!app.dialog || app.sizeSelectOpen || !!app.batchRenaming || app.gridEditorOpen || app.tagBarOpen || wikis.editing !== null || wikis.overlaysOpen || wikis.overviewOpen || wikis.settingsOpen || !!wikis.webSync || (drag.active && drag.source !== 'web')
   );
 
   function measure() {
@@ -164,7 +166,9 @@
   });
 </script>
 
-<aside class="web" style:width="{web.width}px">
+<svelte:window onkeydown={(e) => e.key === 'Escape' && web.fullscreen && !finding && web.toggleFullscreen(false)} />
+
+<aside class="web" class:fullscreen={web.fullscreen} style:width={web.fullscreen ? null : `${web.width}px`}>
   <div class="grip" onpointerdown={resize} role="separator" aria-orientation="vertical" aria-label={t('webpane.resize')}></div>
   {#if web.mode !== 'doc' || !board.reader}
   <div class="bar" class:gone={web.barsHidden && !web.suggest}>
@@ -193,7 +197,8 @@
         >
       {/if}
     </form>
-    <button class="btn icon" onclick={() => web.toggle(false)} aria-label={t('webpane.closePane')}><Icon name="x" size={14} /></button>
+    <button class="btn icon" class:on={web.fullscreen} onclick={() => web.toggleFullscreen()} title={web.fullscreen ? t('webpane.fullscreenOff') : t('webpane.fullscreenOn')} aria-label={t('webpane.fullscreenOn')}><Icon name="fit" size={14} /></button>
+    <button class="btn icon" onclick={() => (web.toggleFullscreen(false), web.toggle(false))} aria-label={t('webpane.closePane')}><Icon name="x" size={14} /></button>
   </div>
   <div class="bar tools" class:gone={web.barsHidden && !web.suggest}>
     {#if web.hasSelection && app.projects.length}
@@ -220,6 +225,28 @@
       <span class="dot"></span>
     </button>
     <span class="grow"></span>
+    <!-- Tabs: the open pages, switch, close, open a new one. -->
+    <div class="tabsbox">
+      <button class="btn" class:on={tabsOpen} onclick={() => (tabsOpen = !tabsOpen)} title={t('webpane.tabsTitle')}>
+        <Icon name="layers" size={12} />{tn('webpane.tabs', Math.max(web.tabs.length, 1))}
+      </button>
+      <button class="btn icon" onclick={() => ((tabsOpen = false), web.newTab())} title={t('webpane.newTab')} aria-label={t('webpane.newTab')}><Icon name="plus" size={12} /></button>
+      {#if tabsOpen}
+        <div class="tablist" role="menu">
+          {#each web.tabs as tab (tab.id)}
+            <div class="tabrow" class:on={tab.id === web.activeTab}>
+              <button class="pick" onclick={() => ((tabsOpen = false), web.switchTab(tab.id))} title={tab.url}>
+                <Icon name={tab.local ? 'folder' : 'globe'} size={11} />
+                <span>{tab.title || tab.url || t('webpane.home')}</span>
+              </button>
+              <button class="btn icon" onclick={() => web.closeTab(tab.id)} title={t('webpane.closeTab')} aria-label={t('webpane.closeTab')}><Icon name="x" size={11} /></button>
+            </div>
+          {:else}
+            <p class="none">{t('webpane.noTabs')}</p>
+          {/each}
+        </div>
+      {/if}
+    </div>
     {#if web.local}
       <button class="btn" class:warn={web.local.scripts} onclick={() => web.setScripts(!web.local!.scripts)} title={t('webpane.scriptsRemember')}>
         <Icon name="warn" size={12} />
@@ -718,5 +745,64 @@
   }
   .sendto .chip:hover {
     box-shadow: 0 0 0 2px var(--accent);
+  }
+  .web.fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    width: auto;
+    border-left: none;
+  }
+  .web.fullscreen .grip {
+    display: none;
+  }
+  .tabsbox {
+    position: relative;
+    display: flex;
+    gap: 2px;
+  }
+  .tablist {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 40;
+    width: 300px;
+    max-height: 360px;
+    overflow: auto;
+    padding: 4px;
+    border-radius: 10px;
+    background: var(--bg-elev);
+    box-shadow:
+      var(--shadow),
+      0 0 0 1px var(--line);
+  }
+  .tabrow {
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+  }
+  .tabrow.on {
+    background: var(--hover, rgb(0 0 0 / 0.05));
+  }
+  .tabrow .pick {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 12.5px;
+    color: var(--fg);
+    text-align: left;
+  }
+  .tabrow .pick span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tablist .none {
+    margin: 6px 8px;
+    font-size: 12px;
+    color: var(--fg-faint);
   }
 </style>
