@@ -1,7 +1,9 @@
 <script lang="ts">
-  /** Small settings popover: interface language and updates. */
+  /** Small settings popover: interface language, hidden file formats and updates. */
   import { fade } from 'svelte/transition';
   import { i18n, LANGS, systemLang, t, type LangChoice } from '../i18n/index.svelte';
+  import { app } from '../state/app.svelte';
+  import { parseExtList } from '../core/views';
   import { updates } from '../state/updates.svelte';
   import Icon from './Icon.svelte';
 
@@ -22,6 +24,21 @@
       {#each LANGS as l (l.key)}<option value={l.key}>{l.label}</option>{/each}
     </select>
   </label>
+
+  <div class="sep"></div>
+  <div class="row head"><span>{t('settings.hiddenFormats')}</span></div>
+  <input
+    class="exts"
+    type="text"
+    spellcheck="false"
+    placeholder={t('settings.hiddenPlaceholder')}
+    value={app.hiddenExts.map((x) => '.' + x).join(', ')}
+    onchange={(e) => {
+      app.setHiddenExts(parseExtList(e.currentTarget.value));
+      e.currentTarget.value = app.hiddenExts.map((x) => '.' + x).join(', ');
+    }}
+  />
+  <div class="hint">{t('settings.hiddenHint')}</div>
 
   <div class="sep"></div>
   <div class="row head">
@@ -90,6 +107,22 @@
     color: var(--fg);
     font: inherit;
     font-size: 12px;
+  }
+  .exts {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+  }
+  .hint {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--fg-faint);
   }
   .check {
     display: flex;

@@ -50,6 +50,8 @@ export interface ViewQuery {
   cats?: Category[] | null;
   /** Show directories in the canvas (off in stream mode). */
   showDirs?: boolean;
+  /** File formats never shown (extensions, lower case, without dot). */
+  hideExts?: string[] | null;
   sort?: SortKey;
   desc?: boolean;
 }
@@ -59,6 +61,7 @@ export const UNTAGGED = '__untagged__';
 export function filterEntries(entries: Entry[], q: ViewQuery, now = Date.now()): Entry[] {
   let out = entries;
   if (!q.showDirs) out = out.filter((e) => e.kind === 'file');
+  if (q.hideExts?.length) out = out.filter((e) => e.kind !== 'file' || !q.hideExts!.includes(e.ext));
   if (q.funnel) out = out.filter((e) => isWithin(e.path, q.funnel!));
   if (q.cats?.length) out = out.filter((e) => e.kind === 'file' && q.cats!.includes(category(e.ext)!));
   if (q.date) out = out.filter((e) => e.kind === 'file' && inRange(e, q.date!));
@@ -67,6 +70,15 @@ export function filterEntries(entries: Entry[], q: ViewQuery, now = Date.now()):
     if (p.terms.length) out = out.filter((e) => matches(e, p, now));
   }
   return sortEntries(out, q.sort ?? 'name', q.desc ?? false);
+}
+
+/** Turns "tid, .bak *.tmp" into ['tid', 'bak', 'tmp']: lower case, without dot, no doubles. */
+export function parseExtList(text: string): string[] {
+  const out = text
+    .split(/[\s,;]+/)
+    .map((x) => x.trim().replace(/^\*?\.+/, '').toLowerCase())
+    .filter(Boolean);
+  return [...new Set(out)];
 }
 
 export function sortEntries(entries: Entry[], key: SortKey, desc = false): Entry[] {

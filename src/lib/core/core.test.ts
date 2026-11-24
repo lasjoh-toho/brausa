@@ -12,7 +12,7 @@ import {
 } from './tags';
 import { parsePattern, searchNeedle, selectByPattern } from './pattern';
 import { crumbs, dirname, isWithin, relativeTo } from './paths';
-import { filterEntries, groupEntries, UNTAGGED, withFound } from './views';
+import { filterEntries, groupEntries, parseExtList, UNTAGGED, withFound } from './views';
 import type { Entry } from './types';
 import { category } from './format';
 import { decisionFor, forget, hasScripts, remember, resolveLocal } from './htmlpreview';
@@ -145,6 +145,15 @@ describe('views', () => {
   it('filters dirs and funnels', () => {
     expect(filterEntries(entries, {}).length).toBe(3);
     expect(filterEntries(entries, { funnel: '/root/2026' }).map((e) => e.name)).toEqual(['a.jpg', 'b.jpg']);
+  });
+
+  it('hides chosen formats, keeps folders', () => {
+    const list = [...entries, entry('notes.tid'), entry('x.TID')];
+    const shown = filterEntries(list, { hideExts: ['tid'], showDirs: true }).map((e) => e.name);
+    expect(shown).not.toContain('notes.tid');
+    expect(shown).not.toContain('x.TID');
+    expect(shown).toContain('dir');
+    expect(parseExtList('.tid, *.BAK;tmp tid')).toEqual(['tid', 'bak', 'tmp']);
   });
 
   it('groups by tag depth and subfolder', () => {

@@ -156,6 +156,12 @@ class AppState {
   desc = $state(this.recursive ? store.get('descFlat', false) : store.get('desc', false));
   /** Show system files (only offered inside a chosen folder or with a search of at least five characters). */
   showSystem = $state(false);
+  /** File formats the user hides everywhere (extensions without dot); "Show system files" shows them again. */
+  hiddenExts = $state<string[]>(store.get('hiddenExts', ['tid']));
+  setHiddenExts(exts: string[]) {
+    this.hiddenExts = exts;
+    store.set('hiddenExts', exts);
+  }
   /** A story is being presented: no sidebar, no toolbar, the window full screen. */
   presenting = $state(false);
   setPresenting(on: boolean) {
@@ -325,6 +331,7 @@ class AppState {
       // Documents found by their text keep their names.
       search: this.searchMode === 'filter' && !this.contentWords ? this.search : '',
       funnel: this.funnel,
+      hideExts: this.showSystem && this.systemAllowed ? null : this.hiddenExts,
       cats: this.typeFilter ? parseCategories(this.typeFilter) : null,
       // A search shows the folders it finds, in Stream too.
       showDirs: (!this.recursive || !!this.findText) && !this.typeFilter && !this.project && !this.contentWords,
