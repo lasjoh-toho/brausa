@@ -18,8 +18,10 @@ import { archiveRoot, inArchive } from '../core/archive';
 import { app } from './app.svelte';
 import type { NoteCard } from '../core/map';
 import { t } from '../i18n/index.svelte';
+import { PROGRAM_EXT, programName, type Alias } from '../core/launcher';
+import { launcher } from './launcher.svelte';
 
-export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project' | 'notes' | 'kanban' | 'wiki' | 'places';
+export type DropKind = 'folder' | 'crumb' | 'tray' | 'canvas' | 'column' | 'grid-trigger' | 'grid-cell' | 'grid-up' | 'board' | 'project' | 'notes' | 'kanban' | 'wiki' | 'places' | 'apptab' | 'appalias';
 
 /** The project map handles its own drops (where on which card), see ProjectMap.svelte. */
 export type BoardDrop = (items: Entry[], x: number, y: number, data?: unknown) => void | Promise<void>;
@@ -102,6 +104,10 @@ class DragController {
         return t('drag.toPlaces');
       case 'wiki':
         return t('drag.toWiki', { name: h.key ?? '' });
+      case 'apptab':
+        return t('launcher.dropOnTab', { tab: launcher.tabs.find((x) => x.id === h.key)?.name ?? '' });
+      case 'appalias':
+        return (this.data as { alias?: unknown } | undefined)?.alias ? '' : t('launcher.openIn', { app: programName(h.path ?? '') });
       case 'kanban':
         return t('drag.toColumn', { name: h.key ?? '' });
       case 'grid-trigger':
@@ -530,6 +536,28 @@ export async function performDrop(h: DropHit, items: Entry[], source: string, co
         for (const f of tiddlers) {
           const title = await app.backend.wikiAddTiddler(name, f);
           app.toast(t('drag.wikiAdded', { title, name }));
+        }
+        break;
+      }
+      case 'apptab':
+      case 'appalias': {
+        const d = data as { alias?: Alias; fromTab?: string } | undefined;
+        const tab = h.key!;
+        if (h.kind === 'appalias' && d?.alias && d.fromTab === tab) {
+          // Reordering within a tab: in front of the alias dropped on.
+          const at = launcher.tabs.find((x) => x.id === tab)?.aliases.findIndex((a) => a.path === h.path) ?? -1;
+          if (at >= 0) launcher.place(tab, d.alias, at);
+        } else if (h.kind === 'appalias' && !d?.alias) {
+          // Files onto a program: open them with it.
+          const { apps } = await import('./apps.svelte');
+          const files = items.filter((i) => i.kind === 'file' || i.ext === 'app');
+          if (files.length) await apps.openWith(files, { path: h.path!, name: programName(h.path!), categories: [], exts: [], kinds: [] });
+        } else if (d?.alias) launcher.drop(d.alias, tab, d.fromTab);
+        else {
+          // Programs from the file view (an .app, a shortcut …) become aliases.
+          const progs = items.filter((i) => PROGRAM_EXT.has(i.ext.toLowerCase()));
+          if (!progs.length) app.toast(t('launcher.notProgram'), true);
+          for (const p of progs) launcher.drop({ path: p.path, name: programName(p.path) }, tab);
         }
         break;
       }

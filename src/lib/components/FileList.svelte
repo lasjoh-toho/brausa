@@ -33,6 +33,14 @@
     if (i >= untrack(() => paged.limit)) paged.limit = i + STEP;
   });
   const rows = $derived(app.visible.slice(0, paged.limit));
+  // Folder sizes come from the core's memory at once and are counted again in the background.
+  $effect(() => {
+    if (shown.has('size')) app.wantDirSizes(rows.filter((e) => e.kind === 'dir').map((e) => e.path));
+  });
+  function dirSize(e: Entry) {
+    const s = app.dirSizes.get(e.path);
+    return s ? formatSize(s.size) : '–';
+  }
 
   let { table = false }: { table?: boolean } = $props();
 
@@ -255,7 +263,7 @@
               {:else if c.id === 'mtime' || c.id === 'ctime' || c.id === 'taken'}
                 <span class="td date">{dateOf(e, c.id)}</span>
               {:else if c.id === 'size'}
-                <span class="td size">{e.kind === 'dir' ? '–' : formatSize(e.size)}</span>
+                <span class="td size">{e.kind === 'dir' ? dirSize(e) : formatSize(e.size)}</span>
               {:else if c.id === 'kind'}
                 <span class="td kind">{kindOf(e)}</span>
               {:else if c.id === 'ext'}

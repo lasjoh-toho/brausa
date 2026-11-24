@@ -5,6 +5,7 @@
    * the pencil next to it changes them, and own functions can be added.
    */
   import { app } from '../state/app.svelte';
+  import { drag } from '../state/drag.svelte';
   import { apps, APP_CATEGORIES, OTHER } from '../state/apps.svelte';
   import type { AppInfo } from '../backend/types';
   import { store } from '../platform';
@@ -122,7 +123,17 @@
     {/if}
     {#each shown as a (a.path)}
       <div class="row">
-        <button class="place" onclick={() => apps.launch(a)} title={t('apps.launch', { name: a.name })}>
+        <button
+          class="place"
+          onpointerdown={(e) =>
+            drag.begin(e, () => [{ path: a.path, name: a.name, ext: 'app', kind: 'file', size: 0, mtime: 0, ctime: 0, tags: [] }], 'apps', () => apps.launch(a), {
+              data: { alias: { path: a.path, name: a.name } },
+              accepts: ['apptab'],
+              title: a.name
+            })}
+          onkeydown={(e) => e.key === 'Enter' && apps.launch(a)}
+          title={t('apps.launchDrag', { name: a.name })}
+        >
           <Icon name="open" size={13} />
           <span class="pname">{a.name}</span>
         </button>

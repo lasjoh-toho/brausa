@@ -8,6 +8,10 @@
   import SidePane from './lib/components/SidePane.svelte';
   import WebPane from './lib/components/WebPane.svelte';
   import { web } from './lib/state/web.svelte';
+  import Leinwand from './lib/components/Leinwand.svelte';
+  import LauncherBar from './lib/components/LauncherBar.svelte';
+  import Launcher from './lib/components/Launcher.svelte';
+  import { launcher } from './lib/state/launcher.svelte';
   import Canvas from './lib/components/Canvas.svelte';
   import Tray from './lib/components/Tray.svelte';
   import DropBar from './lib/components/DropBar.svelte';
@@ -137,9 +141,10 @@
 <div class="app">
   {#if app.sidebarOpen && !app.presenting}<Sidebar />{/if}
   <main>
-    {#if !app.presenting}<Toolbar bind:this={toolbar} {accent} />{/if}
+    {#if !app.presenting}<LauncherBar />{/if}
+    {#if !app.presenting && !launcher.activeTab}<Toolbar bind:this={toolbar} {accent} />{/if}
     <div class="work">
-      {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
+      {#if launcher.activeTab && !app.presenting}<Launcher tab={launcher.activeTab} />{:else if app.view === 'board'}<ProjectBoard />{:else if app.view === 'leinwand' && !app.dupes}<Leinwand />{:else}<Canvas />{/if}
       {#if app.pane && app.view !== 'board'}<SidePane />{/if}
       {#if web.open}<WebPane />{/if}
     </div>

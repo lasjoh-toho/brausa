@@ -22,6 +22,7 @@
     { id: 'stream', icon: 'grid' },
     { id: 'panes', icon: 'columns' },
     { id: 'table', icon: 'table' },
+    { id: 'leinwand', icon: 'tree' },
     { id: 'kanban', icon: 'kanban' },
     { id: 'timeline', icon: 'timeline' },
     { id: 'calendar', icon: 'calendar' },

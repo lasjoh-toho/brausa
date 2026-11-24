@@ -297,6 +297,11 @@ export interface Backend {
   addLibrary(root: string, name?: string): Promise<LibraryInfo>;
   removeLibrary(root: string): Promise<void>;
   onIndexReport(cb: (r: IndexReport) => void): Promise<() => void>;
+  /** Remembered folder sizes now; unknown and old ones are counted in the background, then `onDirSizes` names the counted folder. */
+  dirSizes(paths: string[]): Promise<Record<string, DirSize>>;
+  onDirSizes(cb: (root: string) => void): Promise<() => void>;
+  /** Files changed in these folders: their remembered sizes and those above count as old. */
+  forgetDirSizes(dirs: string[]): Promise<void>;
 
   /** Projects: free collections; adding a folder adds everything in it. */
   projects(): Promise<ProjectInfo[]>;
@@ -431,4 +436,12 @@ export interface AppInfo {
   exts: string[];
   /** File kinds it says it opens: image, video, audio, text, pdf, web, any. */
   kinds: string[];
+}
+
+/** Size of a folder with everything below it. */
+export interface DirSize {
+  size: number;
+  files: number;
+  /** When it was counted (ms). */
+  scanned: number;
 }

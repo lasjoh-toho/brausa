@@ -17,6 +17,7 @@
     forward: 'M9 6l6 6-6 6',
     up: 'M12 19V5M6 11l6-6 6 6',
     down: 'M12 5v14M6 13l6 6 6-6',
+    tree: 'M3 4h7v5H3zM14 4h7v5h-7zM14 15h7v5h-7zM10 6.5h4M12 6.5v11h2',
     grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
     kanban: 'M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z',
     timeline: 'M4 6h16M4 12h10M4 18h13',

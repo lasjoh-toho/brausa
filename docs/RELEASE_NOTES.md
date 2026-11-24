@@ -14,6 +14,12 @@ brausa is not signed by Apple or Microsoft, so the first start has to be allowed
 | Windows | `brausa_*_x64-setup.exe` or `.msi` | SmartScreen → **More info** → **Run anyway** |
 | Linux | `.AppImage` (make executable) or `.deb` | – |
 
+### New in 0.26
+
+- **Canvas (Leinwand):** a new view next to tiles, list and table. Folders are windows on a zoomable surface; clicking a subfolder opens it as its own window beside it, joined by a coloured line from its row. Three arrangements: to the right (deep paths), tree downwards (wide fan-out), star (root in the middle). Windows move by their title bar. Dragging files from one window into another moves them (⌥/Ctrl copies), with undo. Zoomed far out, windows show only name, counts and size. brausa remembers the open windows per folder and project.
+- **Program tabs:** tabs at the top of the main window: "Files" and your own tabs for programs. Drag a program from the sidebar (Programs), from the file view (.app, shortcut) or from another tab onto a tab and it lies there as an alias. If other tabs hold it already, brausa asks: add another alias, or delete the one in that tab. In a tab a click starts the program, files dropped on it open with it, dragging sorts. Double click renames a tab.
+- **Folder sizes at once:** the table, the list and the canvas show the size of folders. brausa remembers what it counted, so the size is there immediately the next time, and counts again in the background (after changes, or when the number is older than a minute). One count of a folder fills all its subfolders.
+
 ### New in 0.25
 
 - **Saving to the web without overwriting others:** with store.php 2.2 (store_TW) brausa uploads only the tiddlers that changed, merged into what is on the server now. Whatever someone else saved there in the meantime (another browser, another device) stays, and comes into the wiki afterwards. If both changed the same tiddler, the web keeps its version and yours lies next to it as "Title (Konflikt …)". With an older store.php brausa uploads the whole wiki as before.
@@ -176,6 +182,11 @@ brausa ist nicht signiert, deshalb muss der erste Start freigegeben werden. Die 
 | Linux | `.AppImage` (ausführbar machen) oder `.deb` | – |
 
 ### Was drin ist
+
+**Neu in 0.26: Leinwand, Programm-Tabs, Ordnergrößen**
+- **Leinwand:** neue Ansicht neben Kacheln, Liste und Tabelle. Ordner sind Fenster auf einer zoombaren Fläche; ein Klick auf einen Unterordner öffnet ihn als eigenes Fenster daneben, mit einer farbigen Linie von seiner Zeile aus. Drei Anordnungen: nach rechts (tiefe Pfade), Baum nach unten (breite Auffächerung), Stern (Wurzel in der Mitte). Fenster lassen sich an der Titelleiste verschieben. Dateien von einem Fenster ins andere ziehen verschiebt sie (⌥/Strg kopiert), mit Rückgängig. Weit herausgezoomt zeigen die Fenster nur Name, Anzahl und Größe. brausa merkt sich die offenen Fenster pro Ordner und Projekt.
+- **Programm-Tabs:** Tabs oben im Hauptfenster: „Dateien“ und eigene Tabs für Programme. Ein Programm aus der Seitenleiste (Programme), aus der Dateiansicht (.app, Verknüpfung) oder aus einem anderen Tab auf einen Tab ziehen legt es dort als Alias ab. Liegt es schon in anderen Tabs, fragt brausa: zusätzlichen Alias anlegen oder den Alias in jenem Tab löschen. Im Tab startet ein Klick das Programm, darauf gezogene Dateien öffnen sich damit, Ziehen sortiert. Doppelklick benennt einen Tab um.
+- **Ordnergrößen sofort:** Tabelle, Liste und Leinwand zeigen die Größe von Ordnern. brausa merkt sich, was es gezählt hat; beim nächsten Mal ist die Größe sofort da und wird im Hintergrund nachgezählt (nach Änderungen oder wenn die Zahl älter als eine Minute ist). Einmal einen Ordner zählen füllt auch alle Unterordner.
 
 **Neu in 0.25: Ins Web speichern, ohne andere zu überschreiben**
 - **Ins Web speichern, ohne andere zu überschreiben:** Mit store.php 2.2 (store_TW) lädt brausa nur die geänderten Tiddler hoch und baut sie in den aktuellen Stand auf dem Server ein. Was jemand anders dort inzwischen gespeichert hat (anderer Browser, anderes Gerät), bleibt erhalten und kommt danach ins Wiki. Haben beide denselben Tiddler geändert, bleibt im Web die dortige Fassung, deine liegt als „Titel (Konflikt …)“ daneben. Mit einer älteren store.php lädt brausa wie bisher das ganze Wiki hoch.

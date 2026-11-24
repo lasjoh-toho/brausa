@@ -5,7 +5,7 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import type { Backend } from '../backend';
-import { WALK_LIMIT, type IndexReport, type LibraryInfo, type MediaInfo, type OsDrag } from '../backend/types';
+import { WALK_LIMIT, type DirSize, type IndexReport, type LibraryInfo, type MediaInfo, type OsDrag } from '../backend/types';
 import { createBackend } from '../backend';
 
 /** What the interface showed when it last reported to the watchdog. */
@@ -419,7 +419,18 @@ class AppState {
       ...this.gridConfig.cells.flatMap((c) => (c?.tag ? [c.tag] : []))
     ])
   );
-  selectedEntries = $derived(this.visible.filter((e) => this.selection.has(e.path)));
+  /** Entries shown outside the main list (the windows of the Leinwand), so selection and context menu find them too. */
+  shownElsewhere = $state.raw<Entry[]>([]);
+  selectedEntries = $derived.by(() => {
+    const seen = new Set<string>();
+    const out: Entry[] = [];
+    for (const e of [...this.visible, ...this.shownElsewhere])
+      if (this.selection.has(e.path) && !seen.has(e.path)) {
+        seen.add(e.path);
+        out.push(e);
+      }
+    return out;
+  });
 
   async init() {
     this.home = await this.backend.homeDir();
@@ -443,6 +454,56 @@ class AppState {
     if (this.project) await this.refresh();
     await this.backend.onIndexReport((r) => this.onIndexReport(r));
     await this.backend.onOsDrag((e) => void this.onOsDrag(e));
+    await this.backend.onDirSizes((root) => this.dirSizesCounted(root));
+  }
+
+  // ---------------------------------------------------------------- folder sizes
+
+  /** Folder sizes known so far (remembered by the core, counted again in the background). */
+  dirSizes = new SvelteMap<string, DirSize>();
+  private sizeWanted = new Set<string>();
+  private sizeBatch = new Set<string>();
+  private sizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Views call this for the folders they show; sizes arrive in `dirSizes`. */
+  wantDirSizes(paths: string[]) {
+    for (const p of paths) {
+      if (inArchive(p)) continue;
+      this.sizeWanted.add(p);
+      this.sizeBatch.add(p);
+    }
+    // Only the most recent folders stay wanted.
+    if (this.sizeWanted.size > 2000) this.sizeWanted = new Set([...this.sizeWanted].slice(-1000));
+    if (this.sizeBatch.size && !this.sizeTimer) this.sizeTimer = setTimeout(() => this.fetchDirSizes(), 120);
+  }
+
+  private async fetchDirSizes(paths = [...this.sizeBatch]) {
+    this.sizeTimer = null;
+    this.sizeBatch.clear();
+    if (!paths.length) return;
+    try {
+      const got = await this.backend.dirSizes(paths);
+      for (const [p, s] of Object.entries(got)) {
+        const old = this.dirSizes.get(p);
+        if (!old || old.size !== s.size || old.files !== s.files) this.dirSizes.set(p, s);
+      }
+    } catch {
+      /* sizes are a nicety */
+    }
+  }
+
+  /** Files changed in these folders: their sizes and those of all folders above are counted again. */
+  dirsChanged(dirs: string[]) {
+    if (!dirs.length) return;
+    void this.backend
+      .forgetDirSizes(dirs)
+      .then(() => this.fetchDirSizes([...this.sizeWanted].filter((w) => dirs.some((d) => isWithin(d, w)))))
+      .catch(() => {});
+  }
+
+  /** The core finished counting a folder: fetch the wanted sizes at or below it. */
+  private dirSizesCounted(root: string) {
+    void this.fetchDirSizes([...this.sizeWanted].filter((p) => p === root || isWithin(p, root)));
   }
 
   /** Files from Finder/Explorer dragged over brausa: they go where an internal drag would. */
@@ -802,6 +863,7 @@ class AppState {
     this.fsTimer = setTimeout(async () => {
       const dirs = [...this.fsDirs];
       this.fsDirs.clear();
+      this.dirsChanged(dirs);
       await this.refresh(true);
       await Promise.all(dirs.filter((d) => this.children.has(d)).map((d) => this.loadChildren(d)));
     }, 250);
@@ -1282,6 +1344,7 @@ class AppState {
     const paths = entries.map((e) => e.path).filter((p) => !(mode === 'move' && dirname(p) === targetDir));
     if (!paths.length) return;
     const res = await this.backend.transfer(paths, targetDir, mode);
+    this.dirsChanged([targetDir, ...new Set(mode === 'move' ? paths.map(dirname) : [])]);
     const n = Object.keys(res.moved).length;
     if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
     if (n) {
@@ -1455,6 +1518,7 @@ class AppState {
       if (!ok) return;
     }
     const res = await this.backend.trash(entries.map((e) => e.path));
+    this.dirsChanged([...new Set(entries.map((e) => dirname(e.path)))]);
     const n = Object.keys(res.moved).length;
     if (res.errors.length) this.toast(res.errors.map((e) => e.message).join(' · '), true);
     if (n) this.toast(tn(entries.some((e) => inArchive(e.path)) ? 'app.deletedFromArchive' : 'app.trashed', n));

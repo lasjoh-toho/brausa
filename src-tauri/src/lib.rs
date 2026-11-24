@@ -14,6 +14,7 @@ mod media;
 mod meta;
 mod projects;
 mod web;
+mod sizes;
 
 use fsops::{Entry, Mode, TransferResult};
 use library::{LibraryInfo, Registry, Report};
@@ -95,6 +96,24 @@ fn places() -> Vec<Place> {
         .into_iter()
         .map(|(name, p)| Place { name, path: p.to_string_lossy().to_string() })
         .collect()
+}
+
+/// Remembered folder sizes now; unknown and old ones are counted in the background ("dir-sizes" event per counted folder).
+#[tauri::command]
+fn dir_sizes(app: AppHandle, state: State<'_, sizes::SizeIndex>, paths: Vec<String>) -> std::collections::HashMap<String, sizes::DirSize> {
+    let (known, start) = state.request(&paths);
+    if start {
+        let idx = state.inner().clone();
+        std::thread::spawn(move || idx.work(|p| {
+            let _ = app.emit("dir-sizes", p.to_string());
+        }));
+    }
+    known
+}
+
+#[tauri::command]
+fn forget_dir_sizes(state: State<'_, sizes::SizeIndex>, dirs: Vec<String>) {
+    state.sizes.lock().unwrap_or_else(|e| e.into_inner()).forget(&dirs);
 }
 
 #[tauri::command]
@@ -1059,6 +1078,7 @@ pub fn run() {
                 let _ = saved.emit("wiki-saved", WikiSaved { path: file.to_string_lossy().to_string(), wiki: name.as_ref().ok().cloned().flatten(), error: name.err().map(|e| e.to_string()) });
             }));
             app.manage(Smart(smart::SmartFolders::open(&dir)?));
+            app.manage(sizes::SizeIndex::open(dir.join("dir-sizes.json")));
             app.manage(watchdog::Watchdog::new(&dir));
             watchdog::Watchdog::start(app.handle().clone());
             // Repair on start, then every 10 minutes (catches changes outside the watched folder).
@@ -1071,6 +1091,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             home_dir,
+            dir_sizes,
+            forget_dir_sizes,
             places,
             volumes,
             find,
