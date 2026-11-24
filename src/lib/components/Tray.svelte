@@ -10,7 +10,7 @@
   let { onTag }: { onTag: () => void } = $props();
 
   const hit = $derived(drag.active && drag.hit?.kind === 'tray');
-  const visible = $derived(!app.preview && (app.staging.length > 0 || (drag.active && drag.source !== 'tray')));
+  const visible = $derived(!app.preview && (app.staging.length > 0 || (drag.active && drag.source !== 'tray' && (!drag.accepts || drag.accepts.includes('tray')))));
 </script>
 
 {#if visible}

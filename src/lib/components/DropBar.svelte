@@ -10,7 +10,7 @@
   const trail = $derived(crumbs(drag.trail ?? app.funnel ?? app.cwd, app.home));
 </script>
 
-{#if drag.active}
+{#if drag.active && (!drag.accepts || drag.accepts.includes('crumb'))}
   <div class="bar" transition:fly={{ y: -12, duration: 160 }}>
     <Icon name="folder" size={14} />
     {#each trail as c, i (c.path)}
