@@ -8,6 +8,7 @@
   import SidePane from './lib/components/SidePane.svelte';
   import WebPane from './lib/components/WebPane.svelte';
   import { web } from './lib/state/web.svelte';
+  import Leinwand from './lib/components/Leinwand.svelte';
   import Canvas from './lib/components/Canvas.svelte';
   import Tray from './lib/components/Tray.svelte';
   import DropBar from './lib/components/DropBar.svelte';
@@ -139,7 +140,7 @@
   <main>
     {#if !app.presenting}<Toolbar bind:this={toolbar} {accent} />{/if}
     <div class="work">
-      {#if app.view === 'board'}<ProjectBoard />{:else}<Canvas />{/if}
+      {#if app.view === 'board'}<ProjectBoard />{:else if app.view === 'leinwand' && !app.dupes}<Leinwand />{:else}<Canvas />{/if}
       {#if app.pane && app.view !== 'board'}<SidePane />{/if}
       {#if web.open}<WebPane />{/if}
     </div>

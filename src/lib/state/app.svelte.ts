@@ -419,7 +419,18 @@ class AppState {
       ...this.gridConfig.cells.flatMap((c) => (c?.tag ? [c.tag] : []))
     ])
   );
-  selectedEntries = $derived(this.visible.filter((e) => this.selection.has(e.path)));
+  /** Entries shown outside the main list (the windows of the Leinwand), so selection and context menu find them too. */
+  shownElsewhere = $state.raw<Entry[]>([]);
+  selectedEntries = $derived.by(() => {
+    const seen = new Set<string>();
+    const out: Entry[] = [];
+    for (const e of [...this.visible, ...this.shownElsewhere])
+      if (this.selection.has(e.path) && !seen.has(e.path)) {
+        seen.add(e.path);
+        out.push(e);
+      }
+    return out;
+  });
 
   async init() {
     this.home = await this.backend.homeDir();
