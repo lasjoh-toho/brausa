@@ -8,7 +8,7 @@ import { applyTagPatch, parseFilenameTags, uniqueTags } from '../core/tags';
 import { basename, dirname, extOf, isWithin, joinPath, relativeTo } from '../core/paths';
 import type { Backend, LibraryInfo, MapInfo, ProjectInfo, MediaInfo, OverlayResolution, TransferResult, WalkOptions, WikiBag, WebPreview, WebUploadReport,
   MwsReport, PluginInfo, PluginOverview, WikiHit, WikiLayer, WikiOverlay, WikiRecipe } from './types';
-import { WALK_LIMIT, type AppInfo } from './types';
+import { WALK_LIMIT, type AppInfo, type DirSize } from './types';
 import { addCard, addLink, newMap, type NoteCard, type ProjectMap } from '../core/map';
 import { DEMO_HTML, DEMO_PDF } from './demo-docs';
 import { t } from '../i18n/index.svelte';
@@ -490,6 +490,21 @@ export class DemoBackend implements Backend {
 
   async removeLibrary(root: string) {
     this.libs = this.libs.filter((l) => l.root !== root);
+  }
+
+  async dirSizes(paths: string[]): Promise<Record<string, DirSize>> {
+    const out: Record<string, DirSize> = {};
+    for (const p of paths) {
+      const files = (await this.walk(p, {})).filter((e) => e.kind === 'file');
+      out[p] = { size: files.reduce((s, e) => s + e.size, 0), files: files.length, scanned: Date.now() };
+    }
+    return out;
+  }
+
+  async forgetDirSizes() {}
+
+  async onDirSizes() {
+    return () => {};
   }
 
   async onIndexReport() {

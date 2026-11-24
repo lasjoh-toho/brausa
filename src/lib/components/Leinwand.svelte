@@ -80,6 +80,11 @@
     return () => (app.shownElsewhere = []);
   });
 
+  // Folder sizes from the core's memory; counted again in the background.
+  $effect(() => {
+    app.wantDirSizes([...wins.map((w) => w.path), ...[...lists.values()].flat().filter((e) => e.kind === 'dir').map((e) => e.path)]);
+  });
+
   function sortEntries(es: Entry[]): Entry[] {
     return [...es].sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name, loc(), { numeric: true }) : a.kind === 'dir' ? -1 : 1));
   }
@@ -281,13 +286,14 @@
           <div class="title" role="presentation" onpointerdown={(e) => moveWin(e, w.path)} ondblclick={() => app.navigate(w.path)}>
             <Icon name="folder" size={14} />
             <span class="tname">{basename(w.path) || w.path}</span>
-            <span class="count">{list.length}</span>
+            <span class="count">{list.length}{#if app.dirSizes.get(w.path)} · {formatSize(app.dirSizes.get(w.path)!.size)}{/if}</span>
             {#if w.parent}<button class="x" title={t('leinwand.close')} onclick={() => close(w.path)}><Icon name="x" size={12} /></button>{/if}
           </div>
           {#if far}
             <div class="summary">
               <div class="big">{basename(w.path) || w.path}</div>
               <div>{t('leinwand.summary', { dirs: list.filter((e) => e.kind === 'dir').length, files: list.filter((e) => e.kind === 'file').length })}</div>
+              {#if app.dirSizes.get(w.path)}<div>{formatSize(app.dirSizes.get(w.path)!.size)}</div>{/if}
             </div>
           {:else}
             <div class="cols">
@@ -319,7 +325,7 @@
                   }}
                 >
                   <span class="n"><Icon name={e.kind === 'dir' ? 'folder' : 'file'} size={13} />{e.name}</span>
-                  <span class="r">{e.kind === 'dir' ? '–' : formatSize(e.size)}</span>
+                  <span class="r">{e.kind === 'dir' ? (app.dirSizes.get(e.path) ? formatSize(app.dirSizes.get(e.path)!.size) : '–') : formatSize(e.size)}</span>
                   <span class="d">{stamp(e.mtime)}</span>
                 </div>
               {:else}

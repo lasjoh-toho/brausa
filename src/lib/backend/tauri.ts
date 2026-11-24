@@ -5,7 +5,7 @@ import type { Entry, MetaPatch, TransferMode } from '../core/types';
 import { inArchive } from '../core/archive';
 import { t } from '../i18n/index.svelte';
 import type { NoteCard, ProjectMap } from '../core/map';
-import { WALK_LIMIT, type AppInfo, type OsDrag, type WebDrag } from './types';
+import { WALK_LIMIT, type AppInfo, type DirSize, type OsDrag, type WebDrag } from './types';
 import type {
   Backend,
   IndexReport,
@@ -335,6 +335,18 @@ export class TauriBackend implements Backend {
       listen<string>('web-newtab', (ev) => cb({ kind: 'newtab', url: ev.payload }))
     ]);
     return () => offs.forEach((off) => off());
+  }
+
+  dirSizes(paths: string[]) {
+    return invoke<Record<string, DirSize>>('dir_sizes', { paths });
+  }
+
+  forgetDirSizes(dirs: string[]) {
+    return invoke<void>('forget_dir_sizes', { dirs });
+  }
+
+  onDirSizes(cb: (root: string) => void) {
+    return listen<string>('dir-sizes', (ev) => cb(ev.payload));
   }
 
   onIndexReport(cb: (r: IndexReport) => void) {
